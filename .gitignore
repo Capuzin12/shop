@@ -1,0 +1,14 @@
+.idea/
+
+client/node_modules/
+client/dist/
+client/dist-ssr/
+client/.env*.local
+
+server/venv/
+server/__pycache__/
+server/app.db
+*.pyc
+*.pyo
+
+.DS_Store
