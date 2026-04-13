@@ -1,6 +1,6 @@
+import api from '../../api';
 import { RefreshCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { DataTable, EmptyState, Panel, StatusBadge } from '../../components/BackofficeUI';
 
@@ -11,9 +11,7 @@ export default function ManagerProducts() {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/products?limit=100', {
-        headers: { Authorization: `Bearer ${user.token}` },
-      });
+      const response = await api.get('/api/products?limit=100');
       setProducts(Array.isArray(response.data) ? response.data : response.data.products || []);
     } catch (error) {
       console.error('Error fetching products:', error);

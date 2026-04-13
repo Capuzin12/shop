@@ -51,7 +51,7 @@ export default function AdminInventory() {
                 <td className="px-4 py-4">
                   {editingId === item.id ? (
                     <div className="flex gap-3">
-                      <button onClick={async () => { const current = inventory.find((entry) => entry.id === item.id); await axios.put(`http://localhost:8000/api/inventory/${item.id}`, { quantity: current.quantity, min_quantity: current.min_quantity, min_quantity_alert: current.min_quantity_alert }, auth); setEditingId(null); fetchInventory(); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
+                      <button onClick={async () => { const current = inventory.find((entry) => entry.id === item.id); await api.put(`/api/inventory/${item.id}`, { quantity: current.quantity, min_quantity: current.min_quantity, min_quantity_alert: current.min_quantity_alert }); setEditingId(null); fetchInventory(); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
                       <button onClick={() => setEditingId(null)} className="text-sm font-semibold text-slate-500 dark:text-slate-400" type="button">Скасувати</button>
                     </div>
                   ) : (

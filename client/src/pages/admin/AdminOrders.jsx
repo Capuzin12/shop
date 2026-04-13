@@ -1,6 +1,6 @@
+import api from '../../api';
 import { RefreshCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { EmptyState, FilterButton, Panel, StatusBadge } from '../../components/BackofficeUI';
 
@@ -18,11 +18,9 @@ export default function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('all');
 
-  const auth = { headers: { Authorization: `Bearer ${user?.token}` } };
-
   const fetchOrders = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/orders', auth);
+      const response = await api.get('/api/orders');
       setOrders(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -81,7 +79,7 @@ export default function AdminOrders() {
                   <select
                     value={order.status || 'new'}
                     onChange={async (e) => {
-                      await axios.put(`http://localhost:8000/api/orders/${order.id}`, { status: e.target.value }, auth);
+                      await api.put(`/api/orders/${order.id}`, { status: e.target.value });
                       fetchOrders();
                     }}
                     className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-950/60"

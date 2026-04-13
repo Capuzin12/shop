@@ -1,6 +1,6 @@
+import api from '../../api';
 import { Plus, RefreshCcw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { DataTable, EmptyState, Panel, StatusBadge } from '../../components/BackofficeUI';
 
@@ -12,9 +12,7 @@ export default function AdminProducts() {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/products?limit=100', {
-        headers: { Authorization: `Bearer ${user.token}` },
-      });
+      const response = await api.get('/api/products?limit=100');
       setProducts(Array.isArray(response.data) ? response.data : response.data.products || []);
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -34,13 +32,9 @@ export default function AdminProducts() {
     e.preventDefault();
     try {
       if (editing) {
-        await axios.put(`http://localhost:8000/api/products/${editing}`, formData, {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
+        await api.put(`/api/products/${editing}`, formData);
       } else {
-        await axios.post('http://localhost:8000/api/products', formData, {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
+        await api.post('/api/products', formData);
       }
       setEditing(null);
       setFormData({ name: '', description: '', price: '', category_id: '' });
@@ -102,7 +96,7 @@ export default function AdminProducts() {
                     </button>
                     <button onClick={async () => {
                       if (!confirm('Видалити товар?')) return;
-                      await axios.delete(`http://localhost:8000/api/products/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } });
+                      await api.delete(`/api/products/${product.id}`);
                       fetchProducts();
                     }} className="inline-flex items-center gap-1 text-sm font-semibold text-rose-600 dark:text-rose-300" type="button">
                       <Trash2 className="h-4 w-4" />

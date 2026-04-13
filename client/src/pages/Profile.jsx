@@ -109,7 +109,7 @@ export default function Profile() {
             </div>
           ) : (
             <div className="space-y-4">
-              {orders.map((order) => (
+              {orders.filter(o => o && o.id).map((order) => (
                 <div key={order.id} className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>

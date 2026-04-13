@@ -1,6 +1,6 @@
+import api from '../../api';
 import { FolderPlus, RefreshCcw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext';
 import { DataTable, EmptyState, Panel } from '../../components/BackofficeUI';
 
@@ -10,11 +10,9 @@ export default function AdminCategories() {
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({ name: '', slug: '', description: '' });
 
-  const auth = { headers: { Authorization: `Bearer ${user?.token}` } };
-
   const fetchCategories = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/categories', auth);
+      const response = await api.get('/api/categories');
       setCategories(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -32,8 +30,8 @@ export default function AdminCategories() {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (editing) await axios.put(`http://localhost:8000/api/categories/${editing}`, formData, auth);
-    else await axios.post('http://localhost:8000/api/categories', formData, auth);
+    if (editing) await api.put(`/api/categories/${editing}`, formData);
+    else await api.post('/api/categories', formData);
     setEditing(null);
     setFormData({ name: '', slug: '', description: '' });
     fetchCategories();
@@ -70,7 +68,7 @@ export default function AdminCategories() {
                 <td className="px-4 py-4">
                   <div className="flex flex-wrap gap-3">
                     <button onClick={() => { setEditing(category.id); setFormData({ name: category.name, slug: category.slug, description: category.description || '' }); }} className="text-sm font-semibold text-blue-600 dark:text-blue-300" type="button">Редагувати</button>
-                    <button onClick={async () => { if (!confirm('Видалити категорію?')) return; await axios.delete(`http://localhost:8000/api/categories/${category.id}`, auth); fetchCategories(); }} className="inline-flex items-center gap-1 text-sm font-semibold text-rose-600 dark:text-rose-300" type="button"><Trash2 className="h-4 w-4" />Видалити</button>
+                    <button onClick={async () => { if (!confirm('Видалити категорію?')) return; await api.delete(`/api/categories/${category.id}`); fetchCategories(); }} className="inline-flex items-center gap-1 text-sm font-semibold text-rose-600 dark:text-rose-300" type="button"><Trash2 className="h-4 w-4" />Видалити</button>
                   </div>
                 </td>
               </tr>
