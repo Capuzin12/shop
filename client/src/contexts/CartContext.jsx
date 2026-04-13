@@ -1,0 +1,188 @@
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useEffect, useState } from 'react';
+import api from '../api';
+import { useAuth } from './AuthContext';
+
+const CartContext = createContext(null);
+
+const STORAGE_KEY = 'buildshop-cart';
+
+const readLocalCart = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+const normalizeServerCart = (serverCart) => {
+  const serverItems = serverCart?.items || [];
+  return serverItems.map((item) => ({
+    id: item.product_id,
+    name: item.product?.name || 'Товар',
+    price: item.product?.price || 0,
+    quantity: item.quantity,
+    slug: item.product?.slug || '',
+    sku: item.product?.sku || '',
+  }));
+};
+
+export const useCart = () => useContext(CartContext);
+
+export const CartProvider = ({ children }) => {
+  const { user } = useAuth();
+  const [cart, setCart] = useState(() => readLocalCart());
+  const [serverCart, setServerCart] = useState(null);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
+  }, [cart]);
+
+  const refreshServerCart = async (tokenOverride) => {
+    const token = tokenOverride || user?.token || localStorage.getItem('token');
+    if (!token || !user) {
+      setServerCart(null);
+      return null;
+    }
+
+    try {
+      const response = await api.get('/api/cart');
+      setServerCart(response.data);
+      const normalized = normalizeServerCart(response.data);
+      setCart(normalized);
+      return response.data;
+    } catch (error) {
+      console.error('Error syncing cart:', error);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const syncCart = async () => {
+      const token = user?.token || localStorage.getItem('token');
+      if (!user || !token) {
+        setServerCart(null);
+        setCart(readLocalCart());
+        return;
+      }
+
+      const guestCart = readLocalCart();
+      const serverSnapshot = await refreshServerCart(token);
+
+      if (guestCart.length) {
+        const existingIds = new Set((serverSnapshot?.items || []).map((item) => item.product_id));
+        for (const item of guestCart) {
+          try {
+            await api.post('/api/cart/items', {
+              product_id: item.id,
+              quantity: item.quantity,
+            });
+          } catch (error) {
+            if (!existingIds.has(item.id)) {
+              console.error('Error syncing cart item:', error);
+            }
+          }
+        }
+      }
+
+      await refreshServerCart(token);
+    };
+
+    syncCart();
+  }, [user]);
+
+  const addToCart = async (product, quantity = 1) => {
+    const token = user?.token || localStorage.getItem('token');
+
+    if (user && token) {
+      try {
+        await api.post('/api/cart/items', {
+          product_id: product.id,
+          quantity,
+        });
+        await refreshServerCart(token);
+        return;
+      } catch (error) {
+        console.error('Error adding to server cart:', error);
+      }
+    }
+
+    setCart((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
+      if (existing) {
+        return prev.map((item) => (
+          item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item
+        ));
+      }
+      return [...prev, { ...product, quantity }];
+    });
+  };
+
+  const removeFromCart = async (productId) => {
+    const token = user?.token || localStorage.getItem('token');
+    if (user && token) {
+      const cartSnapshot = serverCart || await refreshServerCart(token);
+      const item = cartSnapshot?.items?.find((entry) => entry.product_id === productId);
+      if (item) {
+        try {
+          await api.delete(`/api/cart/items/${item.id}`);
+          await refreshServerCart(token);
+          return;
+        } catch (error) {
+          console.error('Error removing from server cart:', error);
+        }
+      }
+    }
+
+    setCart((prev) => prev.filter((item) => item.id !== productId));
+  };
+
+  const updateQuantity = async (productId, quantity) => {
+    if (quantity <= 0) {
+      await removeFromCart(productId);
+      return;
+    }
+
+    const token = user?.token || localStorage.getItem('token');
+    if (user && token) {
+      const cartSnapshot = serverCart || await refreshServerCart(token);
+      const item = cartSnapshot?.items?.find((entry) => entry.product_id === productId);
+      if (item) {
+        try {
+          await api.put(`/api/cart/items/${item.id}`, { quantity });
+          await refreshServerCart(token);
+          return;
+        } catch (error) {
+          console.error('Error updating server cart:', error);
+        }
+      }
+    }
+
+    setCart((prev) => prev.map((item) => (
+      item.id === productId ? { ...item, quantity } : item
+    )));
+  };
+
+  const clearCart = () => {
+    setCart([]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+  };
+
+  const value = {
+    cart,
+    cartCount: cart.reduce((total, item) => total + item.quantity, 0),
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    clearCart,
+    getTotal: () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    refreshServerCart,
+  };
+
+  return (
+    <CartContext.Provider value={value}>
+      {children}
+    </CartContext.Provider>
+  );
+};

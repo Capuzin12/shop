@@ -3,11 +3,65 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  .dark {
+    color-scheme: dark;
+  }
+
+  html,
   body {
-    @apply m-0 min-h-screen antialiased;
+    @apply transition-colors duration-300;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply m-0 min-h-screen antialiased font-sans;
+    background-attachment: fixed;
+    @apply bg-stone-100 text-slate-900;
+    background-image:
+      radial-gradient(circle at top, rgba(245, 158, 11, 0.12), transparent 28%),
+      linear-gradient(180deg, #fffaf4 0%, #f1ebe1 100%);
+  }
+
+  body.dark {
+    @apply bg-slate-950 text-slate-100;
+    background-image:
+      radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 24%),
+      linear-gradient(180deg, #020617 0%, #111827 100%);
   }
 
   #root {
     @apply min-h-screen;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+  }
+}
+
+@layer utilities {
+  @keyframes swing {
+    0%, 100% {
+      transform: rotate(0deg);
+    }
+    20% {
+      transform: rotate(12deg);
+    }
+    40% {
+      transform: rotate(-10deg);
+    }
+    60% {
+      transform: rotate(6deg);
+    }
+    80% {
+      transform: rotate(-4deg);
+    }
   }
 }
