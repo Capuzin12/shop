@@ -1,5 +1,5 @@
 import { ShieldCheck, ShoppingBag, Warehouse } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,16 +15,22 @@ export default function Profile() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
     const fetchOrders = async () => {
-      if (!user || !user.token) {
+      if (!user || !user.token || fetchedRef.current) {
         return;
       }
+      fetchedRef.current = true;
       try {
         setLoadingOrders(true);
         const response = await api.get('/api/orders');
-        setOrders(Array.isArray(response.data) ? response.data : []);
+        const ordersData = response.data;
+        const validOrders = Array.isArray(ordersData) 
+          ? ordersData.filter(o => o && o.id)
+          : [];
+        setOrders(validOrders);
       } catch (error) {
         console.error('Error fetching orders:', error);
         setOrders([]);
@@ -34,6 +40,12 @@ export default function Profile() {
     };
 
     fetchOrders();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      fetchedRef.current = false;
+    }
   }, [user]);
 
   if (loading || !user) {

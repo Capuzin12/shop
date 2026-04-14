@@ -12,7 +12,11 @@ export default function ManagerProducts() {
   const fetchProducts = async () => {
     try {
       const response = await api.get('/api/products?limit=100');
-      setProducts(Array.isArray(response.data) ? response.data : response.data.products || []);
+      const productsData = response.data;
+      const validProducts = Array.isArray(productsData) 
+        ? productsData.filter(p => p && p.id)
+        : (productsData.products || []).filter(p => p && p.id);
+      setProducts(validProducts);
     } catch (error) {
       console.error('Error fetching products:', error);
       setProducts([]);

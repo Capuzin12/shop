@@ -279,31 +279,8 @@ CREATE INDEX idx_supply_supplier      ON supply_orders(supplier_id);
 CREATE INDEX idx_supply_status        ON supply_orders(status);
 
 -- ============================================================
--- 8. ТРИГЕРИ (без AFTER UPDATE на products/orders — уникнення рекурсії в SQLite)
+-- 8. ТРИГЕРИ (без AFTER UPDATE на products/orders — унікнення рекурсії в SQLite)
 -- ============================================================
-
-CREATE TRIGGER trg_sale_movement
-AFTER INSERT ON order_items
-BEGIN
-    UPDATE inventory
-    SET quantity    = quantity - NEW.quantity,
-        updated_at  = CURRENT_TIMESTAMP
-    WHERE product_id = NEW.product_id;
-
-    INSERT INTO inventory_movements (
-        product_id, order_id, type, quantity,
-        quantity_before, quantity_after, note
-    )
-    SELECT
-        NEW.product_id,
-        NEW.order_id,
-        'sale',
-        -NEW.quantity,
-        inv.quantity + NEW.quantity,
-        inv.quantity,
-        'Автосписання: замовлення #' || NEW.order_id
-    FROM inventory inv WHERE inv.product_id = NEW.product_id;
-END;
 
 CREATE TRIGGER trg_receipt_movement
 AFTER UPDATE OF status ON supply_orders

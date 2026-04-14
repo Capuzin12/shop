@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Heart, RefreshCcw, ShoppingBag, Trash2, Plus, Minus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import api from '../api';
 import { useCart } from '../contexts/CartContext';
 
 const formatPrice = (price) => new Intl.NumberFormat('uk-UA', {
@@ -10,6 +12,39 @@ const formatPrice = (price) => new Intl.NumberFormat('uk-UA', {
 
 export default function Cart() {
   const { cart, removeFromCart, updateQuantity, getTotal } = useCart();
+  const [inventory, setInventory] = useState({});
+
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        const response = await api.get('/api/inventory');
+        const invData = response.data;
+        const invMap = {};
+        if (Array.isArray(invData)) {
+          invData.forEach(item => {
+            invMap[item.product_id] = item.quantity;
+          });
+        }
+        setInventory(invMap);
+      } catch (error) {
+        console.error('Error fetching inventory:', error);
+      }
+    };
+    fetchInventory();
+  }, []);
+
+  const getAvailableQuantity = (productId) => {
+    return inventory[productId] ?? 0;
+  };
+
+  const handleUpdateQuantity = (productId, newQuantity) => {
+    const available = getAvailableQuantity(productId);
+    if (available > 0 && newQuantity > available) {
+      updateQuantity(productId, available);
+    } else if (newQuantity > 0) {
+      updateQuantity(productId, newQuantity);
+    }
+  };
 
   if (!cart || cart.length === 0) {
     return (
@@ -32,6 +67,8 @@ export default function Cart() {
       </div>
     );
   }
+
+  const hasOutOfStock = cart.some(item => getAvailableQuantity(item.id) === 0);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -73,17 +110,22 @@ export default function Cart() {
 
               <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/60">
                 <button
-                  onClick={() => updateQuantity(item.id, (item.quantity || 1) - 1)}
+                  onClick={() => handleUpdateQuantity(item.id, (item.quantity || 1) - 1)}
                   className="flex h-11 w-11 items-center justify-center rounded-2xl text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
                   type="button"
                 >
                   <Minus className="h-4 w-4" />
                 </button>
-                <span className="text-lg font-semibold text-slate-900 dark:text-white">
-                  {item.quantity || 1}
-                </span>
+                <div className="text-center">
+                  <span className="text-lg font-semibold text-slate-900 dark:text-white">
+                    {item.quantity || 1}
+                  </span>
+                  {getAvailableQuantity(item.id) > 0 && getAvailableQuantity(item.id) < 10 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-300">в наявності: {getAvailableQuantity(item.id)}</p>
+                  )}
+                </div>
                 <button
-                  onClick={() => updateQuantity(item.id, (item.quantity || 1) + 1)}
+                  onClick={() => handleUpdateQuantity(item.id, (item.quantity || 1) + 1)}
                   className="flex h-11 w-11 items-center justify-center rounded-2xl text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
                   type="button"
                 >
@@ -112,6 +154,12 @@ export default function Cart() {
         ))}
       </div>
 
+      {hasOutOfStock && (
+        <div className="mt-4 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+          Деякі товари закінчилися на складі. Будь ласка, видаліть їх або зменшіть кількість.
+        </div>
+      )}
+
       <div className="mt-8 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -121,8 +169,17 @@ export default function Cart() {
             </p>
           </div>
           <Link
-            to="/checkout"
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-8 py-4 text-base font-semibold text-white transition hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300"
+            to={hasOutOfStock ? "#" : "/checkout"}
+            onClick={(e) => {
+              if (hasOutOfStock) {
+                e.preventDefault();
+              }
+            }}
+            className={`inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-base font-semibold transition ${
+              hasOutOfStock
+                ? 'cursor-not-allowed bg-slate-300 text-slate-500 dark:bg-slate-700 dark:text-slate-500'
+                : 'bg-slate-950 text-white hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300'
+            }`}
           >
             <ShoppingBag className="h-5 w-5" />
             Оформити замовлення

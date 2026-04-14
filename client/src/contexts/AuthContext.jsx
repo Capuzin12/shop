@@ -27,9 +27,13 @@ export const AuthProvider = ({ children }) => {
           localStorage.setItem('user', JSON.stringify(freshUserData));
           setUser(freshUserData);
         } catch (error) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          setUser(null);
+          if (error.response?.status === 401) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setUser(null);
+          } else {
+            console.error('Error initializing auth:', error);
+          }
         }
       }
       setLoading(false);

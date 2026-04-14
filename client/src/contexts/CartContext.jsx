@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import api from '../api';
 import { useAuth } from './AuthContext';
 
@@ -34,13 +34,14 @@ export const CartProvider = ({ children }) => {
   const { user } = useAuth();
   const [cart, setCart] = useState(() => readLocalCart());
   const [serverCart, setServerCart] = useState(null);
+  const syncedRef = useRef(false);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
   }, [cart]);
 
   const refreshServerCart = async (tokenOverride) => {
-    const token = tokenOverride || user?.token || localStorage.getItem('token');
+    const token = tokenOverride || localStorage.getItem('token');
     if (!token || !user) {
       setServerCart(null);
       return null;
@@ -53,6 +54,11 @@ export const CartProvider = ({ children }) => {
       setCart(normalized);
       return response.data;
     } catch (error) {
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        setServerCart(null);
+        return null;
+      }
       console.error('Error syncing cart:', error);
       return null;
     }
@@ -60,10 +66,13 @@ export const CartProvider = ({ children }) => {
 
   useEffect(() => {
     const syncCart = async () => {
-      const token = user?.token || localStorage.getItem('token');
-      if (!user || !token) {
-        setServerCart(null);
-        setCart(readLocalCart());
+      if (syncedRef.current || !user) {
+        return;
+      }
+      syncedRef.current = true;
+
+      const token = localStorage.getItem('token');
+      if (!token) {
         return;
       }
 
@@ -74,18 +83,19 @@ export const CartProvider = ({ children }) => {
         const existingIds = new Set((serverSnapshot?.items || []).map((item) => item.product_id));
         for (const item of guestCart) {
           try {
-            await api.post('/api/cart/items', {
-              product_id: item.id,
-              quantity: item.quantity,
-            });
-          } catch (error) {
             if (!existingIds.has(item.id)) {
-              console.error('Error syncing cart item:', error);
+              await api.post('/api/cart/items', {
+                product_id: item.id,
+                quantity: item.quantity,
+              });
             }
+          } catch (error) {
+            console.error('Error syncing cart item:', error);
           }
         }
       }
 
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
       await refreshServerCart(token);
     };
 
@@ -93,18 +103,31 @@ export const CartProvider = ({ children }) => {
   }, [user]);
 
   const addToCart = async (product, quantity = 1) => {
-    const token = user?.token || localStorage.getItem('token');
+    const token = localStorage.getItem('token');
 
     if (user && token) {
       try {
-        await api.post('/api/cart/items', {
-          product_id: product.id,
-          quantity,
-        });
+        const currentCart = serverCart || await refreshServerCart(token);
+        const existingItem = currentCart?.items?.find((item) => item.product_id === product.id);
+        
+        if (existingItem) {
+          await api.put(`/api/cart/items/${existingItem.id}`, { 
+            quantity: existingItem.quantity + quantity 
+          });
+        } else {
+          await api.post('/api/cart/items', {
+            product_id: product.id,
+            quantity,
+          });
+        }
         await refreshServerCart(token);
         return;
       } catch (error) {
-        console.error('Error adding to server cart:', error);
+        if (error.response?.status === 401) {
+          console.log('Token expired, adding to local cart instead');
+        } else {
+          console.error('Error adding to server cart:', error);
+        }
       }
     }
 
@@ -120,7 +143,7 @@ export const CartProvider = ({ children }) => {
   };
 
   const removeFromCart = async (productId) => {
-    const token = user?.token || localStorage.getItem('token');
+    const token = localStorage.getItem('token');
     if (user && token) {
       const cartSnapshot = serverCart || await refreshServerCart(token);
       const item = cartSnapshot?.items?.find((entry) => entry.product_id === productId);
@@ -130,7 +153,9 @@ export const CartProvider = ({ children }) => {
           await refreshServerCart(token);
           return;
         } catch (error) {
-          console.error('Error removing from server cart:', error);
+          if (error.response?.status !== 401) {
+            console.error('Error removing from server cart:', error);
+          }
         }
       }
     }
@@ -144,7 +169,7 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
-    const token = user?.token || localStorage.getItem('token');
+    const token = localStorage.getItem('token');
     if (user && token) {
       const cartSnapshot = serverCart || await refreshServerCart(token);
       const item = cartSnapshot?.items?.find((entry) => entry.product_id === productId);
@@ -154,7 +179,9 @@ export const CartProvider = ({ children }) => {
           await refreshServerCart(token);
           return;
         } catch (error) {
-          console.error('Error updating server cart:', error);
+          if (error.response?.status !== 401) {
+            console.error('Error updating server cart:', error);
+          }
         }
       }
     }

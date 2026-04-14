@@ -24,9 +24,13 @@ export default function ManagerDashboard() {
           api.get('/api/inventory'),
         ]);
 
-        const orders = Array.isArray(ordersRes.data) ? ordersRes.data : ordersRes.data.orders || [];
-        const products = Array.isArray(productsRes.data) ? productsRes.data : productsRes.data.products || [];
-        const inventory = Array.isArray(inventoryRes.data) ? inventoryRes.data : [];
+        const ordersData = ordersRes.data;
+        const productsData = productsRes.data;
+        const inventoryData = inventoryRes.data;
+
+        const orders = Array.isArray(ordersData) ? ordersData : (ordersData.orders || []);
+        const products = Array.isArray(productsData) ? productsData : (productsData.products || []);
+        const inventory = Array.isArray(inventoryData) ? inventoryData : [];
         const lowStock = inventory.filter((item) => item.quantity < (item.min_quantity_alert ?? item.min_quantity)).length;
 
         setStats({ orders: orders.length, products: products.length, lowStock });

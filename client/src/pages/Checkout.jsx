@@ -32,12 +32,38 @@ export default function Checkout() {
     delivery_city: '',
     delivery_address: '',
     comment: '',
+    delivery_method: 'nova_poshta',
+    payment_method: 'card',
   });
   const [message, setMessage] = useState('');
+  const [inventory, setInventory] = useState({});
+
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        const response = await api.get('/api/inventory');
+        const invData = response.data;
+        const invMap = {};
+        if (Array.isArray(invData)) {
+          invData.forEach(item => {
+            invMap[item.product_id] = item.quantity;
+          });
+        }
+        setInventory(invMap);
+      } catch (error) {
+        console.error('Error fetching inventory:', error);
+      }
+    };
+    fetchInventory();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(GUEST_CHECKOUT_KEY, JSON.stringify(formData));
   }, [formData]);
+
+  const getAvailableQuantity = (productId) => {
+    return inventory[productId] ?? 0;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,6 +71,12 @@ export default function Checkout() {
     if (!user) {
       setMessage('Чернетку збережено локально. Увійдіть, щоб завершити оформлення замовлення.');
       navigate('/login');
+      return;
+    }
+
+    const outOfStock = cart.find(item => getAvailableQuantity(item.id) < item.quantity);
+    if (outOfStock) {
+      setMessage(`Товару "${outOfStock.name}" недостатньо на складі. Доступно: ${getAvailableQuantity(outOfStock.id)}`);
       return;
     }
 
@@ -62,7 +94,15 @@ export default function Checkout() {
       navigate('/profile');
     } catch (error) {
       console.error('Error creating order:', error);
-      setMessage('Не вдалося оформити замовлення. Перевірте дані та спробуйте ще раз.');
+      console.error('Error response:', error.response);
+      console.error('Error response data:', error.response?.data);
+      console.error('Error response status:', error.response?.status);
+      const errorMsg = error.response?.data?.detail;
+      if (errorMsg && errorMsg.includes('Not enough stock')) {
+        setMessage(`Помилка: недостатньо товару на складі. ${errorMsg}`);
+      } else {
+        setMessage(`Не вдалося оформити замовлення. Помилка: ${errorMsg || error.message}`);
+      }
     }
   };
 
@@ -124,15 +164,27 @@ export default function Checkout() {
         <div className="rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
           <h2 className="text-2xl font-black text-slate-900 dark:text-white">Ваше замовлення</h2>
           <div className="mt-5 space-y-3">
-            {cart.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-white/5">
-                <div>
-                  <p className="font-semibold text-slate-900 dark:text-white">{item.name}</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{item.quantity} x {formatPrice(item.price)}</p>
+            {cart.map((item) => {
+              const available = getAvailableQuantity(item.id);
+              const isOutOfStock = available < item.quantity;
+              return (
+                <div key={item.id} className={`flex items-center justify-between rounded-2xl border px-4 py-3 dark:border-white/10 dark:bg-white/5 ${isOutOfStock ? 'border-rose-300 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10' : 'border-slate-200 bg-slate-50'}`}>
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-white">{item.name}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      {item.quantity} x {formatPrice(item.price)}
+                      {available > 0 && available < item.quantity && (
+                        <span className="ml-2 text-rose-500"> (в наявності: {available})</span>
+                      )}
+                      {available === 0 && (
+                        <span className="ml-2 text-rose-500"> (немає в наявності)</span>
+                      )}
+                    </p>
+                  </div>
+                  <p className="font-bold text-amber-600 dark:text-amber-300">{formatPrice(item.price * item.quantity)}</p>
                 </div>
-                <p className="font-bold text-amber-600 dark:text-amber-300">{formatPrice(item.price * item.quantity)}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mt-6 rounded-[1.75rem] bg-slate-950 p-5 text-white dark:bg-amber-400 dark:text-slate-950">

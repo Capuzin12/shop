@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import api from '../api';
 import { useAuth } from './AuthContext';
 
@@ -38,6 +38,7 @@ export function WishlistProvider({ children }) {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const syncedRef = useRef(false);
 
   const refreshWishlist = async (tokenOverride) => {
     const token = tokenOverride || user?.token || localStorage.getItem('token');
@@ -52,10 +53,20 @@ export function WishlistProvider({ children }) {
     setLoading(true);
     try {
       const response = await api.get('/api/wishlist');
-      const nextItems = Array.isArray(response.data) ? response.data : [];
-      setItems(nextItems);
-      return nextItems;
+      const wishlistData = response.data;
+      const validItems = Array.isArray(wishlistData) 
+        ? wishlistData.filter(item => item && item.product_id)
+        : [];
+      setItems(validItems);
+      return validItems;
     } catch (error) {
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        const guestItems = readGuestWishlist();
+        setItems(guestItems);
+        setLoading(false);
+        return guestItems;
+      }
       console.error('Error fetching wishlist:', error);
       setItems([]);
       return [];
@@ -66,11 +77,13 @@ export function WishlistProvider({ children }) {
 
   useEffect(() => {
     const syncWishlist = async () => {
-      const token = user?.token || localStorage.getItem('token');
+      if (syncedRef.current || !user) {
+        return;
+      }
+      syncedRef.current = true;
 
-      if (!user || !token) {
-        setItems(readGuestWishlist());
-        setLoading(false);
+      const token = localStorage.getItem('token');
+      if (!token) {
         return;
       }
 
@@ -80,6 +93,10 @@ export function WishlistProvider({ children }) {
           try {
             await api.post('/api/wishlist', { product_id: item.product_id });
           } catch (error) {
+            if (error.response?.status === 401) {
+              localStorage.removeItem('token');
+              break;
+            }
             if (error?.response?.status !== 400) {
               console.error('Error syncing wishlist item:', error);
             }
@@ -128,6 +145,15 @@ export function WishlistProvider({ children }) {
       }
       return true;
     } catch (error) {
+      if (error.response?.status === 401) {
+        const guestItems = readGuestWishlist();
+        const nextItems = existing
+          ? guestItems.filter((item) => item.product_id !== productId)
+          : [...guestItems, normalizeGuestItem(product)];
+        writeGuestWishlist(nextItems);
+        setItems(nextItems);
+        return !existing;
+      }
       console.error('Error toggling wishlist:', error);
       return existing;
     }

@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import api from '../api';
 import { useAuth } from './AuthContext';
 
@@ -9,9 +9,10 @@ export function NotificationsProvider({ children }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
+  const syncedRef = useRef(false);
 
   const refreshNotifications = async (tokenOverride) => {
-    const token = tokenOverride || user?.token || localStorage.getItem('token');
+    const token = tokenOverride || localStorage.getItem('token');
     if (!token || !user) {
       setNotifications([]);
       setLoading(false);
@@ -21,11 +22,18 @@ export function NotificationsProvider({ children }) {
     setLoading(true);
     try {
       const response = await api.get('/api/notifications');
-      const nextItems = Array.isArray(response.data) ? response.data : [];
-      setNotifications(nextItems);
-      return nextItems;
+      const notificationsData = response.data;
+      const validNotifications = Array.isArray(notificationsData) 
+        ? notificationsData.filter(n => n && n.id)
+        : [];
+      setNotifications(validNotifications);
+      return validNotifications;
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      if (error.response?.status === 401) {
+        setNotifications([]);
+      } else {
+        console.error('Error fetching notifications:', error);
+      }
       setNotifications([]);
       return [];
     } finally {
@@ -34,7 +42,14 @@ export function NotificationsProvider({ children }) {
   };
 
   useEffect(() => {
-    refreshNotifications();
+    const syncNotifications = async () => {
+      if (syncedRef.current || !user) {
+        return;
+      }
+      syncedRef.current = true;
+      await refreshNotifications();
+    };
+    syncNotifications();
   }, [user]);
 
   useEffect(() => {

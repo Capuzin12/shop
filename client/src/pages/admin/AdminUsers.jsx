@@ -16,7 +16,11 @@ export default function AdminUsers() {
   const fetchUsers = async () => {
     try {
       const response = await api.get('/api/users');
-      setUsers(Array.isArray(response.data) ? response.data : []);
+      const usersData = response.data;
+      const validUsers = Array.isArray(usersData) 
+        ? usersData.filter(u => u && u.id)
+        : [];
+      setUsers(validUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
       setUsers([]);

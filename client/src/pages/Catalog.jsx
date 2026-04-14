@@ -67,7 +67,11 @@ export default function Catalog() {
   const fetchCategories = async () => {
     try {
       const response = await api.get('/api/categories');
-      setCategories(Array.isArray(response.data) ? response.data : []);
+      const categoriesData = response.data;
+      const validCategories = Array.isArray(categoriesData) 
+        ? categoriesData.filter(c => c && c.id)
+        : [];
+      setCategories(validCategories);
     } catch (error) {
       console.error('Error fetching categories:', error);
     }
@@ -89,7 +93,11 @@ export default function Catalog() {
       if (filters.max_price) params.max_price = filters.max_price;
 
       const response = await api.get('/api/products', { params });
-      setProducts(response.data.products || []);
+      const productsData = response.data.products;
+      const validProducts = Array.isArray(productsData) 
+        ? productsData.filter(p => p && p.id)
+        : [];
+      setProducts(validProducts);
       setPagination((prev) => ({
         ...prev,
         total: response.data.total || 0,

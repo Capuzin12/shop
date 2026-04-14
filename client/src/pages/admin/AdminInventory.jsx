@@ -11,7 +11,11 @@ export default function AdminInventory() {
   const fetchInventory = async () => {
     try {
       const response = await api.get('/api/inventory');
-      setInventory(Array.isArray(response.data) ? response.data : []);
+      const inventoryData = response.data;
+      const validInventory = Array.isArray(inventoryData) 
+        ? inventoryData.filter(item => item && item.id)
+        : [];
+      setInventory(validInventory);
     } catch (error) {
       console.error('Error fetching inventory:', error);
       setInventory([]);

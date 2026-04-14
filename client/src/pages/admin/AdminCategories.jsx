@@ -13,7 +13,11 @@ export default function AdminCategories() {
   const fetchCategories = async () => {
     try {
       const response = await api.get('/api/categories');
-      setCategories(Array.isArray(response.data) ? response.data : []);
+      const categoriesData = response.data;
+      const validCategories = Array.isArray(categoriesData) 
+        ? categoriesData.filter(c => c && c.id)
+        : [];
+      setCategories(validCategories);
     } catch (error) {
       console.error('Error fetching categories:', error);
       setCategories([]);

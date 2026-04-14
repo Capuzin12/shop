@@ -21,7 +21,11 @@ export default function ManagerOrders({ onUpdate }) {
   const fetchOrders = async () => {
     try {
       const response = await api.get('/api/orders');
-      setOrders(Array.isArray(response.data) ? response.data : response.data.orders || []);
+      const ordersData = response.data;
+      const validOrders = Array.isArray(ordersData) 
+        ? ordersData.filter(o => o && o.id)
+        : [];
+      setOrders(validOrders);
     } catch (error) {
       console.error('Error fetching orders:', error);
       setOrders([]);

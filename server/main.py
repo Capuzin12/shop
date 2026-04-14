@@ -11,7 +11,7 @@ from sqlalchemy import func, select, inspect, delete
 from sqlalchemy.orm import Session, selectinload
 
 from database import SessionLocal
-from models import Category, Product, User, UserRole, Inventory, Brand, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist
+from models import Category, Product, User, UserRole, Inventory, Brand, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType
 
 # Auth settings
 SECRET_KEY = "your-secret-key-here"  # In production, use environment variable
@@ -47,6 +47,9 @@ def serialize_model(obj, seen=None):
         return None
     if isinstance(obj, (str, int, float, bool)):
         return obj
+    # Handle enums
+    if hasattr(obj, 'value') and hasattr(obj, 'name'):
+        return obj.value
     if isinstance(obj, (datetime,)):
         return obj.isoformat()
     if isinstance(obj, list):
@@ -417,12 +420,57 @@ def get_order(order_id: int, db: DbSession, current_user: Annotated[User, Depend
 
 @app.post("/api/orders")
 def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.error(f"🔵 CREATE_ORDER START - user_id: {current_user.id}")
+    logger.error(f"🔵 Full request data: {order_data}")
+    
     items_data = order_data.pop("items", [])
     if not items_data:
         raise HTTPException(status_code=400, detail="Order must contain at least one item")
 
+    logger.error(f"Order data: {order_data}")
+    logger.error(f"Items data: {items_data}")
+
+    valid_fields = {
+        'contact_name', 'contact_phone', 'contact_email', 'delivery_city',
+        'delivery_address', 'delivery_method', 'payment_method', 'delivery_cost',
+        'discount', 'comment', 'address_id', 'promo_code_id'
+    }
+    filtered_data = {k: v for k, v in order_data.items() if k in valid_fields and v is not None and v != ''}
+
+    if not filtered_data.get('contact_name'):
+        raise HTTPException(status_code=400, detail="Contact name is required")
+    if not filtered_data.get('contact_phone'):
+        raise HTTPException(status_code=400, detail="Contact phone is required")
+
     try:
-        order = Order(user_id=current_user.id, **order_data)
+        # Set default values for enum fields if not provided
+        if 'delivery_method' not in filtered_data or not filtered_data['delivery_method']:
+            filtered_data['delivery_method'] = DeliveryMethod.nova_poshta
+        if 'payment_method' not in filtered_data or not filtered_data['payment_method']:
+            filtered_data['payment_method'] = PaymentMethod.card
+        
+        # Convert string enum values to proper enum objects if they are strings
+        if isinstance(filtered_data.get('delivery_method'), str):
+            filtered_data['delivery_method'] = DeliveryMethod(filtered_data['delivery_method'])
+        if isinstance(filtered_data.get('payment_method'), str):
+            filtered_data['payment_method'] = PaymentMethod(filtered_data['payment_method'])
+        
+        # Convert numeric fields to proper types
+        if 'delivery_cost' in filtered_data:
+            try:
+                filtered_data['delivery_cost'] = float(filtered_data['delivery_cost'])
+            except (ValueError, TypeError):
+                filtered_data['delivery_cost'] = 0.0
+        
+        if 'discount' in filtered_data:
+            try:
+                filtered_data['discount'] = float(filtered_data['discount'])
+            except (ValueError, TypeError):
+                filtered_data['discount'] = 0.0
+        
+        order = Order(user_id=current_user.id, **filtered_data)
         db.add(order)
         db.flush()
 
@@ -438,7 +486,7 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
                 raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
 
             inventory = db.scalar(select(Inventory).where(Inventory.product_id == product_id))
-            available_quantity = inventory.quantity if inventory else 0
+            available_quantity = inventory.quantity if inventory and inventory.quantity else 0
             if available_quantity < quantity:
                 raise HTTPException(
                     status_code=400,
@@ -457,6 +505,7 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
                     unit_price=unit_price,
                 )
             )
+            # Inventory is decreased manually after successful commit
 
         delivery_cost = float(order.delivery_cost or 0)
         discount = float(order.discount or 0)
@@ -465,13 +514,44 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
 
         db.commit()
         db.refresh(order)
+        
+        # Now decrease inventory after successful commit
+        for item in items_data:
+            product_id = item.get("product_id")
+            quantity = int(item.get("quantity", 0))
+            
+            inventory = db.scalar(select(Inventory).where(Inventory.product_id == product_id))
+            if inventory:
+                inventory.quantity -= quantity
+                db.add(inventory)
+                
+                # Add inventory movement record
+                db.add(InventoryMovement(
+                    product_id=product_id,
+                    order_id=order.id,
+                    type=MovementType.sale,
+                    quantity=-quantity,
+                    quantity_before=inventory.quantity + quantity,
+                    quantity_after=inventory.quantity,
+                    note=f"Автосписання: замовлення #{order.id}"
+                ))
+        
+        # Clear user's cart after successful order
+        cart = db.scalar(select(Cart).where(Cart.user_id == current_user.id))
+        if cart:
+            db.execute(delete(CartItem).where(CartItem.cart_id == cart.id))
+        
+        db.commit()
         return serialize_model(order)
     except HTTPException:
         db.rollback()
         raise
-    except Exception:
+    except Exception as e:
         db.rollback()
-        raise
+        logger.error(f"Order creation failed: {e}", exc_info=True)
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @app.put("/api/orders/{order_id}")
