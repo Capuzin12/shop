@@ -109,7 +109,7 @@ export function WishlistProvider({ children }) {
     };
 
     syncWishlist();
-  }, [user]);
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleWishlist = async (product, options = {}) => {
     const productId = typeof product === 'number' ? product : product?.id;

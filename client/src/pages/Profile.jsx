@@ -5,6 +5,7 @@ import api from '../api';
 import OrderChatWindow from '../components/OrderChatWindow';
 import { useAuth } from '../contexts/AuthContext';
 import { getBackofficeLinks, getRoleLabel } from '../utils/roles';
+import { mapZodErrors, normalizePhoneInput, profileSchema } from '../utils/validation';
 
 const formatPrice = (price) => new Intl.NumberFormat('uk-UA', {
   style: 'currency',
@@ -48,12 +49,7 @@ export default function Profile() {
   const backofficeLinks = getBackofficeLinks(user?.role);
 
   const normalizePhone = (value) => {
-    let cleaned = String(value || '').trim().replace(/[^\d+]/g, '');
-    if (cleaned.startsWith('00')) cleaned = `+${cleaned.slice(2)}`;
-    if (!cleaned.startsWith('+') && cleaned.startsWith('0') && cleaned.length === 10) {
-      cleaned = `+38${cleaned}`;
-    }
-    return cleaned;
+    return normalizePhoneInput(value);
   };
 
   useEffect(() => {
@@ -203,8 +199,10 @@ export default function Profile() {
   const savePhone = async () => {
     if (phoneSaving) return;
     const normalized = normalizePhone(phoneInput);
-    if (normalized && !/^\+?\d{10,15}$/.test(normalized)) {
-      setProfileMessage('Телефон має бути у форматі +380XXXXXXXXX');
+    const parsed = profileSchema.safeParse({ phone: normalized });
+    if (!parsed.success) {
+      const mapped = mapZodErrors(parsed.error);
+      setProfileMessage(mapped.phone || 'Некоректний номер телефону');
       return;
     }
 

@@ -2,6 +2,7 @@ import { UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api';
+import { mapZodErrors, registerSchema } from '../utils/validation';
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -26,31 +27,17 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const nextErrors = {};
 
-    const email = String(formData.email || '').trim();
-    const password = String(formData.password || '').trim();
-    const firstName = String(formData.first_name || '').trim();
-    const lastName = String(formData.last_name || '').trim();
-    const phone = String(formData.phone || '').trim();
-
-    if (!email) nextErrors.email = 'Вкажіть email';
-    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) nextErrors.email = 'Некоректний формат email';
-    if (!firstName) nextErrors.first_name = "Вкажіть ім'я";
-    if (!lastName) nextErrors.last_name = 'Вкажіть прізвище';
-    if (!password) nextErrors.password = 'Вкажіть пароль';
-    else if (password.length < 6) nextErrors.password = 'Пароль має містити щонайменше 6 символів';
-    if (phone && !/^\+?\d{10,15}$/.test(phone.replace(/[\s()-]/g, ''))) nextErrors.phone = 'Некоректний номер телефону';
-
-    if (Object.keys(nextErrors).length) {
-      setFieldErrors(nextErrors);
+    const parsed = registerSchema.safeParse(formData);
+    if (!parsed.success) {
+      setFieldErrors(mapZodErrors(parsed.error));
       setError('Перевірте обовʼязкові поля.');
       return;
     }
 
     setError('');
     try {
-      await api.post('/api/users', { ...formData, email, password, first_name: firstName, last_name: lastName, phone });
+      await api.post('/api/users', parsed.data);
       navigate('/login');
     } catch (err) {
       const detail = err?.response?.data?.detail;

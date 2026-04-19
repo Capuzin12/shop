@@ -15,7 +15,7 @@ from sqlalchemy import func, select, inspect, delete, case, text
 from sqlalchemy.orm import Session, selectinload
 
 from database import SessionLocal
-from models import Category, Product, User, UserRole, Inventory, Brand, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, Review, OrderStatus, OrderMessage, AuditLog
+from models import Category, Product, User, UserRole, Inventory, Brand, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, Review, OrderStatus, OrderMessage, AuditLog, ClientError
 from logging_config import configure_logging, get_logger, set_request_id, set_user_id, get_request_id, generate_request_id
 from config import settings, validate_settings
 from security import add_request_id_middleware, add_security_headers_middleware, add_timing_middleware, limiter
@@ -68,6 +68,27 @@ def ensure_runtime_schema(db: Session):
         for sql in statements:
             db.execute(text(sql))
         db.commit()
+
+    table_info = db.execute(text("PRAGMA table_info(client_errors)")).all()
+    if not table_info:
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS client_errors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                path TEXT,
+                message TEXT NOT NULL,
+                stack TEXT,
+                component_stack TEXT,
+                request_id TEXT,
+                user_agent TEXT,
+                ip_address TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_client_errors_created_at ON client_errors(created_at)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_client_errors_user_id ON client_errors(user_id)"))
+        db.commit()
+
     _schema_patched = True
 
 app.add_middleware(
@@ -529,6 +550,73 @@ async def get_current_sales_user(current_user: Annotated[User, Depends(get_curre
 
 
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+@app.get("/api/feature-flags")
+def get_feature_flags(current_user: Annotated[User | None, Depends(get_optional_user)] = None):
+    is_staff = bool(current_user and current_user.role in {
+        UserRole.admin,
+        UserRole.manager,
+        UserRole.content_manager,
+        UserRole.sales_processor,
+        UserRole.warehouse_manager,
+    })
+    return {
+        "flags": {
+            "experimentalCatalogSuggestions": True,
+            "enhancedErrorReporting": True,
+            "apiRetryFor5xx": True,
+            "staffDiagnosticsPanel": is_staff,
+        }
+    }
+
+
+@app.post("/api/errors", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
+def create_client_error(
+    request: Request,
+    payload: dict,
+    db: DbSession,
+    current_user: Annotated[User | None, Depends(get_optional_user)] = None,
+):
+    message = str((payload or {}).get("message") or "").strip()
+    if len(message) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "INVALID_CLIENT_ERROR", "message": "Повідомлення помилки занадто коротке"},
+        )
+
+    client_error = ClientError(
+        user_id=current_user.id if current_user else None,
+        path=str((payload or {}).get("path") or "")[:255],
+        message=message[:500],
+        stack=str((payload or {}).get("stack") or "")[:8000],
+        component_stack=str((payload or {}).get("component_stack") or "")[:8000],
+        request_id=str((payload or {}).get("request_id") or get_request_id() or "")[:64],
+        user_agent=str((payload or {}).get("user_agent") or request.headers.get("user-agent") or "")[:500],
+        ip_address=request.client.host if request.client else None,
+    )
+    db.add(client_error)
+    db.commit()
+    db.refresh(client_error)
+
+    short_code = f"FE-{client_error.id:06d}"
+    logger.warning(
+        "Client UI error captured",
+        extra={
+            "client_error_id": client_error.id,
+            "error_code": short_code,
+            "path": client_error.path,
+            "request_id": client_error.request_id,
+            "user_id": current_user.id if current_user else None,
+        },
+    )
+
+    return {
+        "ok": True,
+        "error_code": short_code,
+        "id": client_error.id,
+    }
 
 
 @app.post("/token")

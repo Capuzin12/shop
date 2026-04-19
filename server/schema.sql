@@ -343,6 +343,22 @@ CREATE TABLE notifications (
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE client_errors (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    path            TEXT,
+    message         TEXT NOT NULL,
+    stack           TEXT,
+    component_stack TEXT,
+    request_id      TEXT,
+    user_agent      TEXT,
+    ip_address      TEXT,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_client_errors_created_at ON client_errors(created_at);
+CREATE INDEX idx_client_errors_user_id ON client_errors(user_id);
+
 -- ============================================================
 -- WISHLIST
 -- ============================================================

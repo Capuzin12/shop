@@ -7,6 +7,7 @@ client/.env*.local
 
 server/venv/
 server/__pycache__/
+__pycache__/
 server/app.db
 *.pyc
 *.pyo
@@ -23,3 +24,5 @@ server/app.db
 # Local backup files
 *.sql
 *.sqlite
+backups/
+restore_test/

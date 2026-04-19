@@ -83,7 +83,7 @@ export function NotificationsProvider({ children }) {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('buildshop:notifications-refresh', onNotificationsRefresh);
     };
-  }, [user?.token]);
+  }, [user?.token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const markRead = async (id) => {
     const token = user?.token || localStorage.getItem('token');

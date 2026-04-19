@@ -602,3 +602,21 @@ class AuditLog(Base):
     
     user: Mapped[Optional["User"]] = relationship("User")
 
+
+class ClientError(Base):
+    __tablename__ = "client_errors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    path: Mapped[Optional[str]] = mapped_column(String(255))
+    message: Mapped[str] = mapped_column(String(500), nullable=False)
+    stack: Mapped[Optional[str]] = mapped_column(Text)
+    component_stack: Mapped[Optional[str]] = mapped_column(Text)
+    request_id: Mapped[Optional[str]] = mapped_column(String(64))
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500))
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45))
+    created_at: Mapped[datetime] = mapped_column(default=func.now(), index=True)
+
+    user: Mapped[Optional["User"]] = relationship("User")
+
+

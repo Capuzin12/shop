@@ -4,7 +4,9 @@ import { CartProvider } from './contexts/CartContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { WishlistProvider } from './contexts/WishlistContext';
 import { NotificationsProvider } from './contexts/NotificationsContext';
+import { FeatureFlagProvider } from './contexts/FeatureFlagContext';
 import Header from './components/Header';
+import GlobalToaster from './components/GlobalToaster';
 import Home from './pages/Home';
 import Catalog from './pages/Catalog';
 import ProductDetail from './pages/ProductDetail';
@@ -23,13 +25,14 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <WishlistProvider>
-          <NotificationsProvider>
-            <CartProvider>
-              <div className="min-h-screen bg-transparent text-slate-900 transition-colors duration-300 dark:text-slate-100">
-                <Header />
-                <main className="pb-12">
-                  <Routes>
+        <FeatureFlagProvider>
+          <WishlistProvider>
+            <NotificationsProvider>
+              <CartProvider>
+                <div className="min-h-screen bg-transparent text-slate-900 transition-colors duration-300 dark:text-slate-100">
+                  <Header />
+                  <main className="pb-12">
+                    <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/catalog" element={<Catalog />} />
                     <Route path="/product/:id" element={<ProductDetail />} />
@@ -51,12 +54,14 @@ export default function App() {
                         <ManagerDashboard />
                       </ProtectedRoute>
                     } />
-                  </Routes>
-                </main>
-              </div>
-            </CartProvider>
-          </NotificationsProvider>
-        </WishlistProvider>
+                    </Routes>
+                  </main>
+                  <GlobalToaster />
+                </div>
+              </CartProvider>
+            </NotificationsProvider>
+          </WishlistProvider>
+        </FeatureFlagProvider>
       </AuthProvider>
     </ThemeProvider>
   );

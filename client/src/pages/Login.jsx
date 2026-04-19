@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleLandingPath } from '../utils/roles';
+import { loginSchema, mapZodErrors } from '../utils/validation';
 
 export default function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -24,22 +25,16 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const nextErrors = {};
-    const email = String(formData.email || '').trim();
-    const password = String(formData.password || '').trim();
-    if (!email) nextErrors.email = "Вкажіть email";
-    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) nextErrors.email = 'Некоректний формат email';
-    if (!password) nextErrors.password = 'Вкажіть пароль';
-
-    if (Object.keys(nextErrors).length) {
-      setFieldErrors(nextErrors);
+    const parsed = loginSchema.safeParse(formData);
+    if (!parsed.success) {
+      setFieldErrors(mapZodErrors(parsed.error));
       setError('Перевірте обовʼязкові поля.');
       return;
     }
 
     setError('');
     try {
-      const userData = await login(email, password);
+      const userData = await login(parsed.data.email, parsed.data.password);
       const from = location.state?.from?.pathname;
       navigate(from || getRoleLandingPath(userData?.role), { replace: true });
     } catch {

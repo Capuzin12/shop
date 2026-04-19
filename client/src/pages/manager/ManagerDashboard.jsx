@@ -1,6 +1,6 @@
 import api from '../../api';
 import { Boxes, LogOut, PackageCheck, ShieldAlert } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BackofficeShell, FilterButton, Panel, StatCard } from '../../components/BackofficeUI';
@@ -19,7 +19,6 @@ export default function ManagerDashboard() {
       ? 'inventory'
       : 'orders';
   const tabFromQuery = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(tabFromQuery || preferredTab);
   const [stats, setStats] = useState({ orders: 0, products: 0, lowStock: 0 });
 
   const canManageOrders = ['admin', 'manager', 'sales_processor'].includes(user?.role);
@@ -27,7 +26,7 @@ export default function ManagerDashboard() {
   const canManageProducts = ['admin', 'manager', 'warehouse_manager'].includes(user?.role);
   const roleLabel = getRoleLabel(user?.role);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     if (!user?.token) return;
     try {
       const [ordersRes, productsRes, inventoryRes] = await Promise.all([
@@ -49,19 +48,12 @@ export default function ManagerDashboard() {
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
-  };
-
-  useEffect(() => {
-    if (tabFromQuery) {
-      setActiveTab(tabFromQuery);
-      return;
-    }
-    setActiveTab(preferredTab);
-  }, [preferredTab, tabFromQuery]);
-
-  useEffect(() => {
-    fetchStats();
   }, [user?.token]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchStats();
+  }, [fetchStats]);
 
   if (!user || (!canManageOrders && !canManageInventory && !canManageProducts)) {
     return (
@@ -77,8 +69,9 @@ export default function ManagerDashboard() {
     canManageInventory ? { id: 'inventory', label: 'Склад' } : null,
   ].filter(Boolean);
 
+  const activeTab = tabFromQuery || preferredTab;
+
   const switchTab = (tabId) => {
-    setActiveTab(tabId);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set('tab', tabId);

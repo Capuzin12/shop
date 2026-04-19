@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
+import { checkoutSchema, mapZodErrors, normalizePhoneInput } from '../utils/validation';
 
 const GUEST_CHECKOUT_KEY = 'buildshop-checkout-draft';
 
@@ -26,18 +27,10 @@ const getStockQuantity = (item) => {
   return null;
 };
 
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const PHONE_RE = /^\+?\d{10,15}$/;
-
 const trimValue = (value) => String(value || '').trim();
 
 const normalizePhone = (value) => {
-  let cleaned = trimValue(value).replace(/[^\d+]/g, '');
-  if (cleaned.startsWith('00')) cleaned = `+${cleaned.slice(2)}`;
-  if (!cleaned.startsWith('+') && cleaned.startsWith('0') && cleaned.length === 10) {
-    cleaned = `+38${cleaned}`;
-  }
-  return cleaned;
+  return normalizePhoneInput(value);
 };
 
 const mapOrderError = (errorPayload, fallbackMessage) => {
@@ -260,15 +253,9 @@ export default function Checkout() {
       })),
     };
 
-    const nextErrors = {};
-    if (!payload.contact_name || payload.contact_name.length < 2) nextErrors.contact_name = "Вкажіть коректне ім'я отримувача";
-    if (!PHONE_RE.test(payload.contact_phone)) nextErrors.contact_phone = 'Вкажіть коректний номер телефону';
-    if (payload.contact_email && !EMAIL_RE.test(payload.contact_email)) nextErrors.contact_email = 'Email має некоректний формат';
-    if (!payload.delivery_city) nextErrors.delivery_city = 'Вкажіть місто доставки';
-    if (!payload.delivery_address) nextErrors.delivery_address = 'Вкажіть адресу доставки';
-
-    if (Object.keys(nextErrors).length > 0) {
-      setFieldErrors(nextErrors);
+    const parsed = checkoutSchema.safeParse(payload);
+    if (!parsed.success) {
+      setFieldErrors(mapZodErrors(parsed.error));
       setMessage('Перевірте заповнення полів форми.');
       return;
     }

@@ -2,8 +2,10 @@ import { Heart, ShoppingCart } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api';
+import Feature from '../components/Feature';
 import { useCart } from '../contexts/CartContext';
 import { useWishlist } from '../contexts/WishlistContext';
+import { mapZodErrors, productFilterSchema } from '../utils/validation';
 
 const formatPrice = (price) => new Intl.NumberFormat('uk-UA', {
   style: 'currency',
@@ -75,7 +77,7 @@ export default function Catalog() {
 
   useEffect(() => {
     fetchProducts();
-  }, [filters, pagination.page]);
+  }, [filters, pagination.page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const query = (filters.search || '').trim();
@@ -150,6 +152,23 @@ export default function Catalog() {
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
+    const nextFilters = { ...filters, [name]: value };
+    const parsed = productFilterSchema.safeParse(nextFilters);
+    if (!parsed.success) {
+      const mapped = mapZodErrors(parsed.error);
+      const firstError = Object.values(mapped)[0];
+      if (firstError) {
+        window.dispatchEvent(new CustomEvent('buildshop:toast', {
+          detail: {
+            title: 'Некоректний фільтр',
+            message: firstError,
+            level: 'warning',
+          },
+        }));
+      }
+      return;
+    }
+
     const nextParams = new URLSearchParams(searchParams);
     if (value) nextParams.set(name, value);
     else nextParams.delete(name);
@@ -236,7 +255,8 @@ export default function Catalog() {
                 <input name="search" value={filters.search} onChange={handleFilterChange} placeholder="Наприклад, цемент або Bosch" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" />
               </label>
 
-              {(suggestions.products.length > 0 || suggestions.categories.length > 0 || suggestions.brands.length > 0) && (
+              <Feature flag="experimentalCatalogSuggestions">
+                {(suggestions.products.length > 0 || suggestions.categories.length > 0 || suggestions.brands.length > 0) && (
                 <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm dark:border-white/10 dark:bg-slate-950/60">
                   {suggestions.products.length > 0 && (
                     <div className="mb-2">
@@ -304,7 +324,8 @@ export default function Catalog() {
                     </div>
                   )}
                 </div>
-              )}
+                )}
+              </Feature>
 
               {brandFacets.length > 0 && (
                 <div>
