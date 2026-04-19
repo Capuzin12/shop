@@ -161,6 +161,8 @@ export default function Checkout() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationMessage, setLocationMessage] = useState('');
 
+  const getInputClass = (field) => `form-input ${fieldErrors[field] ? 'form-input-error' : ''}`;
+
   useEffect(() => {
     localStorage.setItem(GUEST_CHECKOUT_KEY, JSON.stringify(formData));
   }, [formData]);
@@ -328,7 +330,7 @@ export default function Checkout() {
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[1.05fr,0.95fr]">
-        <form onSubmit={handleSubmit} className="rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
+        <form noValidate onSubmit={handleSubmit} className="rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-500/20 dark:bg-blue-500/10">
               <label className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-200">
@@ -353,38 +355,38 @@ export default function Checkout() {
               </div>
             </div>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Ім'я</span>
-              <input value={formData.contact_name} onChange={(e) => updateField('contact_name', e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" required />
-              {fieldErrors.contact_name ? <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">{fieldErrors.contact_name}</p> : null}
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Ім'я<span className="required-mark">*</span></span>
+              <input value={formData.contact_name} onChange={(e) => updateField('contact_name', e.target.value)} className={getInputClass('contact_name')} required />
+              {fieldErrors.contact_name ? <p className="form-error-text">{fieldErrors.contact_name}</p> : null}
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Телефон</span>
-              <input value={formData.contact_phone} onChange={(e) => updateField('contact_phone', e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" required />
-              {fieldErrors.contact_phone ? <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">{fieldErrors.contact_phone}</p> : null}
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Телефон<span className="required-mark">*</span></span>
+              <input value={formData.contact_phone} onChange={(e) => updateField('contact_phone', e.target.value)} className={getInputClass('contact_phone')} required />
+              {fieldErrors.contact_phone ? <p className="form-error-text">{fieldErrors.contact_phone}</p> : null}
             </label>
             <label className="block md:col-span-2">
               <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Email</span>
-              <input value={formData.contact_email} onChange={(e) => updateField('contact_email', e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" />
-              {fieldErrors.contact_email ? <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">{fieldErrors.contact_email}</p> : null}
+              <input value={formData.contact_email} onChange={(e) => updateField('contact_email', e.target.value)} className={getInputClass('contact_email')} />
+              {fieldErrors.contact_email ? <p className="form-error-text">{fieldErrors.contact_email}</p> : null}
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Місто</span>
-              <input value={formData.delivery_city} onChange={(e) => updateField('delivery_city', e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" required />
-              {fieldErrors.delivery_city ? <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">{fieldErrors.delivery_city}</p> : null}
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Місто<span className="required-mark">*</span></span>
+              <input value={formData.delivery_city} onChange={(e) => updateField('delivery_city', e.target.value)} className={getInputClass('delivery_city')} required />
+              {fieldErrors.delivery_city ? <p className="form-error-text">{fieldErrors.delivery_city}</p> : null}
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Адреса</span>
-              <input value={formData.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" required />
-              {fieldErrors.delivery_address ? <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">{fieldErrors.delivery_address}</p> : null}
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Адреса<span className="required-mark">*</span></span>
+              <input value={formData.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} className={getInputClass('delivery_address')} required />
+              {fieldErrors.delivery_address ? <p className="form-error-text">{fieldErrors.delivery_address}</p> : null}
             </label>
             <label className="block md:col-span-2">
               <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Коментар</span>
-              <textarea value={formData.comment} onChange={(e) => updateField('comment', e.target.value)} rows="4" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" />
+              <textarea value={formData.comment} onChange={(e) => updateField('comment', e.target.value)} rows="4" className={getInputClass('comment')} />
             </label>
           </div>
 
           {message ? (
-            <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+            <p className={Object.keys(fieldErrors).length ? 'form-error-banner' : 'mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}>
               {message}
             </p>
           ) : null}

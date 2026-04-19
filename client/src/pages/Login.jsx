@@ -7,14 +7,39 @@ import { getRoleLandingPath } from '../utils/roles';
 export default function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
+  const updateField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const { [field]: _removed, ...rest } = prev;
+      return rest;
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const nextErrors = {};
+    const email = String(formData.email || '').trim();
+    const password = String(formData.password || '').trim();
+    if (!email) nextErrors.email = "Вкажіть email";
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) nextErrors.email = 'Некоректний формат email';
+    if (!password) nextErrors.password = 'Вкажіть пароль';
+
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setError('Перевірте обовʼязкові поля.');
+      return;
+    }
+
+    setError('');
     try {
-      const userData = await login(formData.email, formData.password);
+      const userData = await login(email, password);
       const from = location.state?.from?.pathname;
       navigate(from || getRoleLandingPath(userData?.role), { replace: true });
     } catch {
@@ -33,22 +58,24 @@ export default function Login() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="rounded-[2.5rem] border border-white/50 bg-white/75 p-8 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
+        <form noValidate onSubmit={handleSubmit} className="rounded-[2.5rem] border border-white/50 bg-white/75 p-8 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
           <h2 className="text-2xl font-black text-slate-900 dark:text-white">Увійти</h2>
           {error ? (
-            <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+            <p className="form-error-banner">
               {error}
             </p>
           ) : null}
 
           <div className="mt-6 space-y-4">
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Email</span>
-              <input type="email" name="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" />
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Email<span className="required-mark">*</span></span>
+              <input type="email" name="email" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required className={`form-input ${fieldErrors.email ? 'form-input-error' : ''}`} />
+              {fieldErrors.email ? <p className="form-error-text">{fieldErrors.email}</p> : null}
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Пароль</span>
-              <input type="password" name="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} required className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" />
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Пароль<span className="required-mark">*</span></span>
+              <input type="password" name="password" value={formData.password} onChange={(e) => updateField('password', e.target.value)} required className={`form-input ${fieldErrors.password ? 'form-input-error' : ''}`} />
+              {fieldErrors.password ? <p className="form-error-text">{fieldErrors.password}</p> : null}
             </label>
           </div>
 

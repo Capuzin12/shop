@@ -9,6 +9,17 @@ export default function AdminProducts() {
   const [products, setProducts] = useState([]);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState({ name: '', description: '', price: '', category_id: '' });
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [formError, setFormError] = useState('');
+
+  const updateField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const { [field]: _removed, ...rest } = prev;
+      return rest;
+    });
+  };
 
   const fetchProducts = async () => {
     try {
@@ -34,6 +45,22 @@ export default function AdminProducts() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const nextErrors = {};
+    const name = String(formData.name || '').trim();
+    const price = Number(formData.price);
+    const categoryId = Number(formData.category_id);
+
+    if (!name) nextErrors.name = 'Вкажіть назву товару';
+    if (!Number.isFinite(price) || price <= 0) nextErrors.price = 'Ціна має бути більшою за 0';
+    if (!Number.isInteger(categoryId) || categoryId <= 0) nextErrors.category_id = 'Вкажіть коректний ID категорії';
+
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setFormError('Перевірте обовʼязкові поля форми товару.');
+      return;
+    }
+
+    setFormError('');
     try {
       if (editing) {
         await api.put(`/api/products/${editing}`, formData);
@@ -42,9 +69,12 @@ export default function AdminProducts() {
       }
       setEditing(null);
       setFormData({ name: '', description: '', price: '', category_id: '' });
+      setFieldErrors({});
       fetchProducts();
     } catch (error) {
       console.error('Error saving product:', error);
+      const detail = error?.response?.data?.detail;
+      setFormError(detail?.message || detail || 'Не вдалося зберегти товар.');
     }
   };
 
@@ -60,18 +90,28 @@ export default function AdminProducts() {
           </button>
         )}
       >
-        <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
-          <input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Назва товару" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-950/60" required />
-          <input value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} placeholder="Ціна" type="number" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-950/60" required />
-          <input value={formData.category_id} onChange={(e) => setFormData({ ...formData, category_id: e.target.value })} placeholder="ID категорії" type="number" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-950/60" required />
-          <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Опис" rows="3" className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-950/60" />
+        <form noValidate onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
+          {formError ? <p className="form-error-banner md:col-span-2">{formError}</p> : null}
+          <div>
+            <input value={formData.name} onChange={(e) => updateField('name', e.target.value)} placeholder="Назва товару *" className={`form-input ${fieldErrors.name ? 'form-input-error' : ''}`} required />
+            {fieldErrors.name ? <p className="form-error-text">{fieldErrors.name}</p> : null}
+          </div>
+          <div>
+            <input value={formData.price} onChange={(e) => updateField('price', e.target.value)} placeholder="Ціна *" type="number" className={`form-input ${fieldErrors.price ? 'form-input-error' : ''}`} required />
+            {fieldErrors.price ? <p className="form-error-text">{fieldErrors.price}</p> : null}
+          </div>
+          <div>
+            <input value={formData.category_id} onChange={(e) => updateField('category_id', e.target.value)} placeholder="ID категорії *" type="number" className={`form-input ${fieldErrors.category_id ? 'form-input-error' : ''}`} required />
+            {fieldErrors.category_id ? <p className="form-error-text">{fieldErrors.category_id}</p> : null}
+          </div>
+          <textarea value={formData.description} onChange={(e) => updateField('description', e.target.value)} placeholder="Опис" rows="3" className="form-input" />
           <div className="md:col-span-2 flex flex-wrap gap-3">
             <button className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white dark:bg-amber-400 dark:text-slate-950" type="submit">
               <Plus className="h-4 w-4" />
               {editing ? 'Зберегти зміни' : 'Додати товар'}
             </button>
             {editing ? (
-              <button onClick={() => { setEditing(null); setFormData({ name: '', description: '', price: '', category_id: '' }); }} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button">
+              <button onClick={() => { setEditing(null); setFormData({ name: '', description: '', price: '', category_id: '' }); setFieldErrors({}); setFormError(''); }} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button">
                 Скасувати
               </button>
             ) : null}

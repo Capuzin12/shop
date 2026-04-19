@@ -65,3 +65,30 @@
     }
   }
 }
+
+@layer components {
+  .form-input {
+    @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition;
+    @apply focus:border-amber-400 focus:ring-2 focus:ring-amber-200/70;
+    @apply dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100 dark:focus:border-amber-300 dark:focus:ring-amber-400/20;
+  }
+
+  .form-input-error {
+    @apply border-rose-300 ring-2 ring-rose-200/70 focus:border-rose-400 focus:ring-rose-200/80;
+    @apply dark:border-rose-500/50 dark:ring-rose-500/20 dark:focus:border-rose-400;
+  }
+
+  .form-error-text {
+    @apply mt-1.5 text-xs font-medium text-rose-600 dark:text-rose-300;
+  }
+
+  .form-error-banner {
+    @apply mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700;
+    @apply dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300;
+  }
+
+  .required-mark {
+    @apply ml-1 text-rose-500;
+  }
+}
+
