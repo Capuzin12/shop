@@ -26,6 +26,11 @@ const dispatchToast = (title, message, level = 'warning') => {
 
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
+const isAuthEndpointRequest = (url = '') => {
+  const normalized = String(url);
+  return normalized.includes('/token') || normalized.includes('/api/logout');
+};
+
 const resolveErrorCode = (error) => {
   const detail = error?.response?.data?.detail;
   return detail?.code || error?.response?.data?.error_code || null;
@@ -58,6 +63,7 @@ api.interceptors.response.use(
   async (error) => {
     const status = error?.response?.status;
     const config = error?.config || {};
+    const requestUrl = config?.url || '';
 
     const requestId = error?.response?.headers?.['x-request-id'];
     if (requestId) {
@@ -78,8 +84,17 @@ api.interceptors.response.use(
     }
 
     if (status === 401) {
+      if (isAuthEndpointRequest(requestUrl)) {
+        return Promise.reject(error);
+      }
+
       localStorage.removeItem('user');
-      window.location.href = '/login'; // Redirect to login page
+
+      // Avoid full reload loop when user is already on login page.
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+
       return Promise.reject(error);
     }
 
