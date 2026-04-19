@@ -1,34 +1,108 @@
 version: '3.9'
 
 # BuildShop Production Configuration
-# Uses Supabase as external PostgreSQL database
-# DATABASE_URL should be set in .env file
+# Uses PostgreSQL (via DATABASE_URL) for production
+# SSL/TLS certificates should be mounted or provisioned via Certbot
+# All environment variables must be set in .env file
 
 services:
   api:
     build:
       context: ./server
+    container_name: buildshop-api
     env_file:
       - ./.env
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - DEBUG=false
+      - ENVIRONMENT=production
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TTL_MIN=30
+      - AUTH_COOKIE_SAMESITE=strict
+      - AUTH_COOKIE_SECURE=true
+      - CORS_ORIGINS=${CORS_ORIGINS}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Resource limits for production
+    mem_limit: 512m
+    cpus: '1'
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - buildshop-net
+    depends_on:
+      - nginx  # Wait for nginx to be ready
+    # Logs configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   web:
     build:
       context: ./client
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/}
+    container_name: buildshop-web
     restart: unless-stopped
+    # Resource limits
+    mem_limit: 256m
+    cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - buildshop-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   nginx:
     image: nginx:1.27-alpine
+    container_name: buildshop-nginx
     depends_on:
       - api
       - web
     volumes:
       - ./infra/nginx/buildshop.conf:/etc/nginx/conf.d/default.conf:ro
+      # SSL certificates (mount your certificates here)
+      # - ./ssl/certs/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      # - ./ssl/certs/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+      # - ./ssl/conf/dhparam.pem:/etc/nginx/ssl/dhparam.pem:ro
     ports:
       - '80:80'
+      # - '443:443'  # Uncomment for HTTPS
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # Resource limits
+    mem_limit: 256m
+    cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - buildshop-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+networks:
+  buildshop-net:
+    driver: bridge
+    # Disable inter-container connectivity if not needed
+    # driver_opts:
+    #   com.docker.network.bridge.enable_ip_masquerade: "false"

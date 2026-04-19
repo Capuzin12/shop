@@ -36,12 +36,12 @@ export default function AdminCategories() {
   };
 
   useEffect(() => {
-    if (!user?.token) return;
+    if (!user) return;
     const loadCategories = async () => {
       await fetchCategories();
     };
     loadCategories();
-  }, [user?.token]);
+  }, [user]);
 
   const submit = async (e) => {
     e.preventDefault();

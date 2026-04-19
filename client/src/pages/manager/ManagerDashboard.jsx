@@ -27,7 +27,7 @@ export default function ManagerDashboard() {
   const roleLabel = getRoleLabel(user?.role);
 
   const fetchStats = useCallback(async () => {
-    if (!user?.token) return;
+    if (!user) return;
     try {
       const [ordersRes, productsRes, inventoryRes] = await Promise.all([
         api.get('/api/orders'),
@@ -48,7 +48,7 @@ export default function ManagerDashboard() {
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
-  }, [user?.token]);
+  }, [user]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

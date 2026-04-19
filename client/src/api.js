@@ -3,6 +3,7 @@ import axios from 'axios';
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/',
   timeout: 15000,
+  withCredentials: true,
 });
 
 const MAX_RETRIES = 3;
@@ -45,14 +46,6 @@ export const getFriendlyErrorMessage = (error) => {
   return 'Сталася помилка. Спробуйте ще раз.';
 };
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
 api.interceptors.response.use(
   (response) => {
     const requestId = response.headers?.['x-request-id'];
@@ -85,7 +78,6 @@ api.interceptors.response.use(
     }
 
     if (status === 401) {
-      localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login'; // Redirect to login page
       return Promise.reject(error);

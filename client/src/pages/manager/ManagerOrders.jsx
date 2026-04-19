@@ -43,12 +43,12 @@ export default function ManagerOrders({ onUpdate }) {
   };
 
   useEffect(() => {
-    if (!user?.token) return;
+    if (!user) return;
     const loadOrders = async () => {
       await fetchOrders();
     };
     loadOrders();
-  }, [user?.token]);
+  }, [user]);
 
   useEffect(() => {
     const orderId = Number(searchParams.get('order_id') || 0);

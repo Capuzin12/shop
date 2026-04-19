@@ -11,25 +11,8 @@ Run example:
 
 from __future__ import annotations
 
-import importlib
 import random
-
-try:
-    _locust = importlib.import_module("locust")
-    HttpUser = getattr(_locust, "HttpUser")
-    between = getattr(_locust, "between")
-    task = getattr(_locust, "task")
-except Exception:  # pragma: no cover
-    class HttpUser:  # type: ignore[no-redef]
-        wait_time = None
-
-    def between(_a: float, _b: float):  # type: ignore[no-redef]
-        return None
-
-    def task(_weight: int = 1):  # type: ignore[no-redef]
-        def _decorator(func):
-            return func
-        return _decorator
+from locust import HttpUser, between, task
 
 
 class BuildShopBrowseUser(HttpUser):

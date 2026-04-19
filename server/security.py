@@ -16,8 +16,12 @@ from typing import Optional
 
 logger = get_logger(__name__)
 
-# Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address)
+# Initialize rate limiter with stricter defaults for production
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["1000 per hour"] if not settings.is_production() else ["600 per hour"],
+    storage_uri="memory://"  # Can be extended to Redis for distributed setups
+)
 
 
 async def add_request_id_middleware(request: Request, call_next):
@@ -58,20 +62,54 @@ async def add_request_id_middleware(request: Request, call_next):
 async def add_security_headers_middleware(request: Request, call_next):
     """
     Middleware to add security headers to all responses.
+    Production-hardened security headers to prevent common attacks.
     """
     response = await call_next(request)
     
-    # Security headers
+    # Prevent MIME-type sniffing
     response.headers['X-Content-Type-Options'] = 'nosniff'
+    
+    # Clickjacking protection
     response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Content-Security-Policy'] = "frame-ancestors 'none'"
+    
+    # XSS protection (legacy, but good for older browsers)
     response.headers['X-XSS-Protection'] = '1; mode=block'
     
-    # HSTS header only in production
+    # Strict CSP for production (whitelist only API domain and self)
     if settings.is_production():
-        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        # Allow only same-origin resources
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "  # React requires inline styles
+            "img-src 'self' data: https:; "
+            "font-src 'self'; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+        response.headers['Content-Security-Policy'] = csp
     
-    # CSP header
-    response.headers['Content-Security-Policy'] = "default-src 'self'"
+    # HSTS (HTTP Strict Transport Security) - only in production with HTTPS
+    if settings.is_production():
+        # 2 years (63072000 seconds) with subdomains and preload
+        response.headers['Strict-Transport-Security'] = 'max-age=63072000; includeSubDomains; preload'
+    
+    # Referrer Policy - don't leak information
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    
+    # Feature Policy / Permissions Policy
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=(), payment=()'
+    
+    # Remove server header to avoid information disclosure
+    if 'Server' in response.headers:
+        del response.headers['Server']
+    
+    # X-Powered-By should not be exposed
+    if 'X-Powered-By' in response.headers:
+        del response.headers['X-Powered-By']
     
     return response
 

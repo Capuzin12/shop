@@ -272,13 +272,12 @@ export default function Checkout() {
 
     try {
       setSubmitting(true);
-      const token = localStorage.getItem('token');
       const response = await fetch('/api/orders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 

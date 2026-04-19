@@ -24,12 +24,12 @@ export default function ManagerProducts() {
   };
 
   useEffect(() => {
-    if (!user?.token) return;
+    if (!user) return;
     const loadProducts = async () => {
       await fetchProducts();
     };
     loadProducts();
-  }, [user?.token]);
+  }, [user]);
 
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

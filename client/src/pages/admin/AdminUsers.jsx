@@ -23,12 +23,12 @@ export default function AdminUsers() {
   };
 
   useEffect(() => {
-    if (!user?.token) return;
+    if (!user) return;
     const loadUsers = async () => {
       await fetchUsers();
     };
     loadUsers();
-  }, [user?.token]);
+  }, [user]);
 
   const updateUser = async (itemId, payload) => {
     await api.put(`/api/users/${itemId}`, payload);

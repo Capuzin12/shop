@@ -40,9 +40,8 @@ export const CartProvider = ({ children }) => {
   const [serverCart, setServerCart] = useState(null);
   const syncedRef = useRef(false);
 
-  const refreshServerCart = async (tokenOverride) => {
-    const token = tokenOverride || localStorage.getItem('token');
-    if (!token || !user) {
+  const refreshServerCart = async () => {
+    if (!user) {
       setServerCart(null);
       return null;
     }
@@ -55,7 +54,6 @@ export const CartProvider = ({ children }) => {
       return response.data;
     } catch (error) {
       if (error.response?.status === 401) {
-        localStorage.removeItem('token');
         setServerCart(null);
         return null;
       }
@@ -75,13 +73,8 @@ export const CartProvider = ({ children }) => {
       }
       syncedRef.current = true;
 
-      const token = localStorage.getItem('token');
-      if (!token) {
-        return;
-      }
-
       const guestCart = readLocalCart();
-      const serverSnapshot = await refreshServerCart(token);
+      const serverSnapshot = await refreshServerCart();
 
       if (guestCart.length) {
         const existingIds = new Set((serverSnapshot?.items || []).map((item) => item.product_id));
@@ -100,7 +93,7 @@ export const CartProvider = ({ children }) => {
       }
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
-      await refreshServerCart(token);
+      await refreshServerCart();
     };
 
     syncCart();
@@ -109,11 +102,9 @@ export const CartProvider = ({ children }) => {
   }, [user]);
 
   const addToCart = async (product, quantity = 1) => {
-    const token = localStorage.getItem('token');
-
-    if (user && token) {
+    if (user) {
       try {
-        const currentCart = serverCart || await refreshServerCart(token);
+        const currentCart = serverCart || await refreshServerCart();
         const existingItem = currentCart?.items?.find((item) => item.product_id === product.id);
         
         if (existingItem) {
@@ -126,7 +117,7 @@ export const CartProvider = ({ children }) => {
             quantity,
           });
         }
-        await refreshServerCart(token);
+        await refreshServerCart();
         return;
       } catch (error) {
         if (error.response?.status === 401) {
@@ -155,14 +146,13 @@ export const CartProvider = ({ children }) => {
   };
 
   const removeFromCart = async (productId) => {
-    const token = localStorage.getItem('token');
-    if (user && token) {
-      const cartSnapshot = serverCart || await refreshServerCart(token);
+    if (user) {
+      const cartSnapshot = serverCart || await refreshServerCart();
       const item = cartSnapshot?.items?.find((entry) => entry.product_id === productId);
       if (item) {
         try {
           await api.delete(`/api/cart/items/${item.id}`);
-          await refreshServerCart(token);
+          await refreshServerCart();
           return;
         } catch (error) {
           if (error.response?.status !== 401) {
@@ -181,14 +171,13 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
-    const token = localStorage.getItem('token');
-    if (user && token) {
-      const cartSnapshot = serverCart || await refreshServerCart(token);
+    if (user) {
+      const cartSnapshot = serverCart || await refreshServerCart();
       const item = cartSnapshot?.items?.find((entry) => entry.product_id === productId);
       if (item) {
         try {
           await api.put(`/api/cart/items/${item.id}`, { quantity });
-          await refreshServerCart(token);
+          await refreshServerCart();
           return;
         } catch (error) {
           if (error.response?.status !== 401) {

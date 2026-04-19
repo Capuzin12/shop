@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     secret_key: str = Field(default='dev-only-secret-change-me', env='SECRET_KEY')
     jwt_algorithm: str = Field(default='HS256', env='JWT_ALGORITHM')
     jwt_access_ttl_min: int = Field(default=30, env='JWT_ACCESS_TTL_MIN')
+    jwt_refresh_ttl_min: int = Field(default=1440, env='JWT_REFRESH_TTL_MIN')  # 24 hours
+    auth_cookie_name: str = Field(default='access_token', env='AUTH_COOKIE_NAME')
+    auth_cookie_samesite: str = Field(default='lax', env='AUTH_COOKIE_SAMESITE')
+    auth_cookie_secure: bool = Field(default=True, env='AUTH_COOKIE_SECURE')  # HTTPS only
     
     # CORS
     cors_origins: str = Field(default='http://localhost:5173', env='CORS_ORIGINS')
@@ -37,6 +41,14 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = Field(default=True, env='RATE_LIMIT_ENABLED')
     rate_limit_requests_per_minute: int = Field(default=100, env='RATE_LIMIT_REQUESTS_PER_MINUTE')
     rate_limit_login_per_minute: int = Field(default=5, env='RATE_LIMIT_LOGIN_PER_MINUTE')
+    rate_limit_api_per_minute: int = Field(default=100, env='RATE_LIMIT_API_PER_MINUTE')
+    
+    # Security
+    max_login_attempts: int = Field(default=5, env='MAX_LOGIN_ATTEMPTS')
+    login_attempt_window_minutes: int = Field(default=15, env='LOGIN_ATTEMPT_WINDOW_MINUTES')
+    min_password_length: int = Field(default=12, env='MIN_PASSWORD_LENGTH')
+    require_special_char_in_password: bool = Field(default=True, env='REQUIRE_SPECIAL_CHAR')
+    session_timeout_minutes: int = Field(default=30, env='SESSION_TIMEOUT_MINUTES')
     
     class Config:
         env_file = '.env'
@@ -51,23 +63,40 @@ class Settings(BaseSettings):
             if env in ('production', 'prod', 'staging'):
                 raise ValueError(
                     'SECRET_KEY must not be the default dev key in production. '
-                    'Set SECRET_KEY environment variable to a strong random value.'
+                    'Set SECRET_KEY environment variable to a strong random value (min 32 chars).'
                 )
+        # In production, enforce minimum key length
+        if os.getenv('ENVIRONMENT', 'development') in ('production', 'prod'):
+            if len(str(v)) < 32:
+                raise ValueError('SECRET_KEY must be at least 32 characters in production')
         return v
     
     @validator('jwt_algorithm')
     def validate_jwt_algorithm(cls, v):
         """Ensure JWT algorithm is secure."""
+        # HS256 is acceptable but RS256 is better for distributed systems
         valid_algorithms = ('HS256', 'HS384', 'HS512', 'RS256', 'RS384', 'RS512')
         if v not in valid_algorithms:
             raise ValueError(f'JWT_ALGORITHM must be one of {valid_algorithms}')
         return v
+
+    @validator('auth_cookie_samesite')
+    def validate_auth_cookie_samesite(cls, v):
+        allowed = {'lax', 'strict', 'none'}
+        value = str(v or '').strip().lower()
+        if value not in allowed:
+            raise ValueError(f'AUTH_COOKIE_SAMESITE must be one of {tuple(sorted(allowed))}')
+        return value
     
     @validator('database_url')
     def validate_database_url(cls, v):
         """Validate database URL format."""
         if not v or len(v) < 10:
             raise ValueError('DATABASE_URL is invalid or missing')
+        # Warn if SQLite in production (should use PostgreSQL)
+        if v.startswith('sqlite') and os.getenv('ENVIRONMENT', 'development') in ('production', 'prod'):
+            import warnings
+            warnings.warn('SQLite should not be used in production. Use PostgreSQL instead.')
         return v
 
     @validator('cors_origin_regex')
@@ -80,6 +109,14 @@ class Settings(BaseSettings):
         except re.error as e:
             raise ValueError(f'CORS_ORIGIN_REGEX is not a valid regex: {e}') from e
         return s
+    
+    @validator('auth_cookie_secure')
+    def validate_auth_cookie_secure(cls, v):
+        """Enforce secure cookies in production."""
+        if os.getenv('ENVIRONMENT', 'development') in ('production', 'prod'):
+            if not v:
+                raise ValueError('AUTH_COOKIE_SECURE must be True in production')
+        return v
     
     def get_cors_origins(self) -> List[str]:
         """Parse and return CORS origins as list."""

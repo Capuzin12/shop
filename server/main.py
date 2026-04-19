@@ -11,7 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select, inspect, delete, case, text, or_, and_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from database import SessionLocal, DATABASE_URL
@@ -97,9 +99,11 @@ def ensure_runtime_schema(db: Session):
 
 _cors_mw_kwargs = {
     "allow_origins": CORS_ORIGINS,
-    "allow_credentials": False,
-    "allow_methods": ["*"],
-    "allow_headers": ["*"],
+    "allow_credentials": True,
+    "allow_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly list methods
+    "allow_headers": ["Content-Type", "Authorization", "X-Request-ID"],  # Whitelist headers
+    "expose_headers": ["X-Request-ID", "X-Response-Time"],
+    "max_age": 3600,  # Preflight cache time (1 hour)
 }
 if settings.cors_origin_regex:
     _cors_mw_kwargs["allow_origin_regex"] = settings.cors_origin_regex
@@ -469,14 +473,112 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return encoded_jwt
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)):
+def _extract_token_from_request(request: Request, token_from_header: str | None) -> str | None:
+    if token_from_header:
+        return token_from_header
+    cookie_token = request.cookies.get(settings.auth_cookie_name)
+    if not cookie_token:
+        return None
+    if cookie_token.lower().startswith("bearer "):
+        return cookie_token[7:].strip()
+    return cookie_token.strip()
+
+
+def validate_password_strength(password: str) -> None:
+    """
+    Enforce strong password requirements:
+    - Minimum 12 characters (configurable)
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one digit
+    - At least one special character
+    - No common patterns or consecutive characters
+    """
+    pwd = str(password or "")
+    min_len = settings.min_password_length
+    
+    if len(pwd) < min_len:
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "code": "WEAK_PASSWORD", 
+                "message": f"Пароль має містити щонайменше {min_len} символів"
+            }
+        )
+    
+    if not re.search(r"[A-Z]", pwd):
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "code": "WEAK_PASSWORD", 
+                "message": "Пароль має містити хоча б одну велику літеру"
+            }
+        )
+    
+    if not re.search(r"[a-z]", pwd):
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "code": "WEAK_PASSWORD", 
+                "message": "Пароль має містити хоча б одну малу літеру"
+            }
+        )
+    
+    if not re.search(r"\d", pwd):
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "code": "WEAK_PASSWORD", 
+                "message": "Пароль має містити хоча б одну цифру"
+            }
+        )
+    
+    if not re.search(r"[^A-Za-z0-9]", pwd):
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "code": "WEAK_PASSWORD", 
+                "message": "Пароль має містити хоча б один спецсимвол (!@#$%^&*)"
+            }
+        )
+    
+    # Check for common patterns (123, abc, qwerty)
+    if re.search(r"(.)\1{2,}", pwd):  # Repeated characters
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "code": "WEAK_PASSWORD", 
+                "message": "Пароль не може містити три однакові символи поспіль"
+            }
+        )
+    
+    # Don't allow obvious patterns
+    common_patterns = ['password', '12345', 'qwerty', 'abc123', 'admin', 'user']
+    if any(pattern in pwd.lower() for pattern in common_patterns):
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "code": "WEAK_PASSWORD", 
+                "message": "Пароль містить часто використовану послідовність. Будь ласка, виберіть більш складний пароль"
+            }
+        )
+
+
+async def get_current_user(
+    request: Request,
+    token: Annotated[str | None, Depends(oauth2_optional_scheme)],
+    db: Session = Depends(get_db),
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    raw_token = _extract_token_from_request(request, token)
+    if not raw_token:
+        raise credentials_exception
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(raw_token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
@@ -488,11 +590,16 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Se
     return user
 
 
-async def get_optional_user(token: Annotated[str | None, Depends(oauth2_optional_scheme)], db: Session = Depends(get_db)):
-    if not token:
+async def get_optional_user(
+    request: Request,
+    token: Annotated[str | None, Depends(oauth2_optional_scheme)],
+    db: Session = Depends(get_db),
+):
+    raw_token = _extract_token_from_request(request, token)
+    if not raw_token:
         return None
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(raw_token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return None
     email: str | None = payload.get("sub")
@@ -627,7 +734,12 @@ def create_client_error(
 
 @app.post("/token")
 @limiter.limit("5/minute")
-async def login_for_access_token(request: Request, form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: DbSession):
+async def login_for_access_token(
+    request: Request,
+    response: Response,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: DbSession,
+):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         logger.warning(f'Failed login attempt for {form_data.username}', extra={'username': form_data.username})
@@ -646,7 +758,23 @@ async def login_for_access_token(request: Request, form_data: Annotated[OAuth2Pa
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
+    response.set_cookie(
+        key=settings.auth_cookie_name,
+        value=access_token,
+        httponly=True,  # Prevent JavaScript access (XSS protection)
+        secure=settings.auth_cookie_secure,  # HTTPS only
+        samesite=settings.auth_cookie_samesite if not settings.is_production() else 'strict',  # Strict in production
+        max_age=int(access_token_expires.total_seconds()),
+        path="/",
+        domain=None,  # Don't expose to subdomains
+    )
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.post("/api/logout")
+def logout(response: Response):
+    response.delete_cookie(key=settings.auth_cookie_name, path="/")
+    return {"ok": True}
 
 
 @app.get("/")
@@ -1772,7 +1900,11 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logger.error(
+            "Order creation failed",
+            extra={"error": str(e), "request_id": get_request_id(), "user_id": current_user.id},
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.put("/api/orders/{order_id}")
@@ -2047,17 +2179,37 @@ def update_current_user_info(user_data: dict, db: DbSession, current_user: Annot
     return serialize_model(current_user)
 
 
+class UserCreateRequest(BaseModel):
+    email: EmailStr
+    password: str
+    first_name: str
+    last_name: str
+    phone: str | None = None
+
+
 @app.post("/api/users")
-def create_user(user: dict, db: DbSession):
-    if 'password' not in user:
-        raise HTTPException(status_code=400, detail="Password required")
-    user_data = user.copy()
-    user_data['password_hash'] = get_password_hash(user_data.pop('password'))
-    user_data['role'] = UserRole.customer
-    user_data['is_active'] = True
-    new_user = User(**user_data)
+@limiter.limit("10/minute")
+def create_user(request: Request, user: UserCreateRequest, db: DbSession):
+    existing = db.scalar(select(User).where(User.email == user.email))
+    if existing:
+        raise HTTPException(status_code=409, detail={"code": "EMAIL_EXISTS", "message": "Користувач з таким email вже існує"})
+
+    validate_password_strength(user.password)
+    new_user = User(
+        email=user.email.strip().lower(),
+        password_hash=get_password_hash(user.password),
+        first_name=str(user.first_name).strip()[:100],
+        last_name=str(user.last_name).strip()[:100],
+        phone=str(user.phone).strip()[:20] if user.phone else None,
+        role=UserRole.customer,
+        is_active=True,
+    )
     db.add(new_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "EMAIL_EXISTS", "message": "Користувач з таким email вже існує"})
     db.refresh(new_user)
     return {"message": "User created", "user": {"email": new_user.email, "first_name": new_user.first_name}}
 
@@ -2074,6 +2226,7 @@ def update_user(user_id: int, user_data: dict, db: DbSession, current_user: Anno
         if key == "password":
             if not value:
                 continue
+            validate_password_strength(str(value))
             value = get_password_hash(value)
             key = "password_hash"
         elif key == "role":

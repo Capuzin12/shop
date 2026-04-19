@@ -34,12 +34,12 @@ export default function AdminInventory() {
   };
 
   useEffect(() => {
-    if (!user?.token) return;
+    if (!user) return;
     const loadInventory = async () => {
       await fetchInventory();
     };
     loadInventory();
-  }, [user?.token]);
+  }, [user]);
 
   useEffect(() => {
     if (!inventory.length) return;

@@ -20,9 +20,8 @@ export function NotificationsProvider({ children }) {
     });
   };
 
-  const refreshNotifications = async (tokenOverride) => {
-    const token = tokenOverride || localStorage.getItem('token');
-    if (!token || !user) {
+  const refreshNotifications = async () => {
+    if (!user) {
       setNotifications([]);
       setLoading(false);
       return [];
@@ -55,24 +54,24 @@ export function NotificationsProvider({ children }) {
   };
 
   useEffect(() => {
-    if (!user?.token) {
+    if (!user) {
       setNotifications([]);
       return undefined;
     }
 
     // Initial fetch immediately after login/restore session
-    refreshNotifications(user.token);
+    refreshNotifications();
 
     // Refresh when user comes back to tab/window
-    const onFocus = () => refreshNotifications(user.token);
+    const onFocus = () => refreshNotifications();
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        refreshNotifications(user.token);
+        refreshNotifications();
       }
     };
 
     // Event-driven refresh (without polling)
-    const onNotificationsRefresh = () => refreshNotifications(user.token);
+    const onNotificationsRefresh = () => refreshNotifications();
 
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibilityChange);
@@ -83,11 +82,10 @@ export function NotificationsProvider({ children }) {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('buildshop:notifications-refresh', onNotificationsRefresh);
     };
-  }, [user?.token]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const markRead = async (id) => {
-    const token = user?.token || localStorage.getItem('token');
-    if (!token || !user) return;
+    if (!user) return;
 
     try {
       await api.put(`/api/notifications/${id}/read`, {});

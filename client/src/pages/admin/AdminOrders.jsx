@@ -60,12 +60,12 @@ export default function AdminOrders() {
   };
 
   useEffect(() => {
-    if (!user?.token) return;
+    if (!user) return;
     const loadOrders = async () => {
       await fetchOrders();
     };
     loadOrders();
-  }, [user?.token]);
+  }, [user]);
 
   const statusCounts = orders.reduce((acc, order) => {
     acc[order.status] = (acc[order.status] || 0) + 1;

@@ -34,10 +34,10 @@ export default function ManagerInventory({ onUpdate }) {
     }
   }, []);
 
-  const checkLowStock = useCallback(async (token) => {
+  const checkLowStock = useCallback(async () => {
     try {
       await api.get('/api/notifications/check-low-stock');
-      await refreshNotifications(token);
+      await refreshNotifications();
       await fetchInventory();
     } catch (error) {
       console.error('Error checking low stock:', error);
@@ -45,12 +45,12 @@ export default function ManagerInventory({ onUpdate }) {
   }, [fetchInventory, refreshNotifications]);
 
   useEffect(() => {
-    if (!user?.token) return;
+    if (!user) return;
     const loadInventory = async () => {
       await fetchInventory();
     };
     loadInventory();
-  }, [fetchInventory, user?.token]);
+  }, [fetchInventory, user]);
 
   const threshold = (item) => item.min_quantity_alert ?? item.min_quantity;
   const isLowStock = (item) => item.quantity < threshold(item);
@@ -94,7 +94,7 @@ export default function ManagerInventory({ onUpdate }) {
               <RefreshCcw className="h-4 w-4" />
               Оновити
             </button>
-            <button onClick={async () => { await checkLowStock(user?.token); onUpdate?.(); }} className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white dark:bg-amber-400 dark:text-slate-950" type="button">
+            <button onClick={async () => { await checkLowStock(); onUpdate?.(); }} className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white dark:bg-amber-400 dark:text-slate-950" type="button">
               Перевірити запас
             </button>
           </>
@@ -133,7 +133,7 @@ export default function ManagerInventory({ onUpdate }) {
                 <td className="px-4 py-4">
                   {editingItem?.id === item.id ? (
                     <div className="flex gap-3">
-                      <button onClick={async () => { await api.put(`/api/inventory/${item.id}`, { quantity: editingItem.quantity, min_quantity: item.min_quantity, min_quantity_alert: editingItem.min_quantity_alert }); setEditingItem(null); refreshNotifications(user?.token); await fetchInventory(); onUpdate?.(); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
+                      <button onClick={async () => { await api.put(`/api/inventory/${item.id}`, { quantity: editingItem.quantity, min_quantity: item.min_quantity, min_quantity_alert: editingItem.min_quantity_alert }); setEditingItem(null); refreshNotifications(); await fetchInventory(); onUpdate?.(); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
                       <button onClick={() => setEditingItem(null)} className="text-sm font-semibold text-slate-500 dark:text-slate-400" type="button">Скасувати</button>
                     </div>
                   ) : (

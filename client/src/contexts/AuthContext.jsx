@@ -12,7 +12,6 @@ export const AuthProvider = ({ children }) => {
   const syncRef = useRef(null);
 
   const clearAuth = useCallback(() => {
-    localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
   }, []);
@@ -31,15 +30,9 @@ export const AuthProvider = ({ children }) => {
   }, [syncWithServer]);
 
   const refreshUser = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      clearAuth();
-      return null;
-    }
-
     try {
       const response = await api.get('/api/me');
-      return persistUser({ ...response.data, token });
+      return persistUser(response.data);
     } catch (error) {
       if (error.response?.status === 401 || error.response?.status === 400) {
         clearAuth();
@@ -51,9 +44,8 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('token');
       const savedUser = localStorage.getItem('user');
-      if (token && savedUser) {
+      if (savedUser) {
         try {
           await refreshUser();
         } catch (error) {
@@ -69,19 +61,20 @@ export const AuthProvider = ({ children }) => {
   }, [clearAuth, refreshUser]);
 
   const login = useCallback(async (email, password) => {
-    const response = await api.post('/token', new URLSearchParams({
+    await api.post('/token', new URLSearchParams({
       username: email,
       password,
     }));
-    const { access_token } = response.data;
-    localStorage.setItem('token', access_token);
     const userResponse = await api.get('/api/me');
-    const userData = { ...userResponse.data, token: access_token };
-    persistUser(userData);
-    return userData;
+    return persistUser(userResponse.data);
   }, [persistUser]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await api.post('/api/logout');
+    } catch {
+      // If the session is already invalid, local cleanup is still sufficient.
+    }
     clearAuth();
   }, [clearAuth]);
 

@@ -36,12 +36,12 @@ export default function AdminProducts() {
   };
 
   useEffect(() => {
-    if (!user?.token) return;
+    if (!user) return;
     const loadProducts = async () => {
       await fetchProducts();
     };
     loadProducts();
-  }, [user?.token]);
+  }, [user]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

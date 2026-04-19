@@ -40,10 +40,8 @@ export function WishlistProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const syncedRef = useRef(false);
 
-  const refreshWishlist = async (tokenOverride) => {
-    const token = tokenOverride || user?.token || localStorage.getItem('token');
-
-    if (!token || !user) {
+  const refreshWishlist = async () => {
+    if (!user) {
       const guestItems = readGuestWishlist();
       setItems(guestItems);
       setLoading(false);
@@ -61,7 +59,6 @@ export function WishlistProvider({ children }) {
       return validItems;
     } catch (error) {
       if (error.response?.status === 401) {
-        localStorage.removeItem('token');
         const guestItems = readGuestWishlist();
         setItems(guestItems);
         setLoading(false);
@@ -82,11 +79,6 @@ export function WishlistProvider({ children }) {
       }
       syncedRef.current = true;
 
-      const token = localStorage.getItem('token');
-      if (!token) {
-        return;
-      }
-
       const guestItems = readGuestWishlist();
       if (guestItems.length) {
         for (const item of guestItems) {
@@ -94,7 +86,6 @@ export function WishlistProvider({ children }) {
             await api.post('/api/wishlist', { product_id: item.product_id });
           } catch (error) {
             if (error.response?.status === 401) {
-              localStorage.removeItem('token');
               break;
             }
             if (error?.response?.status !== 400) {
@@ -105,7 +96,7 @@ export function WishlistProvider({ children }) {
         writeGuestWishlist([]);
       }
 
-      await refreshWishlist(token);
+      await refreshWishlist();
     };
 
     syncWishlist();
@@ -118,9 +109,7 @@ export function WishlistProvider({ children }) {
     }
 
     const existing = items.some((item) => item.product_id === productId);
-    const token = user?.token || localStorage.getItem('token');
-
-    if (!user || !token) {
+    if (!user) {
       const guestItems = readGuestWishlist();
       const nextItems = existing
         ? guestItems.filter((item) => item.product_id !== productId)
@@ -141,7 +130,7 @@ export function WishlistProvider({ children }) {
       await api.post('/api/wishlist', { product_id: productId });
 
       if (options.refresh !== false) {
-        await refreshWishlist(token);
+        await refreshWishlist();
       }
       return true;
     } catch (error) {
@@ -160,8 +149,7 @@ export function WishlistProvider({ children }) {
   };
 
   const removeFromWishlist = async (productId) => {
-    const token = user?.token || localStorage.getItem('token');
-    if (!user || !token) {
+    if (!user) {
       const nextItems = readGuestWishlist().filter((item) => item.product_id !== productId);
       writeGuestWishlist(nextItems);
       setItems(nextItems);
