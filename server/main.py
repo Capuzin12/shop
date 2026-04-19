@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy import func, select, inspect, delete, case, text
+from sqlalchemy import func, select, inspect, delete, case, text, or_, and_
 from sqlalchemy.orm import Session, selectinload
 
 from database import SessionLocal, DATABASE_URL
@@ -714,9 +714,6 @@ def delete_category(category_id: int, db: DbSession, current_user: Annotated[Use
 
 
 # Products
-from sqlalchemy import or_, and_
-
-
 @app.get("/api/products")
 def get_products(
     db: DbSession,
@@ -730,8 +727,6 @@ def get_products(
     page: int = 1,
     limit: int = 12
  ):
-    from sqlalchemy import or_, and_, func
-    
     query = select(Product).where(Product.is_active == True)
     search_terms = []
     facet_search_conditions = []
