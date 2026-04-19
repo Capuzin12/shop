@@ -1,0 +1,100 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (default: sha-<current commit>)"
+        required: false
+        default: ""
+  pull_request:
+    branches:
+      - develop
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_API: ${{ github.repository }}-api
+  IMAGE_WEB: ${{ github.repository }}-web
+
+jobs:
+  deploy-staging:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      group: staging-deploy
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=sha-${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy to staging host
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.STAGING_APP_DIR }}"
+            export API_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_API }}:${{ steps.vars.outputs.tag }}"
+            export WEB_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_WEB }}:${{ steps.vars.outputs.tag }}"
+            export DEPLOY_TAG="${{ steps.vars.outputs.tag }}"
+            docker login ${{ env.REGISTRY }} -u "${{ secrets.REGISTRY_USERNAME }}" -p "${{ secrets.REGISTRY_TOKEN }}"
+            docker pull "$API_IMAGE"
+            docker pull "$WEB_IMAGE"
+            cat > docker-compose.override.yml <<'EOF'
+            services:
+              api:
+                image: ${API_IMAGE}
+              web:
+                image: ${WEB_IMAGE}
+            EOF
+            docker compose -f docker-compose.prod.yml up -d
+
+      - name: Setup Python for smoke tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run staging smoke checks
+        run: |
+          python scripts/health_check.py \
+            --base-url "${{ secrets.STAGING_BASE_URL }}" \
+            --timeout 5 \
+            --retries 5 \
+            --retry-delay 2 \
+            --max-latency-ms 1200
+
+      - name: Comment PR with staging URL
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ✅ Staging deploy succeeded.
+
+            - URL: `${{ secrets.STAGING_BASE_URL }}`
+            - Image tag: `${{ steps.vars.outputs.tag }}`
+            - Commit: `${{ github.sha }}`
+
+

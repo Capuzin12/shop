@@ -2,6 +2,8 @@
 
 🇺🇦 **[Українська версія](rollback.uk.md)** | 🇬🇧 **[English Version](rollback.en.md)**
 
+Detailed CI/CD rollback playbook: `docs/rollback.md`
+
 ## Trigger
 Rollback if:
 - Sustained 5xx after deploy

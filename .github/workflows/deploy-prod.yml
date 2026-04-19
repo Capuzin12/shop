@@ -1,0 +1,124 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Semantic version tag, e.g. v1.2.3"
+        required: true
+      image_tag:
+        description: "Image tag to deploy (default: sha-<current commit>)"
+        required: false
+        default: ""
+      rollback_tag:
+        description: "Fallback image tag for auto-rollback"
+        required: false
+        default: latest
+
+permissions:
+  contents: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_API: ${{ github.repository }}-api
+  IMAGE_WEB: ${{ github.repository }}-web
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: prod-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate semantic version
+        run: |
+          echo "${{ github.event.inputs.release_version }}" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$'
+
+      - name: Create and push git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ github.event.inputs.release_version }}" -m "Release ${{ github.event.inputs.release_version }}"
+          git push origin "${{ github.event.inputs.release_version }}"
+
+      - name: Resolve image tag
+        id: vars
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=sha-${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy to production host
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.PROD_APP_DIR }}"
+            export API_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_API }}:${{ steps.vars.outputs.tag }}"
+            export WEB_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_WEB }}:${{ steps.vars.outputs.tag }}"
+            docker login ${{ env.REGISTRY }} -u "${{ secrets.REGISTRY_USERNAME }}" -p "${{ secrets.REGISTRY_TOKEN }}"
+            docker pull "$API_IMAGE"
+            docker pull "$WEB_IMAGE"
+            cat > docker-compose.override.yml <<'EOF'
+            services:
+              api:
+                image: ${API_IMAGE}
+              web:
+                image: ${WEB_IMAGE}
+            EOF
+            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml exec -T api python -m alembic upgrade head
+
+      - name: Setup Python for health checks
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run production health gate (5 minutes)
+        run: |
+          python scripts/health_check.py \
+            --base-url "${{ secrets.PROD_BASE_URL }}" \
+            --timeout 5 \
+            --retries 5 \
+            --retry-delay 2 \
+            --max-latency-ms 1200 \
+            --window-seconds 300 \
+            --interval-seconds 10 \
+            --max-error-rate 1.0
+
+      - name: Auto rollback on failed health gate
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.PROD_APP_DIR }}"
+            export API_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_API }}:${{ github.event.inputs.rollback_tag }}"
+            export WEB_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_WEB }}:${{ github.event.inputs.rollback_tag }}"
+            docker login ${{ env.REGISTRY }} -u "${{ secrets.REGISTRY_USERNAME }}" -p "${{ secrets.REGISTRY_TOKEN }}"
+            docker pull "$API_IMAGE"
+            docker pull "$WEB_IMAGE"
+            cat > docker-compose.override.yml <<'EOF'
+            services:
+              api:
+                image: ${API_IMAGE}
+              web:
+                image: ${WEB_IMAGE}
+            EOF
+            docker compose -f docker-compose.prod.yml up -d
+
