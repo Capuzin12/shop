@@ -26,6 +26,7 @@ from models import (
     CartItem,
     Notification,
     NotificationType,
+    Review,
 )
 
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -49,6 +50,30 @@ def run_seed() -> None:
             phone="+380671234567",
             role=UserRole.manager,
         )
+        content_manager = User(
+            email="content@budmart.ua",
+            password_hash=pwd.hash("content123"),
+            first_name="Контент",
+            last_name="Менеджер",
+            phone="+380631234567",
+            role=UserRole.content_manager,
+        )
+        warehouse_manager = User(
+            email="warehouse@budmart.ua",
+            password_hash=pwd.hash("warehouse123"),
+            first_name="Склад",
+            last_name="Менеджер",
+            phone="+380661234567",
+            role=UserRole.warehouse_manager,
+        )
+        sales_processor = User(
+            email="sales@budmart.ua",
+            password_hash=pwd.hash("sales123"),
+            first_name="Продажі",
+            last_name="Менеджер",
+            phone="+380681234567",
+            role=UserRole.sales_processor,
+        )
         customer = User(
             email="ivan@example.com",
             password_hash=pwd.hash("user123"),
@@ -57,7 +82,7 @@ def run_seed() -> None:
             phone="+380501234567",
             role=UserRole.customer,
         )
-        db.add_all([admin, manager, customer])
+        db.add_all([admin, manager, content_manager, warehouse_manager, sales_processor, customer])
 
         cat_cement = Category(name="Цемент і суміші", slug="cement", icon="🧱", sort_order=1)
         cat_brick = Category(name="Цегла та блоки", slug="brick", icon="🏗️", sort_order=2)
@@ -104,6 +129,7 @@ def run_seed() -> None:
                 category=cat_cement,
                 brand=knauf,
                 name="Цемент Portland М500 50кг",
+                description="Високоміцний портландцемент для фундаментів, стяжок та конструкцій з підвищеним навантаженням.",
                 slug="cement-m500-50",
                 sku="CEM-M500-50",
                 price=480,
@@ -125,6 +151,7 @@ def run_seed() -> None:
                 category=cat_cement,
                 brand=knauf,
                 name="Шпаклівка Rotband Knauf 25кг",
+                description="Універсальна гіпсова шпаклівка для внутрішніх робіт, формує гладку основу під фарбування.",
                 slug="rotband-25",
                 sku="KNF-ROT-25",
                 price=320,
@@ -141,6 +168,7 @@ def run_seed() -> None:
                 category=cat_brick,
                 brand=None,
                 name="Цегла керамічна одинарна М150",
+                description="Класична керамічна цегла для несучих та огороджувальних стін у приватному й комерційному будівництві.",
                 slug="brick-m150",
                 sku="BRK-KER-150",
                 price=8,
@@ -162,6 +190,7 @@ def run_seed() -> None:
                 category=cat_brick,
                 brand=baumit,
                 name="Газоблок Baumit D500 600×300×200",
+                description="Легкий енергоефективний газоблок для швидкого зведення стін і перегородок.",
                 slug="gazoblock-d500",
                 sku="GAZ-D500-200",
                 price=78,
@@ -178,6 +207,7 @@ def run_seed() -> None:
                 category=cat_insul,
                 brand=ceresit,
                 name="Пінопласт EPS 70 50мм Ceresit",
+                description="Теплоізоляційні плити для фасадів та перекриттів з оптимальним співвідношенням щільності і ціни.",
                 slug="eps-70-50",
                 sku="CRS-EPS-50",
                 price=520,
@@ -194,6 +224,7 @@ def run_seed() -> None:
                 category=cat_insul,
                 brand=rockwool,
                 name="Мінвата Rockwool 100мм (4 шт)",
+                description="Базальтова тепло- і звукоізоляція для вентильованих фасадів, покрівлі та каркасних стін.",
                 slug="rockwool-100",
                 sku="RCK-100-4",
                 price=1240,
@@ -214,6 +245,7 @@ def run_seed() -> None:
                 category=cat_floor,
                 brand=None,
                 name="Ламінат Kronopol 8мм AC4 Дуб",
+                description="Зносостійкий ламінат для житлових та офісних приміщень із стабільною замковою системою.",
                 slug="kronopol-oak-8",
                 sku="KRP-OAK-8",
                 price=380,
@@ -235,6 +267,7 @@ def run_seed() -> None:
                 category=cat_facade,
                 brand=baumit,
                 name="Штукатурка декор. Baumit Kratzputz",
+                description="Декоративна фасадна штукатурка типу короїд з високою стійкістю до вологи та УФ-випромінювання.",
                 slug="baumit-kratzputz",
                 sku="BAU-KRT-25",
                 price=890,
@@ -251,6 +284,7 @@ def run_seed() -> None:
                 category=cat_tools,
                 brand=bosch,
                 name="Перфоратор Bosch GBH 2-26 DRE",
+                description="Надійний професійний перфоратор для свердління та довбання бетону, цегли й каменю.",
                 slug="bosch-gbh-226",
                 sku="BSH-GBH-226",
                 price=4850,
@@ -271,6 +305,7 @@ def run_seed() -> None:
                 category=cat_tools,
                 brand=ceresit,
                 name="Монтажна піна Ceresit TS 61 Pro",
+                description="Професійна монтажна піна для герметизації швів, отворів та встановлення віконних блоків.",
                 slug="ceresit-ts61",
                 sku="CRS-TS61-750",
                 price=185,
@@ -282,6 +317,125 @@ def run_seed() -> None:
                 qty=4,
                 min_qty=20,
                 attrs=[("Об'єм", "750 мл"), ("Вихід", "до 45 л"), ("Тип", "Однокомпонентна")],
+            ),
+            dict(
+                category=cat_roof,
+                brand=rockwool,
+                name="Мембрана покрівельна супердифузійна 75м²",
+                description="Паропроникна мембрана для скатних дахів, захищає утеплювач від вітру і вологи.",
+                slug="roof-membrane-75",
+                sku="RFM-75-3L",
+                price=2650,
+                old_price=2890,
+                unit="рул",
+                icon="🏠",
+                badge=ProductBadge.sale,
+                is_featured=False,
+                qty=37,
+                min_qty=10,
+                attrs=[("Площа", "75 м²"), ("Шари", "3"), ("Щільність", "110 г/м²")],
+            ),
+            dict(
+                category=cat_roof,
+                brand=baumit,
+                name="Бітумна черепиця Grafit 3м²",
+                description="Гнучка бітумна черепиця для приватних будинків з виразною текстурою і захистом від вигорання.",
+                slug="bitumen-shingle-grafit",
+                sku="BTS-GRF-3",
+                price=1790,
+                old_price=None,
+                unit="уп",
+                icon="🏚️",
+                badge=None,
+                is_featured=False,
+                qty=64,
+                min_qty=20,
+                attrs=[("Площа покриття", "3 м²"), ("Колір", "Графіт"), ("Гарантія", "15 років")],
+            ),
+            dict(
+                category=cat_roof,
+                brand=bosch,
+                name="Саморіз покрівельний 4.8×35 (250 шт)",
+                description="Оцинковані покрівельні саморізи з EPDM-шайбою для герметичного кріплення профнастилу.",
+                slug="roof-screw-48-35-250",
+                sku="RSC-4835-250",
+                price=410,
+                old_price=None,
+                unit="кор",
+                icon="🔩",
+                badge=None,
+                is_featured=False,
+                qty=112,
+                min_qty=40,
+                attrs=[("Розмір", "4.8×35 мм"), ("Кількість", "250 шт"), ("Покриття", "Цинк")],
+            ),
+            dict(
+                category=cat_cement,
+                brand=ceresit,
+                name="Клей для плитки Ceresit CM 11 25кг",
+                description="Еластичний клей для керамічної плитки всередині та зовні приміщень.",
+                slug="ceresit-cm11-25",
+                sku="CRS-CM11-25",
+                price=295,
+                old_price=330,
+                unit="міш",
+                icon="🧪",
+                badge=ProductBadge.sale,
+                is_featured=True,
+                qty=96,
+                min_qty=25,
+                attrs=[("Маса", "25 кг"), ("Час коригування", "20 хв"), ("Основа", "Цементна")],
+            ),
+            dict(
+                category=cat_floor,
+                brand=bosch,
+                name="Підкладка під ламінат XPS 3мм 10м²",
+                description="Щільна підкладка для ламінату, покращує тепло- і шумоізоляцію підлогового покриття.",
+                slug="xps-underlay-3mm-10",
+                sku="XPS-3-10",
+                price=460,
+                old_price=None,
+                unit="рул",
+                icon="📐",
+                badge=None,
+                is_featured=False,
+                qty=73,
+                min_qty=20,
+                attrs=[("Товщина", "3 мм"), ("Площа", "10 м²"), ("Матеріал", "XPS")],
+            ),
+            dict(
+                category=cat_facade,
+                brand=ceresit,
+                name="Фарба фасадна силіконова Ceresit CT 48 10л",
+                description="Силіконова фасадна фарба з високою паропроникністю та стійкістю до атмосферних впливів.",
+                slug="ceresit-ct48-10",
+                sku="CRS-CT48-10",
+                price=2890,
+                old_price=3090,
+                unit="відро",
+                icon="🪣",
+                badge=ProductBadge.sale,
+                is_featured=True,
+                qty=29,
+                min_qty=12,
+                attrs=[("Об'єм", "10 л"), ("Основа", "Силікон"), ("Витрата", "0.2 л/м²")],
+            ),
+            dict(
+                category=cat_tools,
+                brand=bosch,
+                name="Шліфмашина Bosch GWS 750-125",
+                description="Компактна кутова шліфмашина для різання металу, плитки та зачистки поверхонь.",
+                slug="bosch-gws-750-125",
+                sku="BSH-GWS-750",
+                price=2590,
+                old_price=None,
+                unit="шт",
+                icon="⚙️",
+                badge=ProductBadge.new,
+                is_featured=False,
+                qty=21,
+                min_qty=8,
+                attrs=[("Потужність", "750 Вт"), ("Диск", "125 мм"), ("Вага", "1.8 кг")],
             ),
         ]
 
@@ -305,6 +459,23 @@ def run_seed() -> None:
                     max_quantity=max_q,
                 )
             )
+
+        db.add_all([
+            Review(
+                product_id=products[0].id,
+                user_id=customer.id,
+                rating=5,
+                comment="Відмінний цемент, добре тримає міцність після заливки.",
+                is_approved=True,
+            ),
+            Review(
+                product_id=products[8].id,
+                user_id=manager.id,
+                rating=4,
+                comment="Надійний інструмент для щоденної роботи на об'єкті.",
+                is_approved=True,
+            ),
+        ])
 
         db.add(
             PromoCode(
@@ -349,7 +520,10 @@ def run_seed() -> None:
     print("БД заповнена тестовими даними.")
     print(f"   Категорій: 7 | Брендів: 5 | Товарів: {len(products_data)} | Промокодів: 2")
     print("   admin@budmart.ua / admin123 (admin)")
-    print("   manager@budmart.ua / manager123 (manager)")
+    print("   manager@budmart.ua / manager123 (manager/legacy)")
+    print("   content@budmart.ua / content123 (content_manager)")
+    print("   warehouse@budmart.ua / warehouse123 (warehouse_manager)")
+    print("   sales@budmart.ua / sales123 (sales_processor)")
     print("   ivan@example.com / user123 (customer)")
 
 

@@ -1,11 +1,18 @@
 import api from '../../api';
 import { RefreshCcw, Siren } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import { DataTable, EmptyState, FilterButton, Panel, StatCard, StatusBadge } from '../../components/BackofficeUI';
 
-export default function ManagerInventory() {
+const FILTER_LABELS = {
+  all: 'Усі',
+  low: 'Мало',
+  out: 'Немає',
+  ok: 'У нормі',
+};
+
+export default function ManagerInventory({ onUpdate }) {
   const { user } = useAuth();
   const { refreshNotifications } = useNotifications();
   const [inventory, setInventory] = useState([]);
@@ -13,7 +20,7 @@ export default function ManagerInventory() {
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const fetchInventory = async () => {
+  const fetchInventory = useCallback(async () => {
     try {
       const response = await api.get('/api/inventory');
       const inventoryData = response.data;
@@ -25,33 +32,35 @@ export default function ManagerInventory() {
       console.error('Error fetching inventory:', error);
       setInventory([]);
     }
-  };
+  }, []);
 
-  const checkLowStock = async (token) => {
+  const checkLowStock = useCallback(async (token) => {
     try {
       await api.get('/api/notifications/check-low-stock');
-      refreshNotifications(token);
-      fetchInventory();
+      await refreshNotifications(token);
+      await fetchInventory();
     } catch (error) {
       console.error('Error checking low stock:', error);
     }
-  };
+  }, [fetchInventory, refreshNotifications]);
 
   useEffect(() => {
     if (!user?.token) return;
     const loadInventory = async () => {
       await fetchInventory();
-      await checkLowStock(user.token);
     };
     loadInventory();
-  }, [user?.token]);
+  }, [fetchInventory, user?.token]);
 
   const threshold = (item) => item.min_quantity_alert ?? item.min_quantity;
   const isLowStock = (item) => item.quantity < threshold(item);
   const isOutOfStock = (item) => item.quantity === 0;
 
   const filteredInventory = inventory.filter((item) => {
-    const matchesSearch = item.product_name.toLowerCase().includes(searchTerm.toLowerCase());
+    const normalized = searchTerm.toLowerCase();
+    const matchesSearch = item.product_name.toLowerCase().includes(normalized)
+      || String(item.product_sku || '').toLowerCase().includes(normalized)
+      || String(item.location || '').toLowerCase().includes(normalized);
     if (filter === 'all') return matchesSearch;
     if (filter === 'low') return matchesSearch && isLowStock(item);
     if (filter === 'out') return matchesSearch && isOutOfStock(item);
@@ -61,6 +70,12 @@ export default function ManagerInventory() {
 
   const lowStockCount = inventory.filter(isLowStock).length;
   const outOfStockCount = inventory.filter(isOutOfStock).length;
+  const filterCounts = {
+    all: inventory.length,
+    low: lowStockCount,
+    out: outOfStockCount,
+    ok: inventory.length - lowStockCount,
+  };
 
   return (
     <div className="space-y-6">
@@ -79,18 +94,25 @@ export default function ManagerInventory() {
               <RefreshCcw className="h-4 w-4" />
               Оновити
             </button>
-            <button onClick={() => checkLowStock(user?.token)} className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white dark:bg-amber-400 dark:text-slate-950" type="button">
+            <button onClick={async () => { await checkLowStock(user?.token); onUpdate?.(); }} className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white dark:bg-amber-400 dark:text-slate-950" type="button">
               Перевірити запас
             </button>
           </>
         )}
       >
         <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Пошук товару" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm md:w-72 dark:border-white/10 dark:bg-slate-950/60" />
+          <div className="flex w-full gap-2 md:w-auto">
+            <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Пошук: товар, SKU або локація" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm md:w-72 dark:border-white/10 dark:bg-slate-950/60" />
+            {searchTerm ? (
+              <button onClick={() => setSearchTerm('')} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button">
+                Очистити
+              </button>
+            ) : null}
+          </div>
           <div className="flex flex-wrap gap-2">
             {['all', 'low', 'out', 'ok'].map((current) => (
               <FilterButton key={current} active={filter === current} alert={current === 'low' || current === 'out'} onClick={() => setFilter(current)}>
-                {current}
+                {FILTER_LABELS[current]} ({filterCounts[current]})
               </FilterButton>
             ))}
           </div>
@@ -111,7 +133,7 @@ export default function ManagerInventory() {
                 <td className="px-4 py-4">
                   {editingItem?.id === item.id ? (
                     <div className="flex gap-3">
-                      <button onClick={async () => { await api.put(`/api/inventory/${item.id}`, { quantity: editingItem.quantity, min_quantity: item.min_quantity, min_quantity_alert: editingItem.min_quantity_alert }); setEditingItem(null); refreshNotifications(user?.token); fetchInventory(); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
+                      <button onClick={async () => { await api.put(`/api/inventory/${item.id}`, { quantity: editingItem.quantity, min_quantity: item.min_quantity, min_quantity_alert: editingItem.min_quantity_alert }); setEditingItem(null); refreshNotifications(user?.token); await fetchInventory(); onUpdate?.(); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
                       <button onClick={() => setEditingItem(null)} className="text-sm font-semibold text-slate-500 dark:text-slate-400" type="button">Скасувати</button>
                     </div>
                   ) : (

@@ -9,7 +9,16 @@ export function NotificationsProvider({ children }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
-  const syncedRef = useRef(false);
+  const isRefreshingRef = useRef(false);
+
+  const normalizeNotifications = (list) => {
+    const valid = Array.isArray(list) ? list.filter((n) => n && n.id) : [];
+    return [...valid].sort((a, b) => {
+      const aTime = a?.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b?.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    });
+  };
 
   const refreshNotifications = async (tokenOverride) => {
     const token = tokenOverride || localStorage.getItem('token');
@@ -19,13 +28,16 @@ export function NotificationsProvider({ children }) {
       return [];
     }
 
+    if (isRefreshingRef.current) {
+      return notifications;
+    }
+
+    isRefreshingRef.current = true;
+
     setLoading(true);
     try {
       const response = await api.get('/api/notifications');
-      const notificationsData = response.data;
-      const validNotifications = Array.isArray(notificationsData) 
-        ? notificationsData.filter(n => n && n.id)
-        : [];
+      const validNotifications = normalizeNotifications(response.data);
       setNotifications(validNotifications);
       return validNotifications;
     } catch (error) {
@@ -37,30 +49,41 @@ export function NotificationsProvider({ children }) {
       setNotifications([]);
       return [];
     } finally {
+      isRefreshingRef.current = false;
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    const syncNotifications = async () => {
-      if (syncedRef.current || !user) {
-        return;
+    if (!user?.token) {
+      setNotifications([]);
+      return undefined;
+    }
+
+    // Initial fetch immediately after login/restore session
+    refreshNotifications(user.token);
+
+    // Refresh when user comes back to tab/window
+    const onFocus = () => refreshNotifications(user.token);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshNotifications(user.token);
       }
-      syncedRef.current = true;
-      await refreshNotifications();
     };
-    syncNotifications();
-  }, [user]);
 
-  useEffect(() => {
-    if (!user?.token) return undefined;
+    // Event-driven refresh (without polling)
+    const onNotificationsRefresh = () => refreshNotifications(user.token);
 
-    const intervalId = window.setInterval(() => {
-      refreshNotifications(user.token);
-    }, 15000);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('buildshop:notifications-refresh', onNotificationsRefresh);
 
-    return () => window.clearInterval(intervalId);
-  }, [user]);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('buildshop:notifications-refresh', onNotificationsRefresh);
+    };
+  }, [user?.token]);
 
   const markRead = async (id) => {
     const token = user?.token || localStorage.getItem('token');

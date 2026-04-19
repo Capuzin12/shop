@@ -18,7 +18,7 @@ CREATE TABLE users (
     last_name       TEXT NOT NULL,
     phone           TEXT,
     role            TEXT NOT NULL DEFAULT 'customer'
-                        CHECK (role IN ('customer', 'manager', 'admin')),
+                        CHECK (role IN ('customer', 'content_manager', 'warehouse_manager', 'sales_processor', 'manager', 'admin')),
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -191,7 +191,7 @@ CREATE TABLE orders (
     delivery_city   TEXT,
     delivery_address TEXT,
     status          TEXT NOT NULL DEFAULT 'new'
-                        CHECK (status IN ('new','processing','shipped','delivered','cancelled','refunded')),
+                        CHECK (status IN ('new','processing','shipped','delivered','picked_up','cancelled','refunded')),
     subtotal        REAL NOT NULL DEFAULT 0,
     delivery_cost   REAL NOT NULL DEFAULT 0,
     discount        REAL NOT NULL DEFAULT 0,
@@ -218,7 +218,17 @@ CREATE TABLE order_items (
     product_sku     TEXT NOT NULL,
     quantity        INTEGER NOT NULL CHECK (quantity > 0),
     unit_price      REAL NOT NULL CHECK (unit_price >= 0),
-    total_price     REAL NOT NULL DEFAULT 0
+    total_price     REAL NOT NULL DEFAULT 0,
+    UNIQUE (order_id, product_id)
+);
+
+CREATE TABLE order_messages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id        INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    sender_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body            TEXT NOT NULL,
+    is_from_staff   BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Рухи складу (після orders — FK order_id)
@@ -273,6 +283,8 @@ CREATE INDEX idx_orders_status        ON orders(status);
 CREATE INDEX idx_orders_date          ON orders(created_at);
 CREATE INDEX idx_order_items_order    ON order_items(order_id);
 CREATE INDEX idx_order_items_product  ON order_items(product_id);
+CREATE INDEX idx_order_messages_order ON order_messages(order_id);
+CREATE INDEX idx_order_messages_date  ON order_messages(created_at);
 CREATE INDEX idx_reviews_product      ON reviews(product_id);
 CREATE INDEX idx_reviews_approved     ON reviews(is_approved);
 CREATE INDEX idx_supply_supplier      ON supply_orders(supplier_id);
@@ -323,6 +335,10 @@ CREATE TABLE notifications (
     type            TEXT NOT NULL CHECK (type IN ('low_stock', 'order_status', 'supply_arrival', 'system')),
     title           TEXT NOT NULL,
     message         TEXT NOT NULL,
+    target_path     TEXT,
+    target_product_id INTEGER,
+    target_inventory_id INTEGER,
+    target_order_id INTEGER,
     is_read         BOOLEAN NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

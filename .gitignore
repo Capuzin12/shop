@@ -12,3 +12,14 @@ server/app.db
 *.pyo
 
 .DS_Store
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+!client/.env.example
+!server/.env.example
+
+# Local backup files
+*.sql
+*.sqlite

@@ -1,5 +1,6 @@
-import { AlertTriangle, Bell, CheckCheck, Package, Truck } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Bell, CheckCheck, Package, Truck } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 
@@ -7,6 +8,85 @@ export default function Notifications() {
   const { user } = useAuth();
   const { notifications, loading, unreadCount, markRead, markAllRead } = useNotifications();
   const [filter, setFilter] = useState('all');
+  const navigate = useNavigate();
+
+  const resolveFallbackPath = (notification) => {
+    const isStaff = ['admin', 'manager', 'warehouse_manager', 'sales_processor', 'content_manager'].includes(user?.role);
+    const canManageInventory = ['admin', 'manager', 'warehouse_manager'].includes(user?.role);
+
+    if (notification?.target_order_id) {
+      return isStaff ? '/manager?tab=orders' : '/profile';
+    }
+    if (notification?.target_inventory_id || notification?.target_product_id || notification?.type === 'low_stock' || notification?.type === 'supply_arrival') {
+      if (canManageInventory) {
+        return user?.role === 'admin' ? '/admin/inventory' : '/manager?tab=inventory';
+      }
+      return '/catalog';
+    }
+    if (notification?.type === 'order_status') {
+      return isStaff ? '/manager?tab=orders' : '/profile';
+    }
+    return isStaff ? '/manager' : '/profile';
+  };
+
+  const inferOrderIdFromNotification = (notification) => {
+    const explicit = Number(notification?.target_order_id || 0);
+    if (explicit > 0) return explicit;
+
+    const source = `${notification?.title || ''} ${notification?.message || ''}`;
+    const match = source.match(/#(\d{1,10})/);
+    const inferred = Number(match?.[1] || 0);
+    return inferred > 0 ? inferred : 0;
+  };
+
+  const getNotificationCta = (notification) => {
+    const orderId = inferOrderIdFromNotification(notification);
+    if (orderId) return `Відкрити чат замовлення #${orderId}`;
+    if (notification?.target_inventory_id || notification?.type === 'low_stock' || notification?.type === 'supply_arrival') return 'Перейти до складу';
+    if (notification?.target_product_id) return 'Відкрити картку товару';
+    if (notification?.type === 'order_status') return 'Відкрити замовлення';
+    return 'Відкрити деталі';
+  };
+
+  const getNotificationCtaTone = (notification) => {
+    const orderId = inferOrderIdFromNotification(notification);
+    if (orderId) {
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300';
+    }
+    if (notification?.target_inventory_id || notification?.type === 'low_stock' || notification?.type === 'supply_arrival') {
+      return 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300';
+    }
+    if (notification?.target_product_id) {
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300';
+    }
+    return 'bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200';
+  };
+
+  const openNotificationTarget = async (notification) => {
+    if (!notification) return;
+
+    if (!notification.is_read) {
+      await markRead(notification.id);
+    }
+
+    const basePath = notification.target_path || resolveFallbackPath(notification);
+    const [pathname, existingQuery = ''] = basePath.split('?');
+    const params = new URLSearchParams(existingQuery);
+    const orderId = inferOrderIdFromNotification(notification);
+    const isStaff = ['admin', 'manager', 'warehouse_manager', 'sales_processor', 'content_manager'].includes(user?.role);
+
+    if (notification.target_product_id) params.set('product_id', String(notification.target_product_id));
+    if (notification.target_inventory_id) params.set('inventory_id', String(notification.target_inventory_id));
+    if (orderId) params.set('order_id', String(orderId));
+
+    // Chat/order notifications should always land on the orders workspace for staff users.
+    if (orderId && isStaff && pathname === '/manager' && !params.get('tab')) {
+      params.set('tab', 'orders');
+    }
+
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    navigate(`${pathname}${suffix}`);
+  };
 
   const getTypeIcon = (type) => {
     switch (type) {
@@ -134,6 +214,15 @@ export default function Notifications() {
               <div
                 key={notification.id}
                 className={`rounded-[1.75rem] border p-5 shadow-lg shadow-black/5 transition hover:-translate-y-0.5 dark:shadow-none ${tone.card} ${!notification.is_read ? 'ring-1 ring-inset ring-white/60 dark:ring-white/10' : ''}`}
+                onClick={() => openNotificationTarget(notification)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openNotificationTarget(notification);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
               >
                 <div className="flex items-start gap-4">
                   <div className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${tone.icon}`}>
@@ -151,13 +240,21 @@ export default function Notifications() {
                     <h2 className="text-lg font-bold text-slate-900 dark:text-white">{notification.title}</h2>
                     <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{notification.message}</p>
 
+                    <div className={`mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-semibold ${getNotificationCtaTone(notification)}`}>
+                      {getNotificationCta(notification)}
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </div>
+
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                         {new Date(notification.created_at).toLocaleString('uk-UA')}
                       </p>
                       {!notification.is_read && (
                         <button
-                          onClick={() => markRead(notification.id)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            markRead(notification.id);
+                          }}
                           className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
                           type="button"
                         >

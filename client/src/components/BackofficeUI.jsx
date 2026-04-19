@@ -104,9 +104,9 @@ export function StatusBadge({ children, tone = 'slate' }) {
 export function DataTable({ columns, children, emptyMessage, colSpan }) {
   return (
     <div className="overflow-hidden rounded-[1.5rem] border border-slate-200 dark:border-white/10">
-      <div className="overflow-x-auto">
+      <div className="max-h-[65vh] overflow-auto">
         <table className="w-full min-w-[760px]">
-          <thead className="bg-slate-50/80 dark:bg-white/5">
+          <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur dark:bg-slate-950/95">
             <tr>
               {columns.map((column) => (
                 <th key={column} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
@@ -115,7 +115,7 @@ export function DataTable({ columns, children, emptyMessage, colSpan }) {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 bg-white/80 dark:divide-white/10 dark:bg-transparent">
+          <tbody className="divide-y divide-slate-200 bg-white/80 dark:divide-white/10 dark:bg-transparent [&>tr]:transition [&>tr:hover]:bg-slate-50/70 dark:[&>tr:hover]:bg-white/5">
             {children || (
               <tr>
                 <td colSpan={colSpan || columns.length} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">

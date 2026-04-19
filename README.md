@@ -2,63 +2,121 @@
 
 Монорепозиторій: `client` (React + Vite + Tailwind) та `server` (FastAPI + SQLAlchemy + SQLite).
 
-## Налаштування та запуск
+## Як запустити проєкт (Windows)
 
-### 1) Ініціалізація бази даних
+Нижче — повна послідовність запуску від нуля.
 
-Схема зберігається в `server/schema.sql`. ORM-моделі — `server/models.py`.
+### 1) Підготовка бекенду
 
-З каталогу `server` виконайте:
+Відкрийте термінал у папці `server` і виконайте:
 
 ```bash
 python -m venv venv
-.\venv\Scripts\Activate
+.\venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+### 2) Ініціалізація бази даних
+
+Схема БД: `server/schema.sql`, ORM-моделі: `server/models.py`.
+
+У тій же папці `server`:
+
+```bash
 python init_db.py --force --seed
 ```
 
-Якщо потрібна лише чиста схема без seed:
+Якщо потрібна чиста схема без автоматичного seed:
 
 ```bash
 python init_db.py --force
 python seed.py
 ```
 
-### 2) Запуск бекенду
+### 3) Запуск бекенду (термінал №1)
 
-Відкрийте термінал у папці `server`, активуйте віртуальне оточення та запустіть сервер:
+У папці `server`:
 
 ```bash
-.\venv\Scripts\Activate
+.\venv\Scripts\activate
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-- Бекенд буде доступний на `http://localhost:8000`
-- Документація API: `http://localhost:8000/docs`
+- API: `http://localhost:8000`
+- Swagger: `http://localhost:8000/docs`
 
-### 3) Запуск фронтенду
+### 4) Запуск фронтенду (термінал №2)
 
-В іншому терміналі перейдіть у папку `client` та виконайте:
+В іншому терміналі перейдіть у папку `client`:
 
 ```bash
 npm install
 npm run dev
 ```
 
-- Фронтенд працюватиме на `http://localhost:5173` (або на адресі, яку покаже Vite)
+- Фронтенд: `http://localhost:5173` (або інший порт, який покаже Vite)
 
-## Основні сценарії
+## Швидкий порядок запуску (кожного разу)
 
-- Після логіна можна додавати товари до кошика та списку бажань
-- Профіль та історія замовлень доступні на сторінці `/profile`
-- Сторінки:
-  - `/catalog` — каталог товарів
-  - `/cart` — кошик
-  - `/wishlist` — список бажань
-  - `/notifications` — повідомлення
+1. Термінал №1: запустити бекенд у `server`
+2. Термінал №2: запустити фронтенд у `client`
+3. Відкрити `http://localhost:5173`
+
+## Тестові акаунти (після `--seed`)
+
+- `admin@budmart.ua / admin123` (admin)
+- `manager@budmart.ua / manager123` (manager)
+- `ivan@example.com / user123` (customer)
+
+## Основні сторінки
+
+- `/catalog` — каталог товарів
+- `/cart` — кошик
+- `/wishlist` — список бажань
+- `/profile` — профіль та історія замовлень
+- `/notifications` — повідомлення
 
 ## Корисні API
 
 - `GET /api/stats` — базова статистика
 - `POST /token` — отримати JWT токен для авторизації
 - `GET /api/me` — інформація про поточного користувача
+
+## Production baseline (P0)
+
+Додано базовий каркас для введення в експлуатацію:
+
+- шаблони змінних середовища: `.env.example`, `server/.env.example`, `client/.env.example`
+- health-check endpoints: `GET /health/live`, `GET /health/ready`
+- Docker production stack: `docker-compose.prod.yml`
+- CI workflow: `.github/workflows/ci.yml`
+- runbooks: `docs/runbooks/deploy.md`, `docs/runbooks/rollback.md`, `docs/runbooks/backup-restore-drill.md`
+
+### Швидкий старт prod-стеку (локально)
+
+1. Скопіюйте env-шаблон і заповніть секрети:
+
+```bash
+copy .env.example .env
+```
+
+2. Запустіть production compose:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+3. Перевірте health:
+
+```bash
+curl http://localhost/health/live
+curl http://localhost/health/ready
+```
+
+### Backup / restore scripts (Windows PowerShell)
+
+```powershell
+./scripts/backup_db.ps1
+./scripts/restore_db.ps1 -InputFile ./backup_YYYYMMDD_HHMMSS.sql
+```
+

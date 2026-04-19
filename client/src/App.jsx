@@ -38,15 +38,16 @@ export default function App() {
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
                     <Route path="/profile" element={<Profile />} />
+                    <Route path="/users/:userId" element={<Profile />} />
                     <Route path="/wishlist" element={<Wishlist />} />
                     <Route path="/notifications" element={<Notifications />} />
                     <Route path="/admin/*" element={
-                      <ProtectedRoute adminOnly>
+                      <ProtectedRoute allowedRoles={['admin', 'content_manager', 'manager', 'warehouse_manager', 'sales_processor']}>
                         <AdminDashboard />
                       </ProtectedRoute>
                     } />
-                    <Route path="/manager" element={
-                      <ProtectedRoute managerOnly>
+                    <Route path="/manager/*" element={
+                      <ProtectedRoute allowedRoles={['admin', 'manager', 'warehouse_manager', 'sales_processor']}>
                         <ManagerDashboard />
                       </ProtectedRoute>
                     } />

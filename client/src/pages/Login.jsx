@@ -1,19 +1,22 @@
-import { LogIn, MoonStar } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getRoleLandingPath } from '../utils/roles';
 
 export default function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await login(formData.email, formData.password);
-      navigate('/');
+      const userData = await login(formData.email, formData.password);
+      const from = location.state?.from?.pathname;
+      navigate(from || getRoleLandingPath(userData?.role), { replace: true });
     } catch {
       setError('Невірний email або пароль');
     }

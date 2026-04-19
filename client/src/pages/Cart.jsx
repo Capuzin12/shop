@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Heart, RefreshCcw, ShoppingBag, Trash2, Plus, Minus } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import api from '../api';
+import { ShoppingBag, Trash2, Plus, Minus } from 'lucide-react';
+import { useMemo } from 'react';
 import { useCart } from '../contexts/CartContext';
 
 const formatPrice = (price) => new Intl.NumberFormat('uk-UA', {
@@ -10,39 +9,24 @@ const formatPrice = (price) => new Intl.NumberFormat('uk-UA', {
   maximumFractionDigits: 0,
 }).format(price || 0);
 
+const getStockQuantity = (item) => {
+  if (typeof item?.stock_quantity === 'number') return item.stock_quantity;
+  if (typeof item?.in_stock === 'boolean') return item.in_stock ? item.quantity || 0 : 0;
+  return null;
+};
+
 export default function Cart() {
-  const { cart, removeFromCart, updateQuantity, getTotal } = useCart();
-  const [inventory, setInventory] = useState({});
+  const { cart, removeFromCart, updateQuantity } = useCart();
+  const total = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
 
-  useEffect(() => {
-    const fetchInventory = async () => {
-      try {
-        const response = await api.get('/api/inventory');
-        const invData = response.data;
-        const invMap = {};
-        if (Array.isArray(invData)) {
-          invData.forEach(item => {
-            invMap[item.product_id] = item.quantity;
-          });
-        }
-        setInventory(invMap);
-      } catch (error) {
-        console.error('Error fetching inventory:', error);
-      }
-    };
-    fetchInventory();
-  }, []);
+  const getAvailableQuantity = (item) => getStockQuantity(item);
 
-  const getAvailableQuantity = (productId) => {
-    return inventory[productId] ?? 0;
-  };
-
-  const handleUpdateQuantity = (productId, newQuantity) => {
-    const available = getAvailableQuantity(productId);
-    if (available > 0 && newQuantity > available) {
-      updateQuantity(productId, available);
+  const handleUpdateQuantity = (item, newQuantity) => {
+    const available = getAvailableQuantity(item);
+    if (typeof available === 'number' && available >= 0 && newQuantity > available) {
+      updateQuantity(item.id, available);
     } else if (newQuantity > 0) {
-      updateQuantity(productId, newQuantity);
+      updateQuantity(item.id, newQuantity);
     }
   };
 
@@ -68,7 +52,10 @@ export default function Cart() {
     );
   }
 
-  const hasOutOfStock = cart.some(item => getAvailableQuantity(item.id) === 0);
+  const hasOutOfStock = cart.some((item) => {
+    const available = getAvailableQuantity(item);
+    return typeof available === 'number' && available >= 0 && available < item.quantity;
+  });
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -106,11 +93,16 @@ export default function Cart() {
                     {formatPrice(item.price)}
                   </p>
                 </div>
+                {item.description ? (
+                  <p className="max-w-[220px] text-right text-xs leading-5 text-slate-500 dark:text-slate-400">
+                    {item.description}
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/60">
                 <button
-                  onClick={() => handleUpdateQuantity(item.id, (item.quantity || 1) - 1)}
+                  onClick={() => handleUpdateQuantity(item, (item.quantity || 1) - 1)}
                   className="flex h-11 w-11 items-center justify-center rounded-2xl text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
                   type="button"
                 >
@@ -120,18 +112,28 @@ export default function Cart() {
                   <span className="text-lg font-semibold text-slate-900 dark:text-white">
                     {item.quantity || 1}
                   </span>
-                  {getAvailableQuantity(item.id) > 0 && getAvailableQuantity(item.id) < 10 && (
-                    <p className="text-xs text-amber-600 dark:text-amber-300">в наявності: {getAvailableQuantity(item.id)}</p>
+                  {getAvailableQuantity(item) !== null ? (
+                    <p className={`text-xs ${getAvailableQuantity(item) > 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-500 dark:text-rose-300'}`}>
+                      {getAvailableQuantity(item) > 0 ? `на складі: ${getAvailableQuantity(item)}` : 'немає на складі'}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400">склад оновлюється</p>
                   )}
                 </div>
                 <button
-                  onClick={() => handleUpdateQuantity(item.id, (item.quantity || 1) + 1)}
+                  onClick={() => handleUpdateQuantity(item, (item.quantity || 1) + 1)}
                   className="flex h-11 w-11 items-center justify-center rounded-2xl text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
                   type="button"
                 >
                   <Plus className="h-4 w-4" />
                 </button>
               </div>
+
+              {typeof getAvailableQuantity(item) === 'number' && getAvailableQuantity(item) < item.quantity ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                  Обрана кількість перевищує залишок на складі. Зменште кількість або видаліть товар.
+                </div>
+              ) : null}
 
               <div className="flex items-end justify-between rounded-2xl bg-slate-100 p-4 dark:bg-slate-950/60">
                 <div>
@@ -165,7 +167,7 @@ export default function Cart() {
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Загальна сума</p>
             <p className="text-3xl font-black text-amber-600 dark:text-amber-300">
-              {formatPrice(getTotal())}
+              {formatPrice(total)}
             </p>
           </div>
           <Link

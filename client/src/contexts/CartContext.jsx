@@ -25,6 +25,10 @@ const normalizeServerCart = (serverCart) => {
     quantity: item.quantity,
     slug: item.product?.slug || '',
     sku: item.product?.sku || '',
+    description: item.product?.description || '',
+    old_price: item.product?.old_price || null,
+    stock_quantity: item.product?.quantity ?? item.product?.stock_quantity ?? 0,
+    in_stock: item.product?.in_stock ?? (item.product?.quantity ?? 0) > 0,
   }));
 };
 
@@ -35,10 +39,6 @@ export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState(() => readLocalCart());
   const [serverCart, setServerCart] = useState(null);
   const syncedRef = useRef(false);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
-  }, [cart]);
 
   const refreshServerCart = async (tokenOverride) => {
     const token = tokenOverride || localStorage.getItem('token');
@@ -63,6 +63,10 @@ export const CartProvider = ({ children }) => {
       return null;
     }
   };
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cart));
+  }, [cart]);
 
   useEffect(() => {
     const syncCart = async () => {
@@ -100,6 +104,8 @@ export const CartProvider = ({ children }) => {
     };
 
     syncCart();
+    // Keep dependency size fixed to prevent React Fast Refresh warning.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const addToCart = async (product, quantity = 1) => {
@@ -133,12 +139,18 @@ export const CartProvider = ({ children }) => {
 
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
+      const stock_quantity = product.quantity ?? product.stock_quantity ?? 0;
       if (existing) {
         return prev.map((item) => (
           item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item
         ));
       }
-      return [...prev, { ...product, quantity }];
+      return [...prev, {
+        ...product,
+        quantity,
+        stock_quantity,
+        in_stock: product.in_stock ?? stock_quantity > 0,
+      }];
     });
   };
 
@@ -196,6 +208,8 @@ export const CartProvider = ({ children }) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
   };
 
+  const getTotal = () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
   const value = {
     cart,
     cartCount: cart.reduce((total, item) => total + item.quantity, 0),
@@ -203,7 +217,7 @@ export const CartProvider = ({ children }) => {
     removeFromCart,
     updateQuantity,
     clearCart,
-    getTotal: () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    getTotal,
     refreshServerCart,
   };
 

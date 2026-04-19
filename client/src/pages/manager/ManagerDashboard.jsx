@@ -1,48 +1,69 @@
 import api from '../../api';
-import { Boxes, LogOut, PackageCheck, ShieldAlert, Warehouse } from 'lucide-react';
+import { Boxes, LogOut, PackageCheck, ShieldAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { BackofficeShell, FilterButton, Panel, StatCard } from '../../components/BackofficeUI';
 import ManagerInventory from './ManagerInventory';
 import ManagerOrders from './ManagerOrders';
 import ManagerProducts from './ManagerProducts';
+import { getRoleLabel } from '../../utils/roles';
 
 export default function ManagerDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('orders');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const preferredTab = ['sales_processor'].includes(user?.role)
+    ? 'orders'
+    : ['warehouse_manager'].includes(user?.role)
+      ? 'inventory'
+      : 'orders';
+  const tabFromQuery = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabFromQuery || preferredTab);
   const [stats, setStats] = useState({ orders: 0, products: 0, lowStock: 0 });
 
+  const canManageOrders = ['admin', 'manager', 'sales_processor'].includes(user?.role);
+  const canManageInventory = ['admin', 'manager', 'warehouse_manager'].includes(user?.role);
+  const canManageProducts = ['admin', 'manager', 'warehouse_manager'].includes(user?.role);
+  const roleLabel = getRoleLabel(user?.role);
+
+  const fetchStats = async () => {
+    if (!user?.token) return;
+    try {
+      const [ordersRes, productsRes, inventoryRes] = await Promise.all([
+        api.get('/api/orders'),
+        api.get('/api/products?limit=100'),
+        api.get('/api/inventory'),
+      ]);
+
+      const ordersData = ordersRes.data;
+      const productsData = productsRes.data;
+      const inventoryData = inventoryRes.data;
+
+      const orders = Array.isArray(ordersData) ? ordersData : (ordersData.orders || []);
+      const products = Array.isArray(productsData) ? productsData : (productsData.products || []);
+      const inventory = Array.isArray(inventoryData) ? inventoryData : [];
+      const lowStock = inventory.filter((item) => item.quantity < (item.min_quantity_alert ?? item.min_quantity)).length;
+
+      setStats({ orders: orders.length, products: products.length, lowStock });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
   useEffect(() => {
-    const fetchStats = async () => {
-      if (!user?.token) return;
-      try {
-        const [ordersRes, productsRes, inventoryRes] = await Promise.all([
-          api.get('/api/orders'),
-          api.get('/api/products?limit=100'),
-          api.get('/api/inventory'),
-        ]);
+    if (tabFromQuery) {
+      setActiveTab(tabFromQuery);
+      return;
+    }
+    setActiveTab(preferredTab);
+  }, [preferredTab, tabFromQuery]);
 
-        const ordersData = ordersRes.data;
-        const productsData = productsRes.data;
-        const inventoryData = inventoryRes.data;
-
-        const orders = Array.isArray(ordersData) ? ordersData : (ordersData.orders || []);
-        const products = Array.isArray(productsData) ? productsData : (productsData.products || []);
-        const inventory = Array.isArray(inventoryData) ? inventoryData : [];
-        const lowStock = inventory.filter((item) => item.quantity < (item.min_quantity_alert ?? item.min_quantity)).length;
-
-        setStats({ orders: orders.length, products: products.length, lowStock });
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      }
-    };
-
+  useEffect(() => {
     fetchStats();
   }, [user?.token]);
 
-  if (!user || (user.role !== 'manager' && user.role !== 'admin')) {
+  if (!user || (!canManageOrders && !canManageInventory && !canManageProducts)) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-10 text-center text-slate-600 dark:text-slate-300">
         Ви не маєте доступу до панелі менеджера.
@@ -51,15 +72,27 @@ export default function ManagerDashboard() {
   }
 
   const tabs = [
-    { id: 'orders', label: 'Замовлення' },
-    { id: 'products', label: 'Товари' },
-    { id: 'inventory', label: 'Склад' },
-  ];
+    canManageOrders ? { id: 'orders', label: 'Замовлення' } : null,
+    canManageProducts ? { id: 'products', label: 'Товари' } : null,
+    canManageInventory ? { id: 'inventory', label: 'Склад' } : null,
+  ].filter(Boolean);
+
+  const switchTab = (tabId) => {
+    setActiveTab(tabId);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tabId);
+      return next;
+    });
+  };
+
+  const activeTabIsAllowed = tabs.some((tab) => tab.id === activeTab);
+  const currentTab = activeTabIsAllowed ? activeTab : (tabs[0]?.id || 'orders');
 
   return (
     <BackofficeShell
       eyebrow="Панель операцій"
-      title="Панель менеджера"
+      title={`Панель менеджера · ${roleLabel}`}
       description="Операційний екран для щоденної роботи із замовленнями, товарами та контролем запасів."
       actions={[
         <div key="user" className="rounded-2xl border border-white/50 bg-white/70 px-4 py-3 text-sm text-slate-600 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-300">
@@ -87,16 +120,16 @@ export default function ManagerDashboard() {
     >
       <Panel
         title="Робочі розділи"
-        subtitle="Перемикайтеся між ключовими задачами менеджера"
+        subtitle="Перемикайтеся між ключовими задачами менеджера без дублювання блоків"
         actions={tabs.map((tab) => (
-          <FilterButton key={tab.id} active={activeTab === tab.id} alert={tab.id === 'inventory' && stats.lowStock > 0} onClick={() => setActiveTab(tab.id)}>
+          <FilterButton key={tab.id} active={currentTab === tab.id} alert={tab.id === 'inventory' && stats.lowStock > 0} onClick={() => switchTab(tab.id)}>
             {tab.label}
           </FilterButton>
         ))}
       >
-        {activeTab === 'orders' && <ManagerOrders onUpdate={() => setStats((prev) => ({ ...prev }))} />}
-        {activeTab === 'products' && <ManagerProducts />}
-        {activeTab === 'inventory' && <ManagerInventory />}
+        {currentTab === 'orders' && canManageOrders && <ManagerOrders onUpdate={fetchStats} />}
+        {currentTab === 'products' && canManageProducts && <ManagerProducts />}
+        {currentTab === 'inventory' && canManageInventory && <ManagerInventory onUpdate={fetchStats} />}
       </Panel>
     </BackofficeShell>
   );

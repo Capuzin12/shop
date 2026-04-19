@@ -41,6 +41,9 @@ def _py_enum(enum_cls: type[enum.Enum], **kwargs):
 
 class UserRole(str, enum.Enum):
     customer = "customer"
+    content_manager = "content_manager"
+    warehouse_manager = "warehouse_manager"
+    sales_processor = "sales_processor"
     manager  = "manager"
     admin    = "admin"
 
@@ -54,6 +57,7 @@ class OrderStatus(str, enum.Enum):
     processing = "processing"
     shipped    = "shipped"
     delivered  = "delivered"
+    picked_up  = "picked_up"
     cancelled  = "cancelled"
     refunded   = "refunded"
 
@@ -118,6 +122,7 @@ class User(Base):
     wishlist   : Mapped[List["Wishlist"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     carts      : Mapped[List["Cart"]]     = relationship(back_populates="user", cascade="all, delete-orphan")
     notifications: Mapped[List["Notification"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    order_messages: Mapped[List["OrderMessage"]] = relationship(back_populates="sender")
 
     def __repr__(self):
         return f"<User {self.email}>"
@@ -399,10 +404,16 @@ class Order(Base):
         primaryjoin="Order.id == InventoryMovement.order_id",
         foreign_keys="InventoryMovement.order_id"
     )
+    messages   : Mapped[List["OrderMessage"]] = relationship(
+        back_populates="order",
+        cascade="all, delete-orphan",
+        order_by="OrderMessage.created_at",
+    )
 
 
 class OrderItem(Base):
     __tablename__ = "order_items"
+    __table_args__ = (UniqueConstraint("order_id", "product_id", name="unique_order_product"),)
 
     id           : Mapped[int]           = mapped_column(primary_key=True)
     order_id     : Mapped[int]           = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
@@ -418,6 +429,20 @@ class OrderItem(Base):
     @property
     def total_price(self) -> float:
         return self.quantity * self.unit_price
+
+
+class OrderMessage(Base):
+    __tablename__ = "order_messages"
+
+    id         : Mapped[int]      = mapped_column(primary_key=True)
+    order_id   : Mapped[int]      = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
+    sender_id  : Mapped[int]      = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    body       : Mapped[str]      = mapped_column(Text, nullable=False)
+    is_from_staff: Mapped[bool]   = mapped_column(Boolean, default=False)
+    created_at : Mapped[datetime] = mapped_column(default=func.now())
+
+    order  : Mapped["Order"] = relationship(back_populates="messages")
+    sender : Mapped["User"] = relationship(back_populates="order_messages")
 
 
 # ============================================================
@@ -529,6 +554,10 @@ class Notification(Base):
     type: Mapped[NotificationType] = mapped_column(_py_enum(NotificationType), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
+    target_path: Mapped[Optional[str]] = mapped_column(String(255))
+    target_product_id: Mapped[Optional[int]] = mapped_column(Integer)
+    target_inventory_id: Mapped[Optional[int]] = mapped_column(Integer)
+    target_order_id: Mapped[Optional[int]] = mapped_column(Integer)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(default=func.now())
 

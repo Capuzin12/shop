@@ -10,6 +10,38 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const syncRef = useRef(null);
 
+  const clearAuth = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+  };
+
+  const persistUser = (userData) => {
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+    syncWithServer(userData);
+    return userData;
+  };
+
+  const refreshUser = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      clearAuth();
+      return null;
+    }
+
+    try {
+      const response = await api.get('/api/me');
+      return persistUser({ ...response.data, token });
+    } catch (error) {
+      if (error.response?.status === 401 || error.response?.status === 400) {
+        clearAuth();
+        return null;
+      }
+      throw error;
+    }
+  };
+
   const syncWithServer = (userData) => {
     if (syncRef.current) {
       syncRef.current(userData);
@@ -22,19 +54,13 @@ export const AuthProvider = ({ children }) => {
       const savedUser = localStorage.getItem('user');
       if (token && savedUser) {
         try {
-          const response = await api.get('/api/me');
-          const freshUserData = { ...response.data, token };
-          localStorage.setItem('user', JSON.stringify(freshUserData));
-          setUser(freshUserData);
+          await refreshUser();
         } catch (error) {
-          if (error.response?.status === 401) {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            setUser(null);
-          } else {
-            console.error('Error initializing auth:', error);
-          }
+          console.error('Error initializing auth:', error);
+          clearAuth();
         }
+      } else {
+        clearAuth();
       }
       setLoading(false);
     };
@@ -51,22 +77,19 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', access_token);
       const userResponse = await api.get('/api/me');
       const userData = { ...userResponse.data, token: access_token };
-      localStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData);
-      syncWithServer(userData);
+      persistUser(userData);
+      return userData;
     } catch (error) {
       throw error;
     }
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
+    clearAuth();
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, syncWithServer: (fn) => { syncRef.current = fn; } }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, refreshUser, syncWithServer: (fn) => { syncRef.current = fn; } }}>
       {children}
     </AuthContext.Provider>
   );
