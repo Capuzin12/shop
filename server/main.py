@@ -14,7 +14,7 @@ from passlib.context import CryptContext
 from sqlalchemy import func, select, inspect, delete, case, text
 from sqlalchemy.orm import Session, selectinload
 
-from database import SessionLocal
+from database import SessionLocal, DATABASE_URL
 from models import Category, Product, User, UserRole, Inventory, Brand, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, Review, OrderStatus, OrderMessage, AuditLog, ClientError
 from logging_config import configure_logging, get_logger, set_request_id, set_user_id, get_request_id, generate_request_id
 from config import settings, validate_settings
@@ -50,6 +50,10 @@ def ensure_runtime_schema(db: Session):
     """Best-effort lightweight patch for older app.db without latest notification columns."""
     global _schema_patched
     if _schema_patched:
+        return
+    # PRAGMA / SQLite-only DDL: skip for PostgreSQL and other engines (cloud prod).
+    if not DATABASE_URL.startswith("sqlite"):
+        _schema_patched = True
         return
 
     table_info = db.execute(text("PRAGMA table_info(notifications)")).all()
@@ -91,13 +95,15 @@ def ensure_runtime_schema(db: Session):
 
     _schema_patched = True
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_mw_kwargs = {
+    "allow_origins": CORS_ORIGINS,
+    "allow_credentials": False,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+if settings.cors_origin_regex:
+    _cors_mw_kwargs["allow_origin_regex"] = settings.cors_origin_regex
+app.add_middleware(CORSMiddleware, **_cors_mw_kwargs)
 
 # Add custom middleware in reverse order (last added = first executed)
 app.middleware('http')(add_timing_middleware)

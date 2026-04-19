@@ -22,6 +22,7 @@ Exit code:
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import random
 import string
@@ -138,7 +139,8 @@ def assert_sla(latency_ms: float, max_latency_ms: float) -> bool:
 
 def run_ui_timing_checks(frontend_url: str, summary: RunSummary, max_page_load_ms: float) -> None:
     try:
-        from playwright.sync_api import sync_playwright
+        sync_api = importlib.import_module("playwright.sync_api")
+        sync_playwright = getattr(sync_api, "sync_playwright")
     except Exception as exc:  # pragma: no cover
         summary.add(CheckResult(
             name="UI Timing (Playwright)",

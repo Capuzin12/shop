@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     
     # CORS
     cors_origins: str = Field(default='http://localhost:5173', env='CORS_ORIGINS')
+    # Опційно: regex для Origin (напр. усі Vercel preview), якщо не хочете перелічувати кожен URL у CORS_ORIGINS
+    cors_origin_regex: Optional[str] = Field(default=None, env='CORS_ORIGIN_REGEX')
     
     # API Server
     api_host: str = Field(default='0.0.0.0', env='API_HOST')
@@ -67,6 +69,17 @@ class Settings(BaseSettings):
         if not v or len(v) < 10:
             raise ValueError('DATABASE_URL is invalid or missing')
         return v
+
+    @validator('cors_origin_regex')
+    def validate_cors_origin_regex(cls, v):
+        if v is None or not str(v).strip():
+            return None
+        s = str(v).strip()
+        try:
+            re.compile(s)
+        except re.error as e:
+            raise ValueError(f'CORS_ORIGIN_REGEX is not a valid regex: {e}') from e
+        return s
     
     def get_cors_origins(self) -> List[str]:
         """Parse and return CORS origins as list."""

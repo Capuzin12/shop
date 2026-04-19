@@ -28,8 +28,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set the sqlalchemy.url from database.py
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+# Set the sqlalchemy.url from database.py (escape % for ConfigParser interpolation)
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 # add your model's MetaData object here
 # for 'autogenerate' support
