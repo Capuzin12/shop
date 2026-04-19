@@ -316,7 +316,7 @@ npm audit fix
 
 ### Version Pinning
 - Use exact versions for critical dependencies
-- Allow patch updates (e.g., `4.1.4` not `>=4.0.0`)
+- Allow patch updates (e.g., `4.1.3` not `>=4.0.0`)
 - Keep dependencies updated monthly
 
 ### Recommended Tools

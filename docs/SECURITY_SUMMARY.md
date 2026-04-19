@@ -89,7 +89,7 @@ This document summarizes all security enhancements made to BuildShop for product
 
 ### 4. **server/requirements.txt**
 #### Changes:
-- Updated bcrypt from 4.0.1 to 4.1.4 (security patches)
+- Updated bcrypt from 4.0.1 to 4.1.3 (security patches)
 - Added `python-dotenv>=1.0.0` for safe env loading
 - Added `pip-audit>=2.6.0` for vulnerability scanning
 - Added `cryptography>=42.0.0` for strong encryption
