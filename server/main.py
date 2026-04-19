@@ -763,7 +763,8 @@ async def login_for_access_token(
         value=access_token,
         httponly=True,  # Prevent JavaScript access (XSS protection)
         secure=settings.auth_cookie_secure,  # HTTPS only
-        samesite=settings.auth_cookie_samesite if not settings.is_production() else 'strict',  # Strict in production
+        # Honor environment-configured SameSite policy (e.g. 'none' for cross-site frontend/API).
+        samesite=settings.auth_cookie_samesite,
         max_age=int(access_token_expires.total_seconds()),
         path="/",
         domain=None,  # Don't expose to subdomains

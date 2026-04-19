@@ -84,6 +84,8 @@ class Settings(BaseSettings):
     def validate_auth_cookie_samesite(cls, v):
         allowed = {'lax', 'strict', 'none'}
         value = str(v or '').strip().lower()
+        if os.getenv('ENVIRONMENT', 'development') in ('production', 'prod') and value in ('', 'lax'):
+            return 'none'
         if value not in allowed:
             raise ValueError(f'AUTH_COOKIE_SAMESITE must be one of {tuple(sorted(allowed))}')
         return value
