@@ -580,3 +580,25 @@ class Wishlist(Base):
     product: Mapped["Product"] = relationship("Product")
 
     __table_args__ = (UniqueConstraint('user_id', 'product_id', name='unique_user_product_wishlist'),)
+
+
+# ============================================================
+# AUDIT & COMPLIANCE
+# ============================================================
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    action: Mapped[str] = mapped_column(String(50), nullable=False)  # create, update, delete, status_change
+    resource_type: Mapped[str] = mapped_column(String(50), nullable=False)  # user, product, order, inventory
+    resource_id: Mapped[Optional[int]] = mapped_column(Integer)
+    changes_json: Mapped[Optional[str]] = mapped_column(Text)  # JSON diff of before/after
+    request_id: Mapped[Optional[str]] = mapped_column(String(36))  # UUID from request
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45))  # IPv4 or IPv6
+    details: Mapped[Optional[str]] = mapped_column(Text)  # Additional context
+    created_at: Mapped[datetime] = mapped_column(default=func.now(), index=True)
+    
+    user: Mapped[Optional["User"]] = relationship("User")
+

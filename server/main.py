@@ -6,7 +6,7 @@ from typing import Annotated
 import unicodedata
 
 import models  # noqa: F401 — реєстрація ORM-моделей
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Response, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -15,19 +15,33 @@ from sqlalchemy import func, select, inspect, delete, case, text
 from sqlalchemy.orm import Session, selectinload
 
 from database import SessionLocal
-from models import Category, Product, User, UserRole, Inventory, Brand, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, Review, OrderStatus, OrderMessage
+from models import Category, Product, User, UserRole, Inventory, Brand, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, Review, OrderStatus, OrderMessage, AuditLog
+from logging_config import configure_logging, get_logger, set_request_id, set_user_id, get_request_id, generate_request_id
+from config import settings, validate_settings
+from security import add_request_id_middleware, add_security_headers_middleware, add_timing_middleware, limiter
+from errors import log_error
+
+# Validate settings on startup
+validate_settings()
+
+# Configure logging
+logger = get_logger(__name__)
+configure_logging(debug=settings.debug)
+
+logger.info('BuildShop API starting', extra={'environment': settings.environment, 'debug': settings.debug})
 
 # Auth settings
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-secret-change-me")
-ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TTL_MIN", "30"))
-CORS_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if origin.strip()]
+SECRET_KEY = settings.secret_key
+ALGORITHM = settings.jwt_algorithm
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.jwt_access_ttl_min
+CORS_ORIGINS = settings.get_cors_origins()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 oauth2_optional_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 app = FastAPI(title="BuildShop API")
+app.state.limiter = limiter
 
 _schema_patched = False
 
@@ -63,6 +77,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add custom middleware in reverse order (last added = first executed)
+app.middleware('http')(add_timing_middleware)
+app.middleware('http')(add_security_headers_middleware)
+app.middleware('http')(add_request_id_middleware)
 
 
 
@@ -513,15 +532,22 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 
 @app.post("/token")
-async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: DbSession):
+@limiter.limit("5/minute")
+async def login_for_access_token(request: Request, form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: DbSession):
     user = authenticate_user(db, form_data.username, form_data.password)
-    print(user);
     if not user:
+        logger.warning(f'Failed login attempt for {form_data.username}', extra={'username': form_data.username})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    # Set user_id in logging context
+    if user:
+        set_user_id(user.id)
+        logger.info(f'User {user.email} logged in', extra={'user_id': user.id, 'email': user.email})
+    
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
@@ -1661,7 +1687,12 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
 
 
 @app.put("/api/orders/{order_id}")
-def update_order(order_id: int, order_data: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_sales_user)]):
+@limiter.limit("30/minute")
+def update_order(request: Request, order_id: int, order_data: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_sales_user)]):
+    from audit_log import create_order_status_change_audit, create_audit_log
+    
+    set_user_id(current_user.id)
+    
     db_order = db.scalar(select(Order).where(Order.id == order_id).options(selectinload(Order.items)))
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1682,12 +1713,23 @@ def update_order(order_id: int, order_data: dict, db: DbSession, current_user: A
             "delivery_method",
             "payment_method",
         }
+        changes = {}
         for key, value in order_data.items():
             if key in allowed_fields:
+                old_value = getattr(db_order, key, None)
+                if old_value != value:
+                    changes[key] = {'from': old_value, 'to': value}
                 setattr(db_order, key, value)
 
         if old_status != new_status and new_status == OrderStatus.cancelled:
             restock_order_items(db, db_order, note_prefix="Скасування замовлення")
+            
+            # Audit log for cancellation
+            create_audit_log(
+                db, current_user.id, 'status_change', 'order', order_id,
+                {'from': old_status.value, 'to': new_status.value},
+                request=request
+            )
 
         if old_status != new_status and db_order.user_id is None and db_order.contact_email:
             linked_user = db.scalar(select(User).where(User.email == db_order.contact_email))
@@ -1705,15 +1747,23 @@ def update_order(order_id: int, order_data: dict, db: DbSession, current_user: A
                 target_path="/profile",
                 target_order_id=db_order.id,
             ))
+            
+            # Audit log for status change
+            create_order_status_change_audit(
+                db, current_user.id, order_id, old_status.value, new_status.value,
+                request=request
+            )
 
         db.commit()
         db.refresh(db_order)
+        logger.info(f'Order {order_id} updated', extra={'order_id': order_id, 'user_id': current_user.id})
         return serialize_model(db_order)
     except HTTPException:
         db.rollback()
         raise
-    except Exception:
+    except Exception as e:
         db.rollback()
+        logger.error(f'Error updating order {order_id}', extra={'order_id': order_id, 'error': str(e)})
         raise
 
 
@@ -1791,7 +1841,10 @@ def get_order_messages(order_id: int, db: DbSession, current_user: Annotated[Use
 
 
 @app.post("/api/orders/{order_id}/messages")
-def create_order_message(order_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+@limiter.limit("30/minute")
+def create_order_message(request: Request, order_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    set_user_id(current_user.id)
+    
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1842,12 +1895,14 @@ def create_order_message(order_id: int, payload: dict, db: DbSession, current_us
 
         db.commit()
         message = db.scalar(select(OrderMessage).where(OrderMessage.id == message.id).options(selectinload(OrderMessage.sender)))
+        logger.info(f'Order message created', extra={'order_id': order_id, 'user_id': current_user.id, 'is_staff': is_from_staff})
         return serialize_order_message(message)
     except HTTPException:
         db.rollback()
         raise
-    except Exception:
+    except Exception as e:
         db.rollback()
+        logger.error(f'Error creating order message', extra={'order_id': order_id, 'error': str(e)})
         raise
 
 
@@ -2156,6 +2211,52 @@ def check_low_stock(db: DbSession, current_user: Annotated[User, Depends(get_cur
     """Примусова перевірка низького запасу"""
     count = check_low_stock_notifications(db)
     return {"message": f"Перевірку выполнено. Знайдено {count} товарів з низьким запасом", "count": count}
+
+
+# ============================================================
+# AUDIT LOGS (Admin Only)
+# ============================================================
+
+@app.get("/api/audit-logs")
+def get_audit_logs(
+    db: DbSession,
+    current_user: Annotated[User, Depends(get_current_admin_user)],
+    resource_type: str | None = None,
+    resource_id: int | None = None,
+    user_id: int | None = None,
+    action: str | None = None,
+    limit: int = 100,
+):
+    """Get audit logs (admin only)."""
+    from audit_log import get_audit_logs as get_audit_logs_helper
+    
+    set_user_id(current_user.id)
+    
+    logs = get_audit_logs_helper(
+        db,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        user_id=user_id,
+        action=action,
+        limit=limit
+    )
+    
+    return [
+        {
+            "id": log.id,
+            "user_id": log.user_id,
+            "user_email": log.user.email if log.user else None,
+            "action": log.action,
+            "resource_type": log.resource_type,
+            "resource_id": log.resource_id,
+            "changes": log.changes_json,
+            "request_id": log.request_id,
+            "ip_address": log.ip_address,
+            "details": log.details,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        }
+        for log in logs
+    ]
 
 
 if __name__ == "__main__":

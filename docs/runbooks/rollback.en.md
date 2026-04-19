@@ -1,14 +1,14 @@
-# BuildShop Rollback Runbook
+# BuildShop Rollback Runbook - English
 
-🇺🇦 **[Українська версія](rollback.uk.md)** | 🇬🇧 **[English Version](rollback.en.md)**
+## Trigger Conditions
 
-## Trigger
-Rollback if:
-- Sustained 5xx after deploy
+Perform rollback if:
+- Sustained 5xx errors after deploy
 - Login or order flow broken
 - DB migration issue blocks core operations
 
 ## Steps
+
 1. Stop current stack:
 
 ```bash

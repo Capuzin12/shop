@@ -1,7 +1,5 @@
 # BuildShop
 
-🇺🇦 **[Українська версія](README.uk.md)** | 🇬🇧 **[English Version](README.en.md)**
-
 Монорепозиторій: `client` (React + Vite + Tailwind) та `server` (FastAPI + SQLAlchemy + SQLite).
 
 ## Як запустити проєкт (Windows)
@@ -122,16 +120,3 @@ curl http://localhost/health/ready
 ./scripts/restore_db.ps1 -InputFile ./backup_YYYYMMDD_HHMMSS.sql
 ```
 
----
-
-## 📚 Документація та плани
-
-Детальна інформація щодо проєкту, статусу та плану розвитку:
-
-- 📖 **[Документація](docs/DOCUMENTATION_STRUCTURE.md)** - Структура документації та навігація
-- 🎯 **[План роботи](docs/WORK_PLAN.md)** - Що потрібно робити далі (фаза 3-6)
-- 📊 **[Статус спринту](docs/SPRINT_STATUS.md)** - Детальний статус реалізації
-- 📋 **[TODO](docs/TODO.md)** - Завершена робота та залишилися завдання
-- ✅ **[Звіт про документацію](DOCUMENTATION_COMPLETE.md)** - Що було створено
-
-Усі документи мають **двомовні версії** (Українська 🇺🇦 та Англійська 🇬🇧).

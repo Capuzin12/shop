@@ -1,12 +1,11 @@
-# BuildShop Production Deploy Runbook
-
-🇺🇦 **[Українська версія](deploy.uk.md)** | 🇬🇧 **[English Version](deploy.en.md)**
+# BuildShop Production Deploy Runbook - English
 
 ## Prerequisites
 - Filled `.env` from `.env.example`
 - Docker and Docker Compose installed
 
 ## Steps
+
 1. Build and start production stack:
 
 ```bash
@@ -22,9 +21,9 @@ curl http://localhost/health/ready
 
 3. Check app availability:
 - Open `http://localhost`
-- Login with seeded account and open `/profile`, `/notifications`
+- Login with pre-created account and open `/profile`, `/notifications`
 
-## Post-deploy checks
+## Post-Deploy Checks
 - Order creation works
 - Order status update works
 - Chat message sends and notification appears
