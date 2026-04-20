@@ -136,7 +136,7 @@ def main():
     print("\nOK: database initialization complete!")
     print("\nNext steps:")
     print("1. Run: alembic upgrade head  (to apply migrations)")
-    print("2. Run: python seed.py (to add sample data)")
+    print("2. Run SQL from server/seed_supabase.sql in Supabase SQL Editor")
 
 
 if __name__ == "__main__":
