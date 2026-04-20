@@ -15,7 +15,12 @@ export const registerSchema = z.object({
   phone: z.string().trim().optional().or(z.literal('')).refine((value) => !value || /^\+?\d{10,15}$/.test(value.replace(/[\s()-]/g, '')), {
     message: 'Некоректний номер телефону',
   }),
-  password: z.string().trim().min(6, 'Пароль має містити щонайменше 6 символів'),
+  password: z.string().trim()
+    .min(12, 'Пароль має містити щонайменше 12 символів')
+    .regex(/[A-Z]/, 'Пароль має містити хоча б одну велику літеру')
+    .regex(/[a-z]/, 'Пароль має містити хоча б одну малу літеру')
+    .regex(/\d/, 'Пароль має містити хоча б одну цифру')
+    .regex(/[^A-Za-z0-9]/, 'Пароль має містити хоча б один спецсимвол'),
 });
 
 export const profileSchema = z.object({

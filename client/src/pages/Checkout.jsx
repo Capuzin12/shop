@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../api';
 import { checkoutSchema, mapZodErrors, normalizePhoneInput } from '../utils/validation';
 
 const GUEST_CHECKOUT_KEY = 'buildshop-checkout-draft';
@@ -272,28 +273,16 @@ export default function Checkout() {
 
     try {
       setSubmitting(true);
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => ({}));
-        const parsed = mapOrderError(errorPayload, 'Не вдалося оформити замовлення');
-        if (parsed.fieldErrors) setFieldErrors(parsed.fieldErrors);
-        throw new Error(parsed.message);
-      }
+      await api.post('/api/orders', payload);
 
       clearCart();
       localStorage.removeItem(GUEST_CHECKOUT_KEY);
       navigate('/profile');
     } catch (error) {
       console.error('Error creating order:', error);
-      const errorMsg = error?.message || 'Не вдалося оформити замовлення';
+      const parsed = mapOrderError(error?.response?.data, 'Не вдалося оформити замовлення');
+      if (parsed.fieldErrors) setFieldErrors(parsed.fieldErrors);
+      const errorMsg = parsed.message || error?.message || 'Не вдалося оформити замовлення';
       setMessage(`Не вдалося оформити замовлення. Помилка: ${errorMsg}`);
     } finally {
       setSubmitting(false);
