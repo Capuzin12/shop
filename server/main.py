@@ -8,7 +8,7 @@ import unicodedata
 import models  # noqa: F401 — реєстрація ORM-моделей
 from fastapi import Depends, FastAPI, HTTPException, Response, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZIPMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -47,10 +47,6 @@ app = FastAPI(title="BuildShop API")
 app.state.limiter = limiter
 
 _schema_patched = False
-
-
-from fastapi.middleware.gzip import GZIPMiddleware
-
 
 def ensure_runtime_schema(db: Session):
     """Best-effort lightweight patch for older app.db without latest notification columns."""
@@ -112,8 +108,8 @@ _cors_mw_kwargs = {
 if settings.cors_origin_regex:
     _cors_mw_kwargs["allow_origin_regex"] = settings.cors_origin_regex
 
-# Add GZIP compression for responses > 1KB (helps with large JSON)
-app.add_middleware(GZIPMiddleware, minimum_size=1024)
+# Add gzip compression for responses > 1KB (helps with large JSON)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.add_middleware(CORSMiddleware, **_cors_mw_kwargs)
 
