@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
-import os
 import re
 from typing import Annotated
 import unicodedata
@@ -212,6 +211,59 @@ def serialize_order_summary(order: Order):
             }
             for item in (order.items or [])
         ],
+    }
+
+
+def serialize_user_summary(user: User):
+    return {
+        "id": user.id,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "phone": user.phone,
+        "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+        "is_active": user.is_active,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+
+def serialize_product_summary(product: Product):
+    return {
+        "id": product.id,
+        "name": product.name,
+        "slug": product.slug,
+        "sku": product.sku,
+        "description": product.description,
+        "price": product.price,
+        "old_price": product.old_price,
+        "unit": product.unit,
+        "icon": product.icon,
+        "badge": product.badge.value if product.badge and hasattr(product.badge, "value") else str(product.badge) if product.badge else None,
+        "is_active": product.is_active,
+        "is_featured": product.is_featured,
+        "category_id": product.category_id,
+        "brand_id": product.brand_id,
+        "category_name": product.category.name if getattr(product, "category", None) else None,
+        "brand_name": product.brand.name if getattr(product, "brand", None) else None,
+        "created_at": product.created_at.isoformat() if product.created_at else None,
+        "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+    }
+
+
+def serialize_inventory_summary(item: Inventory):
+    product = item.product
+    return {
+        "id": item.id,
+        "product_id": item.product_id,
+        "product_name": product.name if product else "Unknown",
+        "product_sku": product.sku if product else None,
+        "quantity": item.quantity,
+        "min_quantity": item.min_quantity,
+        "max_quantity": item.max_quantity,
+        "location": item.location,
+        "min_quantity_alert": item.min_quantity_alert if item.min_quantity_alert is not None else item.min_quantity,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None,
     }
 
 
@@ -1580,7 +1632,7 @@ def create_product(product: dict, db: DbSession, current_user: Annotated[User, D
     db.add(new_product)
     db.commit()
     db.refresh(new_product)
-    return serialize_model(new_product)
+    return serialize_product_summary(new_product)
 
 
 @app.put("/api/products/{product_id}")
@@ -1592,7 +1644,7 @@ def update_product(product_id: int, product: dict, db: DbSession, current_user: 
         setattr(db_product, key, value)
     db.commit()
     db.refresh(db_product)
-    return serialize_model(db_product)
+    return serialize_product_summary(db_product)
 
 
 @app.delete("/api/products/{product_id}")
@@ -1676,7 +1728,7 @@ def update_inventory(inventory_id: int, inventory_data: dict, db: DbSession, cur
 
         db.commit()
         db.refresh(db_inventory)
-        return serialize_model(db_inventory)
+        return serialize_inventory_summary(db_inventory)
     except HTTPException:
         db.rollback()
         raise
@@ -2028,7 +2080,7 @@ def update_order(request: Request, order_id: int, order_data: dict, db: DbSessio
         db.commit()
         db.refresh(db_order)
         logger.info(f'Order {order_id} updated', extra={'order_id': order_id, 'user_id': current_user.id})
-        return serialize_model(db_order)
+        return serialize_order_summary(db_order)
     except HTTPException:
         db.rollback()
         raise
@@ -2092,7 +2144,7 @@ def cancel_order(order_id: int, payload: dict | None, db: DbSession, current_use
 
 
 @app.get("/api/orders/{order_id}/messages")
-def get_order_messages(order_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+def get_order_messages(order_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)], limit: int = 100, offset: int = 0):
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -2103,11 +2155,15 @@ def get_order_messages(order_id: int, db: DbSession, current_user: Annotated[Use
         select(OrderMessage)
         .where(OrderMessage.order_id == order_id)
         .options(selectinload(OrderMessage.sender))
-        .order_by(OrderMessage.created_at.asc())
+        .order_by(OrderMessage.created_at.desc())
+        .offset(max(offset, 0))
+        .limit(min(max(limit, 1), 200))
     ).all()
     return {
         "order_id": order_id,
-        "messages": [serialize_order_message(message) for message in messages],
+        "messages": [serialize_order_message(message) for message in reversed(messages)],
+        "limit": min(max(limit, 1), 200),
+        "offset": max(offset, 0),
     }
 
 
@@ -2181,7 +2237,7 @@ def create_order_message(request: Request, order_id: int, payload: dict, db: DbS
 @app.get("/api/users")
 def get_users(db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
     users = db.scalars(select(User)).all()
-    return serialize_model(users)
+    return [serialize_user_summary(user) for user in users]
 
 
 @app.get("/api/me")
@@ -2236,7 +2292,7 @@ def update_current_user_info(user_data: dict, db: DbSession, current_user: Annot
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
-    return serialize_model(current_user)
+    return serialize_user_summary(current_user)
 
 
 class UserCreateRequest(BaseModel):
@@ -2297,7 +2353,7 @@ def update_user(user_id: int, user_data: dict, db: DbSession, current_user: Anno
         setattr(db_user, key, value)
     db.commit()
     db.refresh(db_user)
-    return db_user
+    return serialize_user_summary(db_user)
 
 
 # Cart
@@ -2457,24 +2513,38 @@ def remove_from_wishlist(product_id: int, db: DbSession, current_user: Annotated
 
 # Notifications
 @app.get("/api/notifications")
-def get_notifications(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    notifications = db.scalars(select(Notification).where(Notification.user_id == current_user.id).order_by(Notification.created_at.desc())).all()
-    return [
-        {
-            "id": n.id,
-            "user_id": n.user_id,
-            "type": n.type.value if hasattr(n.type, 'value') else str(n.type),
-            "title": n.title,
-            "message": n.message,
-            "target_path": resolve_notification_target_path(n, current_user),
-            "target_product_id": n.target_product_id,
-            "target_inventory_id": n.target_inventory_id,
-            "target_order_id": n.target_order_id,
-            "is_read": n.is_read,
-            "created_at": n.created_at.isoformat() if n.created_at else None
-        }
-        for n in notifications
-    ]
+def get_notifications(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)], limit: int = 100, offset: int = 0):
+    safe_limit = min(max(limit, 1), 200)
+    safe_offset = max(offset, 0)
+    notifications = db.scalars(
+        select(Notification)
+        .where(Notification.user_id == current_user.id)
+        .order_by(Notification.created_at.desc())
+        .offset(safe_offset)
+        .limit(safe_limit)
+    ).all()
+    total = db.scalar(select(func.count()).select_from(Notification).where(Notification.user_id == current_user.id)) or 0
+    return {
+        "items": [
+            {
+                "id": n.id,
+                "user_id": n.user_id,
+                "type": n.type.value if hasattr(n.type, 'value') else str(n.type),
+                "title": n.title,
+                "message": n.message,
+                "target_path": resolve_notification_target_path(n, current_user),
+                "target_product_id": n.target_product_id,
+                "target_inventory_id": n.target_inventory_id,
+                "target_order_id": n.target_order_id,
+                "is_read": n.is_read,
+                "created_at": n.created_at.isoformat() if n.created_at else None
+            }
+            for n in notifications
+        ],
+        "total": total,
+        "limit": safe_limit,
+        "offset": safe_offset,
+    }
 
 
 @app.put("/api/notifications/{notification_id}/read")

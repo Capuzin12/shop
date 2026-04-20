@@ -225,7 +225,7 @@ export default function Profile() {
   const loadOrderMessages = async (orderId) => {
     setLoadingMessages((prev) => ({ ...prev, [orderId]: true }));
     try {
-      const response = await api.get(`/api/orders/${orderId}/messages`);
+      const response = await api.get(`/api/orders/${orderId}/messages`, { params: { limit: 100 } });
       setOrderMessages((prev) => ({ ...prev, [orderId]: response.data?.messages || [] }));
     } catch (error) {
       setOrdersInfo(error?.response?.data?.detail?.message || 'Не вдалося завантажити чат замовлення.');

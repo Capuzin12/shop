@@ -35,8 +35,10 @@ export function NotificationsProvider({ children }) {
 
     setLoading(true);
     try {
-      const response = await api.get('/api/notifications');
-      const validNotifications = normalizeNotifications(response.data);
+      const response = await api.get('/api/notifications', { params: { limit: 100 } });
+      const notificationsData = response.data;
+      const source = Array.isArray(notificationsData) ? notificationsData : (notificationsData?.items || []);
+      const validNotifications = normalizeNotifications(source);
       setNotifications(validNotifications);
       return validNotifications;
     } catch (error) {

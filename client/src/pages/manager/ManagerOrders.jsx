@@ -64,7 +64,7 @@ export default function ManagerOrders({ onUpdate }) {
   const loadMessages = async (orderId) => {
     setLoadingMessages((prev) => ({ ...prev, [orderId]: true }));
     try {
-      const response = await api.get(`/api/orders/${orderId}/messages`);
+      const response = await api.get(`/api/orders/${orderId}/messages`, { params: { limit: 100 } });
       setOrderMessages((prev) => ({ ...prev, [orderId]: response.data?.messages || [] }));
     } catch (error) {
       console.error('Error fetching order messages:', error);
