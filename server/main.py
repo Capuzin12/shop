@@ -214,6 +214,87 @@ def serialize_order_summary(order: Order):
     }
 
 
+def _to_iso_or_none(value):
+    if value is None:
+        return None
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+
+def _get_orders_fallback_rows(db: Session, current_user: User):
+    can_manage_all = can_manage_sales(current_user.role)
+    base_sql = """
+        SELECT
+            id,
+            user_id,
+            contact_name,
+            contact_phone,
+            contact_email,
+            delivery_city,
+            delivery_address,
+            status,
+            subtotal,
+            delivery_cost,
+            discount,
+            total,
+            delivery_method,
+            payment_method,
+            payment_status,
+            created_at,
+            updated_at
+        FROM orders
+    """
+    params: dict = {}
+    if can_manage_all:
+        sql = text(base_sql + " ORDER BY created_at DESC")
+    else:
+        sql = text(base_sql + " WHERE user_id = :user_id ORDER BY created_at DESC")
+        params["user_id"] = current_user.id
+
+    rows = db.execute(sql, params).mappings().all()
+    order_ids = [int(row["id"]) for row in rows if row.get("id") is not None]
+    items_by_order: dict[int, list[dict]] = {}
+
+    if order_ids:
+        order_items = db.scalars(
+            select(OrderItem)
+            .where(OrderItem.order_id.in_(order_ids))
+            .order_by(OrderItem.id.asc())
+        ).all()
+        for item in order_items:
+            items_by_order.setdefault(int(item.order_id), []).append({
+                "id": item.id,
+                "product_id": item.product_id,
+                "product_name": item.product_name,
+                "product_sku": item.product_sku,
+                "quantity": item.quantity,
+                "unit_price": item.unit_price,
+            })
+
+    return [
+        {
+            "id": row["id"],
+            "user_id": row.get("user_id"),
+            "contact_name": row.get("contact_name"),
+            "contact_phone": row.get("contact_phone"),
+            "contact_email": row.get("contact_email"),
+            "delivery_city": row.get("delivery_city"),
+            "delivery_address": row.get("delivery_address"),
+            "status": row.get("status"),
+            "subtotal": row.get("subtotal"),
+            "delivery_cost": row.get("delivery_cost"),
+            "discount": row.get("discount"),
+            "total": row.get("total"),
+            "delivery_method": row.get("delivery_method"),
+            "payment_method": row.get("payment_method"),
+            "payment_status": row.get("payment_status"),
+            "created_at": _to_iso_or_none(row.get("created_at")),
+            "updated_at": _to_iso_or_none(row.get("updated_at")),
+            "items": items_by_order.get(int(row["id"]), []),
+        }
+        for row in rows
+    ]
+
+
 def serialize_user_summary(user: User):
     return {
         "id": user.id,
@@ -1740,21 +1821,41 @@ def update_inventory(inventory_id: int, inventory_data: dict, db: DbSession, cur
 # Orders
 @app.get("/api/orders")
 def get_orders(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    query = select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
-    if not can_manage_sales(current_user.role):
-        query = query.where(Order.user_id == current_user.id)
-    orders = db.scalars(query).all()
-    return [serialize_order_summary(order) for order in orders]
+    try:
+        query = select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
+        if not can_manage_sales(current_user.role):
+            query = query.where(Order.user_id == current_user.id)
+        orders = db.scalars(query).all()
+        return [serialize_order_summary(order) for order in orders]
+    except Exception as exc:
+        logger.error(
+            "Falling back to raw order serialization",
+            extra={"error": str(exc), "user_id": current_user.id},
+        )
+        return _get_orders_fallback_rows(db, current_user)
 
 
 @app.get("/api/orders/{order_id}")
 def get_order(order_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    order = db.scalar(select(Order).where(Order.id == order_id).options(selectinload(Order.items)))
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-    if not can_manage_sales(current_user.role) and order.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    return serialize_order_summary(order)
+    try:
+        order = db.scalar(select(Order).where(Order.id == order_id).options(selectinload(Order.items)))
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if not can_manage_sales(current_user.role) and order.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        return serialize_order_summary(order)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Fallback serialization for single order",
+            extra={"error": str(exc), "order_id": order_id, "user_id": current_user.id},
+        )
+        orders = _get_orders_fallback_rows(db, current_user)
+        matched = next((order for order in orders if int(order.get("id", 0)) == int(order_id)), None)
+        if not matched:
+            raise HTTPException(status_code=404, detail="Order not found")
+        return matched
 
 
 @app.post("/api/orders")
