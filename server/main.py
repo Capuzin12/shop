@@ -8,6 +8,7 @@ import unicodedata
 import models  # noqa: F401 — реєстрація ORM-моделей
 from fastapi import Depends, FastAPI, HTTPException, Response, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZIPMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -46,6 +47,9 @@ app = FastAPI(title="BuildShop API")
 app.state.limiter = limiter
 
 _schema_patched = False
+
+
+from fastapi.middleware.gzip import GZIPMiddleware
 
 
 def ensure_runtime_schema(db: Session):
@@ -107,6 +111,10 @@ _cors_mw_kwargs = {
 }
 if settings.cors_origin_regex:
     _cors_mw_kwargs["allow_origin_regex"] = settings.cors_origin_regex
+
+# Add GZIP compression for responses > 1KB (helps with large JSON)
+app.add_middleware(GZIPMiddleware, minimum_size=1024)
+
 app.add_middleware(CORSMiddleware, **_cors_mw_kwargs)
 
 # Add custom middleware in reverse order (last added = first executed)
@@ -785,6 +793,51 @@ def read_root():
         "docs": "/docs",
         "hint": "Після init_db + seed доступні лічильники в /api/stats",
     }
+
+
+@app.post("/api/debug/reset-admin-password")
+def reset_admin_password(payload: dict | None = None, db: DbSession = None):
+    """
+    ⚠️ DEBUG ONLY: Reset admin password to a known test value.
+    Only available in development environment.
+    """
+    if settings.environment not in ('development', 'dev', 'local'):
+        raise HTTPException(
+            status_code=403,
+            detail="This debug endpoint is only available in development"
+        )
+    
+    if db is None:
+        db = SessionLocal()
+    
+    try:
+        test_password = "Admin123!@#"
+        password_hash = get_password_hash(test_password)
+        
+        # Find admin user
+        admin = db.scalar(select(User).where(User.email == "admin@budmart.ua"))
+        if not admin:
+            raise HTTPException(status_code=404, detail="Admin user not found")
+        
+        # Update password and ensure active
+        admin.password_hash = password_hash
+        admin.is_active = True
+        db.add(admin)
+        db.commit()
+        
+        logger.info(f"Admin password reset in debug mode")
+        
+        return {
+            "ok": True,
+            "message": "Admin password reset successfully",
+            "credentials": {
+                "email": "admin@budmart.ua",
+                "password": test_password,
+                "note": "⚠️ This is a debug endpoint. Use strong passwords in production!"
+            }
+        }
+    finally:
+        db.close()
 
 
 @app.get("/api/stats")
@@ -2137,7 +2190,17 @@ def get_users(db: DbSession, current_user: Annotated[User, Depends(get_current_a
 
 @app.get("/api/me")
 def get_current_user_info(current_user: Annotated[User, Depends(get_current_active_user)]):
-    return serialize_model(current_user)
+    """Get current user info (optimized - no related objects)."""
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+        "phone": current_user.phone,
+        "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+    }
 
 
 @app.patch("/api/me")
