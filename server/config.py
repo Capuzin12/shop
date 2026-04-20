@@ -121,8 +121,17 @@ class Settings(BaseSettings):
         return v
     
     def get_cors_origins(self) -> List[str]:
-        """Parse and return CORS origins as list."""
-        return [origin.strip() for origin in self.cors_origins.split(',') if origin.strip()]
+        """Parse and normalize CORS origins from env (trim, drop trailing slash, dedupe)."""
+        normalized: list[str] = []
+        for origin in self.cors_origins.split(','):
+            value = origin.strip()
+            if not value:
+                continue
+            if value != "*":
+                value = value.rstrip('/')
+            if value and value not in normalized:
+                normalized.append(value)
+        return normalized
     
     def is_production(self) -> bool:
         """Check if running in production."""
