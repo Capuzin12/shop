@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
+from io import BytesIO
 import re
 from typing import Annotated
 import unicodedata
@@ -13,8 +14,9 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select, inspect, delete, case, text, or_, and_
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, selectinload
+from docx import Document
 
 from database import SessionLocal, DATABASE_URL
 from models import Category, Product, User, UserRole, Inventory, Brand, Supplier, SupplyOrder, SupplyOrderItem, PromoCode, DiscountType, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, ProductImage, ProductBadge, Review, OrderStatus, OrderMessage, AuditLog, ClientError
@@ -807,6 +809,187 @@ def serialize_inventory_summary(item: Inventory):
     }
 
 
+def _safe_enum_value(value):
+    if value is None:
+        return "-"
+    return value.value if hasattr(value, "value") else str(value)
+
+
+def _safe_money(value) -> str:
+    try:
+        return f"{float(value or 0):,.2f}".replace(",", " ")
+    except (TypeError, ValueError):
+        return "0.00"
+
+
+def _add_docx_table(document: Document, headers: list[str], rows: list[list[str]]):
+    table = document.add_table(rows=1, cols=len(headers))
+    table.style = "Table Grid"
+    header_cells = table.rows[0].cells
+    for index, title in enumerate(headers):
+        header_cells[index].text = title
+
+    for row in rows:
+        cells = table.add_row().cells
+        for index, value in enumerate(row):
+            cells[index].text = value
+
+
+def _build_admin_report_docx(db: Session) -> bytes:
+    now = datetime.now()
+
+    def scalar_or_default(statement, default=0):
+        try:
+            return db.scalar(statement) or default
+        except OperationalError:
+            return default
+
+    def scalars_or_empty(statement):
+        try:
+            return db.scalars(statement).all()
+        except OperationalError:
+            return []
+
+    def rows_or_empty(statement):
+        try:
+            return db.execute(statement).all()
+        except OperationalError:
+            return []
+
+    categories_count = scalar_or_default(select(func.count()).select_from(Category), 0)
+    products_count = scalar_or_default(select(func.count()).select_from(Product), 0)
+    orders_count = scalar_or_default(select(func.count()).select_from(Order), 0)
+    users_count = scalar_or_default(select(func.count()).select_from(User), 0)
+
+    inventory_items = scalars_or_empty(
+        select(Inventory).options(selectinload(Inventory.product)).order_by(Inventory.quantity.asc())
+    )
+    low_stock_items = [
+        item
+        for item in inventory_items
+        if item.quantity < (item.min_quantity_alert if item.min_quantity_alert is not None else item.min_quantity)
+    ]
+    out_of_stock_items = [item for item in inventory_items if item.quantity <= 0]
+    total_stock_units = sum(max(item.quantity or 0, 0) for item in inventory_items)
+
+    status_rows = rows_or_empty(
+        select(Order.status, func.count(Order.id))
+        .group_by(Order.status)
+    )
+    status_map = {_safe_enum_value(status): count for status, count in status_rows}
+
+    paid_revenue = scalar_or_default(
+        select(func.coalesce(func.sum(Order.total), 0)).where(
+            Order.status.in_([OrderStatus.delivered, OrderStatus.picked_up])
+        )
+    , 0)
+
+    latest_orders = scalars_or_empty(
+        select(Order)
+        .order_by(Order.created_at.desc())
+        .limit(12)
+    )
+
+    expensive_products = scalars_or_empty(
+        select(Product)
+        .order_by(Product.price.desc())
+        .limit(10)
+    )
+
+    doc = Document()
+    doc.add_heading("BuildShop - Адміністративний звіт", level=0)
+    doc.add_paragraph(f"Дата формування: {now.strftime('%d.%m.%Y %H:%M')}")
+    doc.add_paragraph("Звіт містить ключові показники, статуси замовлень, дорогі товари та ризики по складу.")
+
+    doc.add_heading("1. Ключові показники", level=1)
+    _add_docx_table(
+        doc,
+        ["Показник", "Значення"],
+        [
+            ["Категорії", str(categories_count)],
+            ["Товари", str(products_count)],
+            ["Замовлення", str(orders_count)],
+            ["Користувачі", str(users_count)],
+            ["Одиниць товару на складі", str(total_stock_units)],
+            ["Низький запас", str(len(low_stock_items))],
+            ["Немає в наявності", str(len(out_of_stock_items))],
+            ["Виторг (доставлено/забрано), грн", _safe_money(paid_revenue)],
+        ],
+    )
+
+    doc.add_heading("2. Статуси замовлень", level=1)
+    if status_map:
+        _add_docx_table(
+            doc,
+            ["Статус", "Кількість"],
+            [[get_order_status_ua(status), str(count)] for status, count in sorted(status_map.items())],
+        )
+    else:
+        doc.add_paragraph("Немає даних по замовленнях.")
+
+    doc.add_heading("3. Останні замовлення", level=1)
+    if latest_orders:
+        _add_docx_table(
+            doc,
+            ["№", "Дата", "Клієнт", "Статус", "Сума, грн"],
+            [
+                [
+                    f"#{order.id}",
+                    order.created_at.strftime("%d.%m.%Y %H:%M") if order.created_at else "-",
+                    order.contact_name or f"user #{order.user_id}",
+                    get_order_status_ua(_safe_enum_value(order.status)),
+                    _safe_money(order.total),
+                ]
+                for order in latest_orders
+            ],
+        )
+    else:
+        doc.add_paragraph("Останні замовлення відсутні.")
+
+    doc.add_heading("4. Найдорожчі товари", level=1)
+    if expensive_products:
+        _add_docx_table(
+            doc,
+            ["Товар", "SKU", "Ціна, грн", "Активний"],
+            [
+                [
+                    product.name,
+                    product.sku or "-",
+                    _safe_money(product.price),
+                    "Так" if product.is_active else "Ні",
+                ]
+                for product in expensive_products
+            ],
+        )
+    else:
+        doc.add_paragraph("Товари не знайдено.")
+
+    doc.add_heading("5. Критичні позиції складу", level=1)
+    if low_stock_items:
+        _add_docx_table(
+            doc,
+            ["Товар", "SKU", "К-сть", "Поріг", "Локація"],
+            [
+                [
+                    item.product.name if item.product else "Невідомо",
+                    item.product.sku if item.product else "-",
+                    str(item.quantity),
+                    str(item.min_quantity_alert if item.min_quantity_alert is not None else item.min_quantity),
+                    item.location or "-",
+                ]
+                for item in low_stock_items[:30]
+            ],
+        )
+        if len(low_stock_items) > 30:
+            doc.add_paragraph(f"Показано перші 30 позицій із {len(low_stock_items)}.")
+    else:
+        doc.add_paragraph("Критичних позицій по складу немає.")
+
+    stream = BytesIO()
+    doc.save(stream)
+    return stream.getvalue()
+
+
 def get_order_status_ua(status_value: str) -> str:
     status_map = {
         "new": "Нове",
@@ -1434,6 +1617,27 @@ def api_stats(db: DbSession):
     products = db.scalar(select(func.count()).select_from(Product)) or 0
     orders = db.scalar(select(func.count()).select_from(Order)) or 0
     return {"categories": categories, "products": products, "orders": orders}
+
+
+@app.get("/api/admin/report")
+def download_admin_report(
+    db: DbSession,
+    current_user: Annotated[User, Depends(get_current_admin_user)],
+    format: str = "docx",
+):
+    _ = current_user
+    requested_format = str(format or "docx").lower()
+    if requested_format != "docx":
+        raise HTTPException(status_code=400, detail={"code": "UNSUPPORTED_REPORT_FORMAT", "message": "Підтримується лише формат docx"})
+
+    report_content = _build_admin_report_docx(db)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"buildshop_admin_report_{timestamp}.docx"
+    return Response(
+        content=report_content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # Categories

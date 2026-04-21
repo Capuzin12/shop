@@ -1,5 +1,5 @@
 import api from '../api';
-import { BadgePercent, Boxes, LayoutGrid, PackageCheck, Shield, TriangleAlert, Users } from 'lucide-react';
+import { BadgePercent, Boxes, FileDown, LayoutGrid, PackageCheck, Shield, TriangleAlert, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { BackofficeShell, Panel, StatCard } from '../components/BackofficeUI';
@@ -46,6 +46,7 @@ const navItems = {
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState({});
+  const [isReportLoading, setIsReportLoading] = useState(false);
   const location = useLocation();
   const currentRole = user?.role || 'customer';
   const availableNavItems = navItems[currentRole] || [];
@@ -95,6 +96,44 @@ export default function AdminDashboard() {
     fetchStats();
   }, []);
 
+  const downloadAdminReport = async () => {
+    try {
+      setIsReportLoading(true);
+      const response = await api.get('/api/admin/report?format=docx', {
+        responseType: 'blob',
+      });
+
+      const disposition = response.headers?.['content-disposition'] || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = match?.[1] || `buildshop_admin_report_${new Date().toISOString().slice(0, 10)}.docx`;
+
+      const blob = new Blob(
+        [response.data],
+        { type: response.headers?.['content-type'] || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
+      );
+
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Error downloading admin report:', error);
+      window.dispatchEvent(new CustomEvent('buildshop:toast', {
+        detail: {
+          title: 'Звіт не завантажено',
+          message: 'Не вдалося сформувати DOCX-звіт. Спробуйте ще раз.',
+          level: 'warning',
+        },
+      }));
+    } finally {
+      setIsReportLoading(false);
+    }
+  };
+
   return (
     <BackofficeShell
       eyebrow="Центр керування"
@@ -102,6 +141,17 @@ export default function AdminDashboard() {
       description={isStaffRole(currentRole)
         ? 'Керуйте каталогом, користувачами, складом і замовленнями з одного центру управління.'
         : 'Доступ до backoffice обмежено вашою роллю.'}
+      actions={currentRole === 'admin' ? (
+        <button
+          type="button"
+          onClick={downloadAdminReport}
+          disabled={isReportLoading}
+          className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300"
+        >
+          <FileDown className="h-4 w-4" />
+          {isReportLoading ? 'Формуємо звіт...' : 'Завантажити DOCX-звіт'}
+        </button>
+      ) : null}
       stats={[
         <StatCard key="categories" icon={LayoutGrid} label="Категорії" value={stats.categories || 0} tone="blue" />,
         <StatCard key="products" icon={Boxes} label="Товари" value={stats.products || 0} tone="amber" />,
