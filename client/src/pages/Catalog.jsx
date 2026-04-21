@@ -418,11 +418,22 @@ export default function Catalog() {
                   const liked = wishlistIds.includes(product.id);
                   const stock = getStockCopy(product);
                   const description = product.description || 'Короткий опис буде додано пізніше.';
+                  const hasCardImage = Boolean(product.image_url);
+                  const cardBackgroundStyle = hasCardImage
+                    ? {
+                        backgroundImage: `linear-gradient(135deg, rgba(15, 23, 42, 0.6), rgba(15, 23, 42, 0.4)), url(${product.image_url})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }
+                    : undefined;
                   return (
                     <div key={product.id} className="group rounded-[2rem] border border-white/50 bg-white/80 p-5 shadow-lg shadow-amber-100/30 transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none">
-                      <div className="mb-5 rounded-[1.5rem] bg-[linear-gradient(135deg,#fff1de,_#fff9f3)] p-6 dark:bg-[linear-gradient(135deg,#251d18,_#18181f)]">
+                      <div
+                        className={`mb-5 rounded-[1.5rem] p-6 ${hasCardImage ? '' : 'bg-[linear-gradient(135deg,#fff1de,_#fff9f3)] dark:bg-[linear-gradient(135deg,#251d18,_#18181f)]'}`}
+                        style={cardBackgroundStyle}
+                      >
                         <div className="flex items-center justify-between">
-                          <span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:bg-white/10 dark:text-slate-300">
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${hasCardImage ? 'bg-black/45 text-white' : 'bg-white/80 text-slate-500 dark:bg-white/10 dark:text-slate-300'}`}>
                             {product.sku}
                           </span>
                           <button
@@ -430,7 +441,9 @@ export default function Catalog() {
                             className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl transition ${
                               liked
                                 ? 'bg-rose-100 text-rose-500 dark:bg-rose-500/15 dark:text-rose-300'
-                                : 'bg-white/70 text-slate-400 hover:text-rose-500 dark:bg-white/10 dark:text-slate-400 dark:hover:text-rose-300'
+                                : hasCardImage
+                                  ? 'bg-black/30 text-white hover:text-rose-300'
+                                  : 'bg-white/70 text-slate-400 hover:text-rose-500 dark:bg-white/10 dark:text-slate-400 dark:hover:text-rose-300'
                             }`}
                             title={liked ? 'Прибрати з обраного' : 'Додати в обране'}
                             type="button"
@@ -440,13 +453,13 @@ export default function Catalog() {
                         </div>
 
                         <div className="mt-10 min-h-[120px]">
-                          <h2 className="text-2xl font-bold text-slate-900 transition group-hover:text-amber-700 dark:text-white dark:group-hover:text-amber-300">
+                          <h2 className={`text-2xl font-bold transition ${hasCardImage ? 'text-white group-hover:text-amber-200' : 'text-slate-900 group-hover:text-amber-700 dark:text-white dark:group-hover:text-amber-300'}`}>
                             {product.name}
                           </h2>
-                          <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                          <p className={`mt-3 text-sm ${hasCardImage ? 'text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
                             Артикул {product.sku} • одиниця {product.unit || 'шт'}
                           </p>
-                          <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                          <p className={`mt-3 line-clamp-3 text-sm leading-6 ${hasCardImage ? 'text-slate-100/95' : 'text-slate-600 dark:text-slate-300'}`}>
                             {description}
                           </p>
                         </div>

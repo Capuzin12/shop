@@ -1837,6 +1837,28 @@ def get_products(
     product_ids = [p.id for p in products]
     inventory_map = {inv.product_id: inv.quantity for inv in db.execute(select(Inventory.product_id, Inventory.quantity).where(Inventory.product_id.in_(product_ids))).all()}
 
+    # Отримуємо головне фото товару одним запитом (is_main -> sort_order -> id)
+    image_rows = db.execute(
+        select(
+            ProductImage.product_id,
+            ProductImage.url,
+            ProductImage.is_main,
+            ProductImage.sort_order,
+            ProductImage.id,
+        )
+        .where(ProductImage.product_id.in_(product_ids))
+        .order_by(
+            ProductImage.product_id.asc(),
+            ProductImage.is_main.desc(),
+            ProductImage.sort_order.asc(),
+            ProductImage.id.asc(),
+        )
+    ).all()
+    image_map: dict[int, str] = {}
+    for row in image_rows:
+        if row.product_id not in image_map and row.url:
+            image_map[row.product_id] = row.url
+
     products_data = [
         {
             "id": p.id,
@@ -1859,6 +1881,8 @@ def get_products(
             "quantity": inventory_map.get(p.id, 0),
             # Додаємо in_stock для зручності (true/false)
             "in_stock": inventory_map.get(p.id, 0) > 0,
+             # Головне фото товару для прев'ю в каталозі
+             "image_url": image_map.get(p.id),
         }
         for p in products
     ]
