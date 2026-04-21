@@ -295,6 +295,66 @@ def _get_orders_fallback_rows(db: Session, current_user: User):
     ]
 
 
+def _get_notifications_fallback_rows(db: Session, current_user: User, limit: int, offset: int):
+    safe_limit = min(max(int(limit or 100), 1), 200)
+    safe_offset = max(int(offset or 0), 0)
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                id,
+                user_id,
+                type,
+                title,
+                message,
+                target_path,
+                target_product_id,
+                target_inventory_id,
+                target_order_id,
+                is_read,
+                created_at
+            FROM notifications
+            WHERE user_id = :user_id
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        {"user_id": current_user.id, "limit": safe_limit, "offset": safe_offset},
+    ).mappings().all()
+    total = db.scalar(
+        text("SELECT COUNT(*) FROM notifications WHERE user_id = :user_id"),
+        {"user_id": current_user.id},
+    ) or 0
+
+    items = []
+    for row in rows:
+        raw_type = str(row.get("type") or "system")
+        items.append(
+            {
+                "id": row.get("id"),
+                "user_id": row.get("user_id"),
+                "type": raw_type,
+                "title": row.get("title"),
+                "message": row.get("message"),
+                "target_path": row.get("target_path")
+                or (
+                    "/manager?tab=orders"
+                    if row.get("target_order_id") and can_manage_sales(current_user.role)
+                    else "/profile"
+                    if row.get("target_order_id")
+                    else "/notifications"
+                ),
+                "target_product_id": row.get("target_product_id"),
+                "target_inventory_id": row.get("target_inventory_id"),
+                "target_order_id": row.get("target_order_id"),
+                "is_read": bool(row.get("is_read")),
+                "created_at": _to_iso_or_none(row.get("created_at")),
+            }
+        )
+
+    return {"items": items, "total": int(total), "limit": safe_limit, "offset": safe_offset}
+
+
 def serialize_user_summary(user: User):
     return {
         "id": user.id,
@@ -2617,35 +2677,42 @@ def remove_from_wishlist(product_id: int, db: DbSession, current_user: Annotated
 def get_notifications(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)], limit: int = 100, offset: int = 0):
     safe_limit = min(max(limit, 1), 200)
     safe_offset = max(offset, 0)
-    notifications = db.scalars(
-        select(Notification)
-        .where(Notification.user_id == current_user.id)
-        .order_by(Notification.created_at.desc())
-        .offset(safe_offset)
-        .limit(safe_limit)
-    ).all()
-    total = db.scalar(select(func.count()).select_from(Notification).where(Notification.user_id == current_user.id)) or 0
-    return {
-        "items": [
-            {
-                "id": n.id,
-                "user_id": n.user_id,
-                "type": n.type.value if hasattr(n.type, 'value') else str(n.type),
-                "title": n.title,
-                "message": n.message,
-                "target_path": resolve_notification_target_path(n, current_user),
-                "target_product_id": n.target_product_id,
-                "target_inventory_id": n.target_inventory_id,
-                "target_order_id": n.target_order_id,
-                "is_read": n.is_read,
-                "created_at": n.created_at.isoformat() if n.created_at else None
-            }
-            for n in notifications
-        ],
-        "total": total,
-        "limit": safe_limit,
-        "offset": safe_offset,
-    }
+    try:
+        notifications = db.scalars(
+            select(Notification)
+            .where(Notification.user_id == current_user.id)
+            .order_by(Notification.created_at.desc())
+            .offset(safe_offset)
+            .limit(safe_limit)
+        ).all()
+        total = db.scalar(select(func.count()).select_from(Notification).where(Notification.user_id == current_user.id)) or 0
+        return {
+            "items": [
+                {
+                    "id": n.id,
+                    "user_id": n.user_id,
+                    "type": n.type.value if hasattr(n.type, 'value') else str(n.type),
+                    "title": n.title,
+                    "message": n.message,
+                    "target_path": resolve_notification_target_path(n, current_user),
+                    "target_product_id": n.target_product_id,
+                    "target_inventory_id": n.target_inventory_id,
+                    "target_order_id": n.target_order_id,
+                    "is_read": n.is_read,
+                    "created_at": n.created_at.isoformat() if n.created_at else None
+                }
+                for n in notifications
+            ],
+            "total": total,
+            "limit": safe_limit,
+            "offset": safe_offset,
+        }
+    except Exception as exc:
+        logger.error(
+            "Fallback serialization for notifications",
+            extra={"error": str(exc), "user_id": current_user.id},
+        )
+        return _get_notifications_fallback_rows(db, current_user, safe_limit, safe_offset)
 
 
 @app.put("/api/notifications/{notification_id}/read")

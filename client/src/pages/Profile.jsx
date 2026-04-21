@@ -72,7 +72,7 @@ export default function Profile() {
   useEffect(() => {
     if (isPublicView) return;
     const fetchOrders = async () => {
-      if (!user || !user.token || fetchedRef.current) {
+      if (!user || fetchedRef.current) {
         return;
       }
       fetchedRef.current = true;
