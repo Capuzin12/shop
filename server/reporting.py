@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from io import BytesIO
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,8 @@ ORDER_STATUS_LABELS = {
 
 
 REPORT_FONT_CANDIDATES = [
+    os.getenv("REPORT_FONT_PATH", "").strip(),
+    str(Path(__file__).resolve().parent / "fonts" / "DejaVuSans.ttf"),
     str(Path("C:/Windows/Fonts/arial.ttf")),
     str(Path("C:/Windows/Fonts/arialuni.ttf")),
     str(Path("C:/Windows/Fonts/segoeui.ttf")),
@@ -192,7 +195,9 @@ def _resolve_pdf_font() -> str:
                 registerFontFamily(font_name, normal=font_name, bold=font_name, italic=font_name, boldItalic=font_name)
             except Exception:
                 pass
+        logger.info("PDF report font selected", extra={"font_name": font_name, "font_path": str(path)})
         return font_name
+    logger.warning("PDF report font fallback to Helvetica; Cyrillic may render incorrectly")
     return "Helvetica"
 
 
