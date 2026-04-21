@@ -27,9 +27,11 @@ Priority order:
 5. Project directory: `server/fonts/DejaVuSans.ttf`
 6. Linux: `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`
 7. Linux: `/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf`
-8. ReportLab bundled font: `reportlab/fonts/Vera.ttf`
+If no Unicode-capable font is found, PDF generation is intentionally rejected (instead of returning broken squares).
 
-If no Unicode font is found, PDF generation is intentionally rejected (instead of returning broken squares).
+Notes:
+- The backend now validates that the selected font contains required Ukrainian glyphs before using it.
+- The Docker image installs `fonts-dejavu-core`, so Linux/container deployments have a deterministic Unicode fallback.
 
 ## Local smoke test
 

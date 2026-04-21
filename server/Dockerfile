@@ -6,8 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Update base packages and install security patches
-RUN apt-get update && apt-get upgrade -y && \
+# Update base packages, install security patches, and add Unicode fonts for PDF reports
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends fonts-dejavu-core && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for running application

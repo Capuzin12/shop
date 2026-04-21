@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-import reportlab
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -50,6 +49,9 @@ REPORT_FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
 ]
+
+# Required glyphs for Ukrainian labels used across the report.
+PDF_REQUIRED_GLYPHS = "АБВГДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯабвгдеєжзиіїйклмнопрстуфхцчшщьюяҐґ"
 
 
 def _safe_money(value) -> str:
@@ -188,24 +190,36 @@ def collect_admin_report_data(db: Session) -> dict[str, Any]:
 
 
 def _resolve_pdf_font() -> str:
-    dynamic_candidates = [
-        str(Path(reportlab.__file__).resolve().parent / "fonts" / "Vera.ttf"),
-    ]
-
-    for candidate in [*REPORT_FONT_CANDIDATES, *dynamic_candidates]:
+    for candidate in REPORT_FONT_CANDIDATES:
         path = Path(candidate)
         if not candidate or not path.exists():
             continue
         font_name = f"BuildShop-{path.stem}"
+        try:
+            font_obj = TTFont(font_name, str(path))
+        except Exception as error:
+            logger.warning("PDF font candidate failed to load", extra={"font_path": str(path), "error": str(error)})
+            continue
+
+        missing_chars = [ch for ch in PDF_REQUIRED_GLYPHS if ord(ch) not in font_obj.face.charToGlyph]
+        if missing_chars:
+            logger.warning(
+                "PDF font candidate skipped due to missing glyphs",
+                extra={"font_path": str(path), "missing_count": len(missing_chars)},
+            )
+            continue
+
         if font_name not in pdfmetrics.getRegisteredFontNames():
-            pdfmetrics.registerFont(TTFont(font_name, str(path)))
+            pdfmetrics.registerFont(font_obj)
             try:
                 registerFontFamily(font_name, normal=font_name, bold=font_name, italic=font_name, boldItalic=font_name)
             except Exception:
                 pass
         logger.info("PDF report font selected", extra={"font_name": font_name, "font_path": str(path)})
         return font_name
-    raise RuntimeError("Unicode PDF font not found. Configure REPORT_FONT_PATH or add server/fonts/DejaVuSans.ttf")
+    raise RuntimeError(
+        "Unicode PDF font not found. Configure REPORT_FONT_PATH or install DejaVu fonts (e.g., apt-get install fonts-dejavu-core)."
+    )
 
 
 def _make_paragraph_style(font_name: str, size: int = 9, bold: bool = False, alignment: int | None = None):
