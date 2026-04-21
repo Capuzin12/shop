@@ -1,10 +1,10 @@
 import api from '../../api';
 import { Plus, RefreshCcw, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
 
-   const DEFAULT_FORM = {
+const DEFAULT_FORM = {
   name: '',
   slug: '',
   sku: '',
@@ -22,6 +22,7 @@ import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../c
   is_active: true,
   is_featured: false,
   images_text: '',
+  attributes_text: '',
 };
 
 const toBool = (value) => value === true || value === 'true';
@@ -30,6 +31,7 @@ export default function AdminProducts() {
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState(DEFAULT_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -47,7 +49,7 @@ export default function AdminProducts() {
 
   const fetchProducts = async () => {
     try {
-      const response = await api.get('/api/products?limit=100');
+      const response = await api.get('/api/products?active_only=false&limit=100');
       const productsData = response.data;
       const validProducts = Array.isArray(productsData) 
         ? productsData.filter(p => p && p.id)
@@ -61,7 +63,7 @@ export default function AdminProducts() {
 
   const fetchCategories = async () => {
     try {
-      const response = await api.get('/api/categories');
+      const response = await api.get('/api/categories?active_only=false');
       setCategories(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -69,14 +71,24 @@ export default function AdminProducts() {
     }
   };
 
-  const loadProductsAndCategories = async ({ showLoading = true } = {}) => {
+  const fetchBrands = async () => {
+    try {
+      const response = await api.get('/api/brands');
+      setBrands(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error fetching brands:', error);
+      setBrands([]);
+    }
+  };
+
+  const loadProductsAndCategories = useCallback(async ({ showLoading = true } = {}) => {
     if (showLoading) setIsLoading(true);
     try {
-      await Promise.all([fetchProducts(), fetchCategories()]);
+      await Promise.all([fetchProducts(), fetchCategories(), fetchBrands()]);
     } finally {
       if (showLoading) setIsLoading(false);
     }
-  };
+  }, []);
 
   const parseImages = (raw) => {
     return String(raw || '')
@@ -89,6 +101,23 @@ export default function AdminProducts() {
         is_main: index === 0,
         sort_order: index,
       }));
+  };
+
+  const parseAttributes = (raw) => {
+    return String(raw || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line, index) => {
+        const [key = '', value = '', unit = '', sortOrder = ''] = line.split('|').map((part) => part.trim());
+        return {
+          key,
+          value,
+          unit: unit || null,
+          sort_order: sortOrder ? Number(sortOrder) : index,
+        };
+      })
+      .filter((item) => item.key && item.value);
   };
 
   const buildPayload = () => {
@@ -110,6 +139,7 @@ export default function AdminProducts() {
       is_active: toBool(formData.is_active),
       is_featured: toBool(formData.is_featured),
       images: parseImages(formData.images_text),
+      attributes: parseAttributes(formData.attributes_text),
     };
   };
 
@@ -119,6 +149,9 @@ export default function AdminProducts() {
       const full = response.data || {};
       const imagesText = Array.isArray(full.images)
         ? full.images.map((img) => img?.url).filter(Boolean).join('\n')
+        : '';
+      const attributesText = Array.isArray(full.attributes)
+        ? full.attributes.map((attr) => [attr?.key || '', attr?.value || '', attr?.unit || '', attr?.sort_order ?? ''].join(' | ')).join('\n')
         : '';
       setEditing(product.id);
       setFormData({
@@ -139,6 +172,7 @@ export default function AdminProducts() {
         is_active: full.is_active !== false,
         is_featured: Boolean(full.is_featured),
         images_text: imagesText,
+        attributes_text: attributesText,
       });
       setFieldErrors({});
       setFormError('');
@@ -151,7 +185,7 @@ export default function AdminProducts() {
   useEffect(() => {
     if (!user) return;
     loadProductsAndCategories();
-  }, [user]);
+  }, [user, loadProductsAndCategories]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -197,7 +231,7 @@ export default function AdminProducts() {
     <div className="space-y-6">
       <Panel
         title="Товари"
-        subtitle="Швидке редагування позицій каталогу"
+        subtitle="Редагуйте назву, слаг, SKU, ціни, бренд, категорію, зображення, атрибути та SEO-поля"
         actions={(
           <button onClick={() => loadProductsAndCategories()} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5" type="button">
             <RefreshCcw className="h-4 w-4" />
@@ -205,73 +239,112 @@ export default function AdminProducts() {
           </button>
         )}
       >
-        <form noValidate onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
-          {formError ? <p className="form-error-banner md:col-span-2">{formError}</p> : null}
-          <div>
-            <input value={formData.name} onChange={(e) => updateField('name', e.target.value)} placeholder="Назва товару *" className={`form-input ${fieldErrors.name ? 'form-input-error' : ''}`} required />
-            {fieldErrors.name ? <p className="form-error-text">{fieldErrors.name}</p> : null}
+        <form noValidate onSubmit={handleSubmit} className="space-y-4">
+          {formError ? <p className="form-error-banner">{formError}</p> : null}
+          
+          {/* Обов'язкові поля в одному рядку */}
+          <div className="grid gap-3 md:grid-cols-4">
+            <div>
+              <input value={formData.name} onChange={(e) => updateField('name', e.target.value)} placeholder="Назва *" className={`form-input text-sm ${fieldErrors.name ? 'form-input-error' : ''}`} required />
+              {fieldErrors.name ? <p className="form-error-text text-xs">{fieldErrors.name}</p> : null}
+            </div>
+            <div>
+              <input value={formData.slug} onChange={(e) => updateField('slug', e.target.value)} placeholder="Слаг *" className={`form-input text-sm ${fieldErrors.slug ? 'form-input-error' : ''}`} required />
+              {fieldErrors.slug ? <p className="form-error-text text-xs">{fieldErrors.slug}</p> : null}
+            </div>
+            <div>
+              <input value={formData.sku} onChange={(e) => updateField('sku', e.target.value)} placeholder="SKU *" className={`form-input text-sm ${fieldErrors.sku ? 'form-input-error' : ''}`} required />
+              {fieldErrors.sku ? <p className="form-error-text text-xs">{fieldErrors.sku}</p> : null}
+            </div>
+            <div>
+              <input value={formData.price} onChange={(e) => updateField('price', e.target.value)} placeholder="Ціна *" type="number" className={`form-input text-sm ${fieldErrors.price ? 'form-input-error' : ''}`} required />
+              {fieldErrors.price ? <p className="form-error-text text-xs">{fieldErrors.price}</p> : null}
+            </div>
           </div>
-          <div>
-            <input value={formData.slug} onChange={(e) => updateField('slug', e.target.value)} placeholder="slug *" className={`form-input ${fieldErrors.slug ? 'form-input-error' : ''}`} required />
-            {fieldErrors.slug ? <p className="form-error-text">{fieldErrors.slug}</p> : null}
+
+          {/* Категорія, бренд, селекти в одному рядку */}
+          <div className="grid gap-3 md:grid-cols-4">
+            <div>
+              {categories.length > 0 ? (
+                <select value={formData.category_id} onChange={(e) => updateField('category_id', e.target.value)} className={`form-input text-sm ${fieldErrors.category_id ? 'form-input-error' : ''}`} required>
+                  <option value="">Категорія *</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input value={formData.category_id} onChange={(e) => updateField('category_id', e.target.value)} placeholder="ID категорії *" type="number" className={`form-input text-sm ${fieldErrors.category_id ? 'form-input-error' : ''}`} required />
+              )}
+              {fieldErrors.category_id ? <p className="form-error-text text-xs">{fieldErrors.category_id}</p> : null}
+            </div>
+            <div>
+              {brands.length > 0 ? (
+                <select value={formData.brand_id} onChange={(e) => updateField('brand_id', e.target.value)} className="form-input text-sm">
+                  <option value="">Без бренду</option>
+                  {brands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>{brand.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input value={formData.brand_id} onChange={(e) => updateField('brand_id', e.target.value)} placeholder="ID бренду" type="number" className="form-input text-sm" />
+              )}
+            </div>
+            <input value={formData.old_price} onChange={(e) => updateField('old_price', e.target.value)} placeholder="Стара ціна" type="number" className="form-input text-sm" />
+            <select value={formData.badge} onChange={(e) => updateField('badge', e.target.value)} className="form-input text-sm">
+              <option value="">Без бейджа</option>
+              <option value="new">Новинка</option>
+              <option value="sale">Знижка</option>
+              <option value="hit">Хіт</option>
+            </select>
           </div>
-          <div>
-            <input value={formData.sku} onChange={(e) => updateField('sku', e.target.value)} placeholder="SKU *" className={`form-input ${fieldErrors.sku ? 'form-input-error' : ''}`} required />
-            {fieldErrors.sku ? <p className="form-error-text">{fieldErrors.sku}</p> : null}
+
+          {/* Додаткові поля в одному рядку */}
+          <div className="grid gap-3 md:grid-cols-4">
+            <input value={formData.unit} onChange={(e) => updateField('unit', e.target.value)} placeholder="Одиниця виміру" className="form-input text-sm" />
+            <input value={formData.icon} onChange={(e) => updateField('icon', e.target.value)} placeholder="Іконка/emoji" className="form-input text-sm" />
+            <input value={formData.weight_kg} onChange={(e) => updateField('weight_kg', e.target.value)} placeholder="Вага (кг)" type="number" className="form-input text-sm" />
+            <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 pt-3">
+              <input type="checkbox" checked={toBool(formData.is_active)} onChange={(e) => updateField('is_active', e.target.checked)} className="rounded" />
+              Активний
+            </label>
           </div>
-          <div>
-            <input value={formData.price} onChange={(e) => updateField('price', e.target.value)} placeholder="Ціна *" type="number" className={`form-input ${fieldErrors.price ? 'form-input-error' : ''}`} required />
-            {fieldErrors.price ? <p className="form-error-text">{fieldErrors.price}</p> : null}
+
+          {/* Опис */}
+          <textarea value={formData.description} onChange={(e) => updateField('description', e.target.value)} placeholder="Опис товару" rows="2" className="form-input text-sm w-full" />
+
+          {/* SEO поля */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <textarea value={formData.meta_title} onChange={(e) => updateField('meta_title', e.target.value)} placeholder="SEO-заголовок" rows="2" className="form-input text-sm" />
+            <textarea value={formData.meta_description} onChange={(e) => updateField('meta_description', e.target.value)} placeholder="SEO-опис" rows="2" className="form-input text-sm" />
           </div>
-          <div>
-            {categories.length > 0 ? (
-              <select value={formData.category_id} onChange={(e) => updateField('category_id', e.target.value)} className={`form-input ${fieldErrors.category_id ? 'form-input-error' : ''}`} required>
-                <option value="">Оберіть категорію *</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>{category.name} (#{category.id})</option>
-                ))}
-              </select>
-            ) : (
-              <input value={formData.category_id} onChange={(e) => updateField('category_id', e.target.value)} placeholder="ID категорії *" type="number" className={`form-input ${fieldErrors.category_id ? 'form-input-error' : ''}`} required />
-            )}
-            {fieldErrors.category_id ? <p className="form-error-text">{fieldErrors.category_id}</p> : null}
+
+          {/* Зображення та атрибути */}
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <textarea value={formData.images_text} onChange={(e) => updateField('images_text', e.target.value)} placeholder="URL зображень: по одному URL в рядок" rows="3" className="form-input text-sm" />
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Перший URL = головне зображення</p>
+            </div>
+            <div>
+              <textarea value={formData.attributes_text} onChange={(e) => updateField('attributes_text', e.target.value)} placeholder="Атрибути: ключ | значення | одиниця | порядок" rows="3" className="form-input text-sm" />
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Приклад: Колір | Сірий | шт | 1</p>
+            </div>
           </div>
-          <input value={formData.brand_id} onChange={(e) => updateField('brand_id', e.target.value)} placeholder="ID бренду (необов'язково)" type="number" className="form-input" />
-          <input value={formData.old_price} onChange={(e) => updateField('old_price', e.target.value)} placeholder="Стара ціна" type="number" className="form-input" />
-          <input value={formData.unit} onChange={(e) => updateField('unit', e.target.value)} placeholder="Одиниця виміру" className="form-input" />
-          <input value={formData.icon} onChange={(e) => updateField('icon', e.target.value)} placeholder="Іконка/emoji" className="form-input" />
-          <select value={formData.badge} onChange={(e) => updateField('badge', e.target.value)} className="form-input">
-            <option value="">Без бейджа</option>
-            <option value="new">new</option>
-            <option value="sale">sale</option>
-            <option value="hit">hit</option>
-          </select>
-          <input value={formData.weight_kg} onChange={(e) => updateField('weight_kg', e.target.value)} placeholder="Вага (кг)" type="number" className="form-input" />
-          <textarea value={formData.description} onChange={(e) => updateField('description', e.target.value)} placeholder="Опис" rows="3" className="form-input" />
-          <textarea value={formData.meta_title} onChange={(e) => updateField('meta_title', e.target.value)} placeholder="Meta title" rows="2" className="form-input" />
-          <textarea value={formData.meta_description} onChange={(e) => updateField('meta_description', e.target.value)} placeholder="Meta description" rows="2" className="form-input" />
-          <div className="md:col-span-2">
-            <textarea value={formData.images_text} onChange={(e) => updateField('images_text', e.target.value)} placeholder="URL картинок: по одному URL в рядок" rows="4" className="form-input" />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Перший URL буде головною картинкою.</p>
-          </div>
-          <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <input type="checkbox" checked={toBool(formData.is_active)} onChange={(e) => updateField('is_active', e.target.checked)} />
-            Активний товар
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <input type="checkbox" checked={toBool(formData.is_featured)} onChange={(e) => updateField('is_featured', e.target.checked)} />
-            Показувати як featured
-          </label>
-          <div className="md:col-span-2 flex flex-wrap gap-3">
-            <button className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white dark:bg-amber-400 dark:text-slate-950" type="submit">
+
+          {/* Кнопки */}
+          <div className="flex flex-wrap gap-2 pt-2">
+            <button className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white dark:bg-amber-400 dark:text-slate-950" type="submit">
               <Plus className="h-4 w-4" />
               {editing ? 'Зберегти зміни' : 'Додати товар'}
             </button>
             {editing ? (
-              <button onClick={() => { setEditing(null); setFormData(DEFAULT_FORM); setFieldErrors({}); setFormError(''); }} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button">
+              <button onClick={() => { setEditing(null); setFormData(DEFAULT_FORM); setFieldErrors({}); setFormError(''); }} className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button">
                 Скасувати
               </button>
             ) : null}
+            <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 pt-1">
+              <input type="checkbox" checked={toBool(formData.is_featured)} onChange={(e) => updateField('is_featured', e.target.checked)} className="rounded" />
+              Рекомендований
+            </label>
           </div>
         </form>
       </Panel>
@@ -282,7 +355,7 @@ export default function AdminProducts() {
         ) : products.length === 0 ? (
           <EmptyState title="Товарів немає" text="Додайте перші позиції в каталог." />
         ) : (
-          <DataTable columns={['Назва', 'SKU', 'Ціна', 'Категорія', 'Статус', 'Дії']}>
+          <DataTable columns={['Назва', 'SKU', 'Ціна', 'Категорія', 'Бренд', 'Статус', 'Дії']}>
             {products.map((product) => (
               <tr key={product.id} className="align-top">
                 <td className="px-4 py-4">
@@ -290,8 +363,9 @@ export default function AdminProducts() {
                 </td>
                 <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">{product.sku || '-'}</td>
                 <td className="px-4 py-4 font-semibold text-amber-600 dark:text-amber-300">{product.price}</td>
-                <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">#{product.category_id}</td>
-                <td className="px-4 py-4">{product.badge ? <StatusBadge tone="blue">{product.badge}</StatusBadge> : <StatusBadge>standard</StatusBadge>}</td>
+                <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">{product.category_name || `#${product.category_id}`}</td>
+                <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">{product.brand_name || '—'}</td>
+                <td className="px-4 py-4">{product.badge ? <StatusBadge tone={product.badge === 'sale' ? 'rose' : product.badge === 'new' ? 'blue' : 'amber'}>{product.badge}</StatusBadge> : <StatusBadge>стандарт</StatusBadge>}</td>
                 <td className="px-4 py-4">
                   <div className="flex flex-wrap gap-3">
                     <button onClick={() => openForEdit(product)} className="text-sm font-semibold text-blue-600 dark:text-blue-300" type="button">

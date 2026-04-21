@@ -12,6 +12,34 @@ const formatPrice = (price) => new Intl.NumberFormat('uk-UA', {
   maximumFractionDigits: 0,
 }).format(price || 0);
 
+const ProductImageDisplay = ({ images, product }) => {
+  const [imageError, setImageError] = useState(false);
+  const hasImages = images && images.length > 0 && !imageError;
+
+  if (!hasImages) {
+    return (
+      <div className="flex h-full min-h-[420px] items-center justify-center rounded-[2rem] bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.25),_transparent_38%),linear-gradient(135deg,#fff3e0,_#fffaf5)] p-8 dark:bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.12),_transparent_28%),linear-gradient(135deg,#211916,_#141820)]">
+        <div className="text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">{product.sku}</p>
+          <div className="mt-6 text-7xl font-black text-slate-900 dark:text-white">
+            {product.icon || '▣'}
+          </div>
+          <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">Карточка матеріалу BuildShop</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={images[0]?.url} 
+      alt={images[0]?.alt_text || product.name} 
+      className="h-full w-full object-cover rounded-[2rem]"
+      onError={() => setImageError(true)}
+    />
+  );
+};
+
 export default function ProductDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -98,22 +126,17 @@ export default function ProductDetail() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr]">
+
         <div className="rounded-[2.5rem] border border-white/50 bg-white/75 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-          <div className="flex h-full min-h-[420px] items-center justify-center rounded-[2rem] bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.25),_transparent_38%),linear-gradient(135deg,#fff3e0,_#fffaf5)] p-8 dark:bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.12),_transparent_28%),linear-gradient(135deg,#211916,_#141820)]">
-            <div className="text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">{product.sku}</p>
-              <div className="mt-6 text-7xl font-black text-slate-900 dark:text-white">
-                {product.icon || '▣'}
-              </div>
-              <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">BuildShop curated material card</p>
-            </div>
+          <div className="flex h-full min-h-[420px] items-center justify-center rounded-[2rem] overflow-hidden">
+            <ProductImageDisplay images={product.images} product={product} />
           </div>
         </div>
 
         <div className="rounded-[2.5rem] border border-white/50 bg-white/75 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Product page</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Сторінка товару</p>
               <h1 className="mt-3 text-4xl font-black text-slate-900 dark:text-white">{product.name}</h1>
             </div>
             <button

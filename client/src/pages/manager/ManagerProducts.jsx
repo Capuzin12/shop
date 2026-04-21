@@ -54,7 +54,7 @@ export default function ManagerProducts() {
       ) : filteredProducts.length === 0 ? (
         <EmptyState title="Товарів не знайдено" text="Спробуйте інший пошуковий запит." />
       ) : (
-        <DataTable columns={['ID', 'Назва', 'SKU', 'Ціна', 'Стара ціна', 'Badge', 'Одиниця']}>
+        <DataTable columns={['ID', 'Назва', 'SKU', 'Ціна', 'Стара ціна', 'Бейдж', 'Одиниця']}>
           {filteredProducts.map((product) => (
             <tr key={product.id}>
               <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">#{product.id}</td>
@@ -62,7 +62,7 @@ export default function ManagerProducts() {
               <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">{product.sku}</td>
               <td className="px-4 py-4 font-semibold text-amber-600 dark:text-amber-300">{product.price}</td>
               <td className="px-4 py-4 text-sm text-slate-400">{product.old_price || '—'}</td>
-              <td className="px-4 py-4">{product.badge ? <StatusBadge tone={product.badge === 'sale' ? 'rose' : product.badge === 'new' ? 'blue' : 'amber'}>{product.badge}</StatusBadge> : <StatusBadge>none</StatusBadge>}</td>
+              <td className="px-4 py-4">{product.badge ? <StatusBadge tone={product.badge === 'sale' ? 'rose' : product.badge === 'new' ? 'blue' : 'amber'}>{product.badge}</StatusBadge> : <StatusBadge>стандарт</StatusBadge>}</td>
               <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">{product.unit || 'шт'}</td>
             </tr>
           ))}

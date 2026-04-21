@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from database import SessionLocal, DATABASE_URL
-from models import Category, Product, User, UserRole, Inventory, Brand, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, ProductImage, ProductBadge, Review, OrderStatus, OrderMessage, AuditLog, ClientError
+from models import Category, Product, User, UserRole, Inventory, Brand, Supplier, SupplyOrder, SupplyOrderItem, PromoCode, DiscountType, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, ProductImage, ProductBadge, Review, OrderStatus, OrderMessage, AuditLog, ClientError
 from logging_config import configure_logging, get_logger, set_request_id, set_user_id, get_request_id, generate_request_id
 from config import settings, validate_settings
 from security import add_request_id_middleware, add_security_headers_middleware, add_timing_middleware, limiter
@@ -369,6 +369,227 @@ def serialize_user_summary(user: User):
     }
 
 
+def serialize_category(category: Category):
+    return {
+        "id": category.id,
+        "parent_id": category.parent_id,
+        "name": category.name,
+        "slug": category.slug,
+        "description": category.description,
+        "icon": category.icon,
+        "image_url": category.image_url,
+        "sort_order": category.sort_order,
+        "is_active": category.is_active,
+        "created_at": category.created_at.isoformat() if category.created_at else None,
+    }
+
+
+def serialize_brand(brand: Brand):
+    return {
+        "id": brand.id,
+        "name": brand.name,
+        "slug": brand.slug,
+        "description": brand.description,
+        "country": brand.country,
+        "logo_url": brand.logo_url,
+        "website_url": brand.website_url,
+        "is_active": brand.is_active,
+        "created_at": brand.created_at.isoformat() if brand.created_at else None,
+    }
+
+
+def serialize_supplier(supplier: Supplier):
+    return {
+        "id": supplier.id,
+        "name": supplier.name,
+        "contact_name": supplier.contact_name,
+        "phone": supplier.phone,
+        "email": supplier.email,
+        "address": supplier.address,
+        "payment_terms": supplier.payment_terms,
+        "notes": supplier.notes,
+        "is_active": supplier.is_active,
+        "created_at": supplier.created_at.isoformat() if supplier.created_at else None,
+    }
+
+
+def serialize_promo_code(promo: PromoCode):
+    return {
+        "id": promo.id,
+        "code": promo.code,
+        "description": promo.description,
+        "discount_type": promo.discount_type.value if hasattr(promo.discount_type, "value") else str(promo.discount_type),
+        "discount_value": promo.discount_value,
+        "min_order_amount": promo.min_order_amount,
+        "max_uses": promo.max_uses,
+        "used_count": promo.used_count,
+        "valid_from": promo.valid_from.isoformat() if promo.valid_from else None,
+        "valid_until": promo.valid_until.isoformat() if promo.valid_until else None,
+        "is_active": promo.is_active,
+        "created_at": promo.created_at.isoformat() if promo.created_at else None,
+    }
+
+
+def _parse_optional_datetime(value):
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_DATETIME_FIELD", "message": "Некоректний формат дати/часу"})
+
+
+def _parse_optional_int_field(value, field_name: str, *, allow_none: bool = True):
+    if value in (None, ""):
+        return None if allow_none else 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_NUMERIC_FIELD", "field": field_name, "message": "Поле має бути числом"})
+
+
+def _parse_optional_float_field(value, field_name: str, *, allow_none: bool = True):
+    if value in (None, ""):
+        return None if allow_none else 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_NUMERIC_FIELD", "field": field_name, "message": "Поле має бути числом"})
+
+
+def _normalize_category_payload(payload: dict, *, require_basic: bool) -> dict:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_CATEGORY_PAYLOAD", "message": "Некоректний формат категорії"})
+
+    normalized: dict = {}
+    field_map = {
+        "parent_id": ("int", True),
+        "name": ("text", False),
+        "slug": ("text", False),
+        "description": ("text", True),
+        "icon": ("text", True),
+        "image_url": ("text", True),
+        "sort_order": ("int", True),
+        "is_active": ("bool", True),
+    }
+    for key, (kind, nullable) in field_map.items():
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if kind == "int":
+            parsed = _parse_optional_int_field(value, key)
+            if parsed is None:
+                normalized[key] = None
+            elif key == "sort_order":
+                normalized[key] = parsed
+            elif parsed <= 0:
+                normalized[key] = None
+            else:
+                normalized[key] = parsed
+        elif kind == "bool":
+            normalized[key] = bool(value)
+        else:
+            cleaned = str(value or "").strip()
+            if key in {"name", "slug"} and cleaned == "":
+                raise HTTPException(status_code=400, detail={"code": "INVALID_CATEGORY_FIELD", "field": key, "message": "Поле не може бути порожнім"})
+            normalized[key] = cleaned if cleaned else None
+
+    if require_basic:
+        for field in ("name", "slug"):
+            if normalized.get(field) in (None, ""):
+                raise HTTPException(status_code=400, detail={"code": "INVALID_CATEGORY_FIELD", "field": field, "message": "Поле обов'язкове"})
+    return normalized
+
+
+def _normalize_brand_payload(payload: dict, *, require_basic: bool) -> dict:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_BRAND_PAYLOAD", "message": "Некоректний формат бренду"})
+
+    normalized: dict = {}
+    for key in ("name", "slug", "description", "country", "logo_url", "website_url", "is_active"):
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if key == "is_active":
+            normalized[key] = bool(value)
+        else:
+            cleaned = str(value or "").strip()
+            if key in {"name", "slug"} and cleaned == "":
+                raise HTTPException(status_code=400, detail={"code": "INVALID_BRAND_FIELD", "field": key, "message": "Поле не може бути порожнім"})
+            normalized[key] = cleaned if cleaned else None
+
+    if require_basic:
+        for field in ("name", "slug"):
+            if normalized.get(field) in (None, ""):
+                raise HTTPException(status_code=400, detail={"code": "INVALID_BRAND_FIELD", "field": field, "message": "Поле обов'язкове"})
+    return normalized
+
+
+def _normalize_supplier_payload(payload: dict, *, require_basic: bool) -> dict:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_SUPPLIER_PAYLOAD", "message": "Некоректний формат постачальника"})
+
+    normalized: dict = {}
+    for key in ("name", "contact_name", "phone", "email", "address", "payment_terms", "notes", "is_active"):
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if key == "is_active":
+            normalized[key] = bool(value)
+        else:
+            cleaned = str(value or "").strip()
+            if key == "name" and cleaned == "":
+                raise HTTPException(status_code=400, detail={"code": "INVALID_SUPPLIER_FIELD", "field": key, "message": "Поле не може бути порожнім"})
+            normalized[key] = cleaned if cleaned else None
+
+    if require_basic and normalized.get("name") in (None, ""):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_SUPPLIER_FIELD", "field": "name", "message": "Поле обов'язкове"})
+    return normalized
+
+
+def _normalize_promo_code_payload(payload: dict, *, require_basic: bool) -> dict:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PROMO_PAYLOAD", "message": "Некоректний формат промокоду"})
+
+    normalized: dict = {}
+    for key in ("code", "description", "discount_type", "discount_value", "min_order_amount", "max_uses", "used_count", "valid_from", "valid_until", "is_active"):
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if key == "is_active":
+            normalized[key] = bool(value)
+        elif key == "discount_type":
+            try:
+                normalized[key] = DiscountType(str(value))
+            except ValueError:
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PROMO_FIELD", "field": key, "message": "Некоректний тип знижки"})
+        elif key in {"discount_value", "min_order_amount"}:
+            parsed = _parse_optional_float_field(value, key, allow_none=False)
+            if key == "discount_value" and parsed < 0:
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PROMO_FIELD", "field": key, "message": "Значення знижки не може бути від'ємним"})
+            if key == "min_order_amount" and parsed < 0:
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PROMO_FIELD", "field": key, "message": "Мінімальна сума не може бути від'ємною"})
+            normalized[key] = parsed
+        elif key in {"max_uses", "used_count"}:
+            parsed = _parse_optional_int_field(value, key)
+            normalized[key] = parsed if parsed is not None else None
+        elif key in {"valid_from", "valid_until"}:
+            normalized[key] = _parse_optional_datetime(value)
+        else:
+            cleaned = str(value or "").strip()
+            if key == "code" and cleaned == "":
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PROMO_FIELD", "field": key, "message": "Поле не може бути порожнім"})
+            normalized[key] = cleaned if cleaned else None
+
+    if require_basic:
+        for field in ("code", "discount_type", "discount_value"):
+            if normalized.get(field) in (None, ""):
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PROMO_FIELD", "field": field, "message": "Поле обов'язкове"})
+    return normalized
+
+
 def serialize_product_summary(product: Product):
     return {
         "id": product.id,
@@ -426,7 +647,54 @@ def serialize_product_detail(product: Product):
     return result
 
 
-def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[dict, list[dict] | None]:
+def _normalize_product_attributes_payload(payload: dict) -> list[dict] | None:
+    if not isinstance(payload, dict):
+        return None
+
+    if "attributes" in payload:
+        attributes_payload = payload.get("attributes")
+        if attributes_payload is None:
+            return None
+        if not isinstance(attributes_payload, list):
+            raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_ATTRIBUTES", "message": "attributes має бути масивом"})
+        parsed_attributes: list[dict] = []
+        for index, raw in enumerate(attributes_payload):
+            if not isinstance(raw, dict):
+                continue
+            key = str(raw.get("key") or "").strip()
+            value = str(raw.get("value") or "").strip()
+            if not key or not value:
+                continue
+            unit = str(raw.get("unit") or "").strip() or None
+            try:
+                sort_order = int(raw.get("sort_order", index))
+            except (TypeError, ValueError):
+                sort_order = index
+            parsed_attributes.append({"key": key, "value": value, "unit": unit, "sort_order": sort_order})
+        return parsed_attributes
+
+    attributes_text = payload.get("attributes_text")
+    if attributes_text in (None, ""):
+        return None
+
+    parsed_attributes = []
+    for index, line in enumerate(str(attributes_text).splitlines()):
+        parts = [part.strip() for part in line.split("|")]
+        if len(parts) < 2:
+            continue
+        key, value = parts[0], parts[1]
+        if not key or not value:
+            continue
+        unit = parts[2] if len(parts) > 2 and parts[2] else None
+        try:
+            sort_order = int(parts[3]) if len(parts) > 3 and parts[3] else index
+        except ValueError:
+            sort_order = index
+        parsed_attributes.append({"key": key, "value": value, "unit": unit, "sort_order": sort_order})
+    return parsed_attributes
+
+
+def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[dict, list[dict] | None, list[dict] | None]:
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_PAYLOAD", "message": "Некоректний формат товару"})
 
@@ -519,7 +787,8 @@ def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[d
         if images and not any(img["is_main"] for img in images):
             images[0]["is_main"] = True
 
-    return normalized, images
+    attributes = _normalize_product_attributes_payload(payload)
+    return normalized, images, attributes
 
 
 def serialize_inventory_summary(item: Inventory):
@@ -1169,55 +1438,228 @@ def api_stats(db: DbSession):
 
 # Categories
 @app.get("/api/categories")
-def get_categories(db: DbSession):
-    categories = db.scalars(select(Category).where(Category.is_active == True)).all()
-    return [
-        {
-            "id": c.id,
-            "name": c.name,
-            "slug": c.slug,
-            "icon": c.icon,
-            "sort_order": c.sort_order,
-        }
-        for c in categories
-    ]
+def get_categories(db: DbSession, active_only: bool = True):
+    query = select(Category)
+    if active_only:
+        query = query.where(Category.is_active == True)
+    categories = db.scalars(query.order_by(Category.sort_order.asc(), Category.name.asc())).all()
+    return [serialize_category(category) for category in categories]
+
+
+@app.get("/api/categories/{category_id}")
+def get_category(category_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    category = db.get(Category, category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail={"code": "CATEGORY_NOT_FOUND", "message": "Категорію не знайдено"})
+    return serialize_category(category)
 
 
 @app.post("/api/categories")
 def create_category(category: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
-    new_category = Category(**category)
+    normalized = _normalize_category_payload(category, require_basic=True)
+    new_category = Category(**normalized)
     db.add(new_category)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "CATEGORY_EXISTS", "message": "Категорія з таким slug вже існує"})
     db.refresh(new_category)
-    return new_category
+    return serialize_category(new_category)
 
 
 @app.put("/api/categories/{category_id}")
 def update_category(category_id: int, category: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
     db_category = db.get(Category, category_id)
     if not db_category:
-        raise HTTPException(status_code=404, detail="Category not found")
-    for key, value in category.items():
+        raise HTTPException(status_code=404, detail={"code": "CATEGORY_NOT_FOUND", "message": "Категорію не знайдено"})
+    normalized = _normalize_category_payload(category, require_basic=False)
+    for key, value in normalized.items():
         setattr(db_category, key, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "CATEGORY_EXISTS", "message": "Категорія з таким slug вже існує"})
     db.refresh(db_category)
-    return db_category
+    return serialize_category(db_category)
 
 
 @app.delete("/api/categories/{category_id}")
 def delete_category(category_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
     db_category = db.get(Category, category_id)
     if not db_category:
-        raise HTTPException(status_code=404, detail="Category not found")
+        raise HTTPException(status_code=404, detail={"code": "CATEGORY_NOT_FOUND", "message": "Категорію не знайдено"})
     db.delete(db_category)
     db.commit()
-    return {"message": "Category deleted"}
+    return {"message": "Категорію видалено"}
+
+
+# Brands
+@app.get("/api/brands")
+def get_brands(db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    brands = db.scalars(select(Brand).order_by(Brand.name.asc())).all()
+    return [serialize_brand(brand) for brand in brands]
+
+
+@app.get("/api/brands/{brand_id}")
+def get_brand(brand_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    brand = db.get(Brand, brand_id)
+    if not brand:
+        raise HTTPException(status_code=404, detail={"code": "BRAND_NOT_FOUND", "message": "Бренд не знайдено"})
+    return serialize_brand(brand)
+
+
+@app.post("/api/brands")
+def create_brand(brand: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    normalized = _normalize_brand_payload(brand, require_basic=True)
+    new_brand = Brand(**normalized)
+    db.add(new_brand)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "BRAND_EXISTS", "message": "Бренд з таким slug вже існує"})
+    db.refresh(new_brand)
+    return serialize_brand(new_brand)
+
+
+@app.put("/api/brands/{brand_id}")
+def update_brand(brand_id: int, brand: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    db_brand = db.get(Brand, brand_id)
+    if not db_brand:
+        raise HTTPException(status_code=404, detail={"code": "BRAND_NOT_FOUND", "message": "Бренд не знайдено"})
+    normalized = _normalize_brand_payload(brand, require_basic=False)
+    for key, value in normalized.items():
+        setattr(db_brand, key, value)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "BRAND_EXISTS", "message": "Бренд з таким slug вже існує"})
+    db.refresh(db_brand)
+    return serialize_brand(db_brand)
+
+
+@app.delete("/api/brands/{brand_id}")
+def delete_brand(brand_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    db_brand = db.get(Brand, brand_id)
+    if not db_brand:
+        raise HTTPException(status_code=404, detail={"code": "BRAND_NOT_FOUND", "message": "Бренд не знайдено"})
+    db.delete(db_brand)
+    db.commit()
+    return {"message": "Бренд видалено"}
+
+
+# Suppliers
+@app.get("/api/suppliers")
+def get_suppliers(db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    suppliers = db.scalars(select(Supplier).order_by(Supplier.name.asc())).all()
+    return [serialize_supplier(supplier) for supplier in suppliers]
+
+
+@app.get("/api/suppliers/{supplier_id}")
+def get_supplier(supplier_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    supplier = db.get(Supplier, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "Постачальника не знайдено"})
+    return serialize_supplier(supplier)
+
+
+@app.post("/api/suppliers")
+def create_supplier(supplier: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    normalized = _normalize_supplier_payload(supplier, require_basic=True)
+    new_supplier = Supplier(**normalized)
+    db.add(new_supplier)
+    db.commit()
+    db.refresh(new_supplier)
+    return serialize_supplier(new_supplier)
+
+
+@app.put("/api/suppliers/{supplier_id}")
+def update_supplier(supplier_id: int, supplier: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    db_supplier = db.get(Supplier, supplier_id)
+    if not db_supplier:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "Постачальника не знайдено"})
+    normalized = _normalize_supplier_payload(supplier, require_basic=False)
+    for key, value in normalized.items():
+        setattr(db_supplier, key, value)
+    db.commit()
+    db.refresh(db_supplier)
+    return serialize_supplier(db_supplier)
+
+
+@app.delete("/api/suppliers/{supplier_id}")
+def delete_supplier(supplier_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    db_supplier = db.get(Supplier, supplier_id)
+    if not db_supplier:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "Постачальника не знайдено"})
+    db.delete(db_supplier)
+    db.commit()
+    return {"message": "Постачальника видалено"}
+
+
+# Promo codes
+@app.get("/api/promo-codes")
+def get_promo_codes(db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    promo_codes = db.scalars(select(PromoCode).order_by(PromoCode.created_at.desc())).all()
+    return [serialize_promo_code(promo) for promo in promo_codes]
+
+
+@app.get("/api/promo-codes/{promo_code_id}")
+def get_promo_code(promo_code_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    promo_code = db.get(PromoCode, promo_code_id)
+    if not promo_code:
+        raise HTTPException(status_code=404, detail={"code": "PROMO_NOT_FOUND", "message": "Промокод не знайдено"})
+    return serialize_promo_code(promo_code)
+
+
+@app.post("/api/promo-codes")
+def create_promo_code(promo_code: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    normalized = _normalize_promo_code_payload(promo_code, require_basic=True)
+    new_promo_code = PromoCode(**normalized)
+    db.add(new_promo_code)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "PROMO_EXISTS", "message": "Промокод з таким кодом вже існує"})
+    db.refresh(new_promo_code)
+    return serialize_promo_code(new_promo_code)
+
+
+@app.put("/api/promo-codes/{promo_code_id}")
+def update_promo_code(promo_code_id: int, promo_code: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    db_promo_code = db.get(PromoCode, promo_code_id)
+    if not db_promo_code:
+        raise HTTPException(status_code=404, detail={"code": "PROMO_NOT_FOUND", "message": "Промокод не знайдено"})
+    normalized = _normalize_promo_code_payload(promo_code, require_basic=False)
+    for key, value in normalized.items():
+        setattr(db_promo_code, key, value)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "PROMO_EXISTS", "message": "Промокод з таким кодом вже існує"})
+    db.refresh(db_promo_code)
+    return serialize_promo_code(db_promo_code)
+
+
+@app.delete("/api/promo-codes/{promo_code_id}")
+def delete_promo_code(promo_code_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+    db_promo_code = db.get(PromoCode, promo_code_id)
+    if not db_promo_code:
+        raise HTTPException(status_code=404, detail={"code": "PROMO_NOT_FOUND", "message": "Промокод не знайдено"})
+    db.delete(db_promo_code)
+    db.commit()
+    return {"message": "Промокод видалено"}
 
 
 # Products
 @app.get("/api/products")
 def get_products(
     db: DbSession,
+    active_only: bool = True,
     category_id: int | None = None,
     search: str | None = None,
     min_price: float | None = None,
@@ -1228,7 +1670,9 @@ def get_products(
     page: int = 1,
     limit: int = 12
  ):
-    query = select(Product).where(Product.is_active == True)
+    query = select(Product)
+    if active_only:
+        query = query.where(Product.is_active == True)
     search_terms = []
     facet_search_conditions = []
     search_mode = "strict"
@@ -1895,13 +2339,16 @@ def get_public_user_profile(user_id: int, db: DbSession):
 
 @app.post("/api/products")
 def create_product(product: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
-    normalized_product, images_data = _normalize_product_payload(product, require_basic=True)
+    normalized_product, images_data, attributes_data = _normalize_product_payload(product, require_basic=True)
     new_product = Product(**normalized_product)
     db.add(new_product)
     db.flush()
     if images_data is not None:
         for image in images_data:
             db.add(ProductImage(product_id=new_product.id, **image))
+    if attributes_data is not None:
+        for attribute in attributes_data:
+            db.add(ProductAttribute(product_id=new_product.id, **attribute))
     db.commit()
     created = db.scalar(
         select(Product)
@@ -1926,7 +2373,7 @@ def update_product(product_id: int, product: dict, db: DbSession, current_user: 
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    normalized_product, images_data = _normalize_product_payload(product, require_basic=False)
+    normalized_product, images_data, attributes_data = _normalize_product_payload(product, require_basic=False)
     for key, value in normalized_product.items():
         setattr(db_product, key, value)
 
@@ -1934,6 +2381,11 @@ def update_product(product_id: int, product: dict, db: DbSession, current_user: 
         db.execute(delete(ProductImage).where(ProductImage.product_id == db_product.id))
         for image in images_data:
             db.add(ProductImage(product_id=db_product.id, **image))
+
+    if attributes_data is not None:
+        db.execute(delete(ProductAttribute).where(ProductAttribute.product_id == db_product.id))
+        for attribute in attributes_data:
+            db.add(ProductAttribute(product_id=db_product.id, **attribute))
 
     db.commit()
     updated = db.scalar(

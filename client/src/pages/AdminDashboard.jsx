@@ -1,12 +1,15 @@
 import api from '../api';
-import { Boxes, LayoutGrid, PackageCheck, Shield, TriangleAlert, Users } from 'lucide-react';
+import { BadgePercent, Boxes, LayoutGrid, PackageCheck, Shield, TriangleAlert, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { BackofficeShell, Panel, StatCard } from '../components/BackofficeUI';
 import AdminCategories from './admin/AdminCategories';
+import AdminBrands from './admin/AdminBrands';
 import AdminInventory from './admin/AdminInventory';
 import AdminOrders from './admin/AdminOrders';
+import AdminPromoCodes from './admin/AdminPromoCodes';
 import AdminProducts from './admin/AdminProducts';
+import AdminSuppliers from './admin/AdminSuppliers';
 import AdminUsers from './admin/AdminUsers';
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleLabel, isStaffRole } from '../utils/roles';
@@ -15,6 +18,9 @@ const navItems = {
   admin: [
     { to: '/admin/products', label: 'Товари', icon: Boxes },
     { to: '/admin/categories', label: 'Категорії', icon: LayoutGrid },
+    { to: '/admin/brands', label: 'Бренди', icon: BadgePercent },
+    { to: '/admin/suppliers', label: 'Постачальники', icon: Shield },
+    { to: '/admin/promo-codes', label: 'Промокоди', icon: PackageCheck },
     { to: '/admin/orders', label: 'Замовлення', icon: PackageCheck },
     { to: '/admin/users', label: 'Користувачі', icon: Users },
     { to: '/admin/inventory', label: 'Склад', icon: Shield },
@@ -203,6 +209,9 @@ export default function AdminDashboard() {
         />
         {availableNavItems.some((item) => item.to === '/admin/products') && <Route path="products" element={<AdminProducts />} />}
         {availableNavItems.some((item) => item.to === '/admin/categories') && <Route path="categories" element={<AdminCategories />} />}
+        {availableNavItems.some((item) => item.to === '/admin/brands') && <Route path="brands" element={<AdminBrands />} />}
+        {availableNavItems.some((item) => item.to === '/admin/suppliers') && <Route path="suppliers" element={<AdminSuppliers />} />}
+        {availableNavItems.some((item) => item.to === '/admin/promo-codes') && <Route path="promo-codes" element={<AdminPromoCodes />} />}
         {availableNavItems.some((item) => item.to === '/admin/orders') && <Route path="orders" element={<AdminOrders />} />}
         {availableNavItems.some((item) => item.to === '/admin/users') && <Route path="users" element={<AdminUsers />} />}
         {availableNavItems.some((item) => item.to === '/admin/inventory') && <Route path="inventory" element={<AdminInventory />} />}
