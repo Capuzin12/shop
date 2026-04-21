@@ -46,7 +46,7 @@ const navItems = {
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState({});
-  const [isReportLoading, setIsReportLoading] = useState(false);
+  const [reportFormatLoading, setReportFormatLoading] = useState(null);
   const location = useLocation();
   const currentRole = user?.role || 'customer';
   const availableNavItems = navItems[currentRole] || [];
@@ -96,20 +96,21 @@ export default function AdminDashboard() {
     fetchStats();
   }, []);
 
-  const downloadAdminReport = async () => {
+  const downloadAdminReport = async (format) => {
     try {
-      setIsReportLoading(true);
-      const response = await api.get('/api/admin/report?format=docx', {
+      setReportFormatLoading(format);
+      const response = await api.get(`/api/admin/report?format=${format}`, {
         responseType: 'blob',
       });
 
       const disposition = response.headers?.['content-disposition'] || '';
       const match = disposition.match(/filename="?([^";]+)"?/i);
-      const filename = match?.[1] || `buildshop_admin_report_${new Date().toISOString().slice(0, 10)}.docx`;
+      const extension = format === 'xlsx' ? 'xlsx' : 'pdf';
+      const filename = match?.[1] || `buildshop_admin_report_${new Date().toISOString().slice(0, 10)}.${extension}`;
 
       const blob = new Blob(
         [response.data],
-        { type: response.headers?.['content-type'] || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
+        { type: response.headers?.['content-type'] || (format === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf') }
       );
 
       const downloadUrl = window.URL.createObjectURL(blob);
@@ -125,12 +126,12 @@ export default function AdminDashboard() {
       window.dispatchEvent(new CustomEvent('buildshop:toast', {
         detail: {
           title: 'Звіт не завантажено',
-          message: 'Не вдалося сформувати DOCX-звіт. Спробуйте ще раз.',
+          message: 'Не вдалося сформувати звіт. Спробуйте ще раз.',
           level: 'warning',
         },
       }));
     } finally {
-      setIsReportLoading(false);
+      setReportFormatLoading(null);
     }
   };
 
@@ -142,15 +143,26 @@ export default function AdminDashboard() {
         ? 'Керуйте каталогом, користувачами, складом і замовленнями з одного центру управління.'
         : 'Доступ до backoffice обмежено вашою роллю.'}
       actions={currentRole === 'admin' ? (
-        <button
-          type="button"
-          onClick={downloadAdminReport}
-          disabled={isReportLoading}
-          className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300"
-        >
-          <FileDown className="h-4 w-4" />
-          {isReportLoading ? 'Формуємо звіт...' : 'Завантажити DOCX-звіт'}
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => downloadAdminReport('pdf')}
+            disabled={Boolean(reportFormatLoading)}
+            className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300"
+          >
+            <FileDown className="h-4 w-4" />
+            {reportFormatLoading === 'pdf' ? 'Готуємо PDF...' : 'Завантажити PDF'}
+          </button>
+          <button
+            type="button"
+            onClick={() => downloadAdminReport('xlsx')}
+            disabled={Boolean(reportFormatLoading)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+          >
+            <FileDown className="h-4 w-4" />
+            {reportFormatLoading === 'xlsx' ? 'Готуємо Excel...' : 'Завантажити Excel'}
+          </button>
+        </>
       ) : null}
       stats={[
         <StatCard key="categories" icon={LayoutGrid} label="Категорії" value={stats.categories || 0} tone="blue" />,

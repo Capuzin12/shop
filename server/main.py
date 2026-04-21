@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
-from io import BytesIO
 import re
 from typing import Annotated
 import unicodedata
@@ -14,9 +13,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select, inspect, delete, case, text, or_, and_
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
-from docx import Document
 
 from database import SessionLocal, DATABASE_URL
 from models import Category, Product, User, UserRole, Inventory, Brand, Supplier, SupplyOrder, SupplyOrderItem, PromoCode, DiscountType, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, ProductImage, ProductBadge, Review, OrderStatus, OrderMessage, AuditLog, ClientError
@@ -24,6 +22,7 @@ from logging_config import configure_logging, get_logger, set_request_id, set_us
 from config import settings, validate_settings
 from security import add_request_id_middleware, add_security_headers_middleware, add_timing_middleware, limiter
 from errors import log_error
+from reporting import build_admin_report_pdf, build_admin_report_xlsx, collect_admin_report_data
 
 # Validate settings on startup
 validate_settings()
@@ -103,7 +102,7 @@ _cors_mw_kwargs = {
     "allow_credentials": True,
     "allow_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly list methods
     "allow_headers": ["Content-Type", "Authorization", "X-Request-ID"],  # Whitelist headers
-    "expose_headers": ["X-Request-ID", "X-Response-Time"],
+    "expose_headers": ["X-Request-ID", "X-Response-Time", "Content-Disposition"],
     "max_age": 3600,  # Preflight cache time (1 hour)
 }
 if settings.cors_origin_regex:
@@ -817,211 +816,16 @@ def _safe_enum_value(value):
     return value.value if hasattr(value, "value") else str(value)
 
 
-def _safe_money(value) -> str:
-    try:
-        return f"{float(value or 0):,.2f}".replace(",", " ")
-    except (TypeError, ValueError):
-        return "0.00"
+def _build_admin_report_data(db: Session):
+    return collect_admin_report_data(db)
 
 
-def _safe_int(value, default: int = 0) -> int:
-    try:
-        if value is None:
-            return default
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+def _build_admin_report_pdf(db: Session) -> bytes:
+    return build_admin_report_pdf(_build_admin_report_data(db))
 
 
-def _add_docx_table(document: Document, headers: list[str], rows: list[list[str]]):
-    table = document.add_table(rows=1, cols=len(headers))
-    table.style = "Table Grid"
-    header_cells = table.rows[0].cells
-    for index, title in enumerate(headers):
-        header_cells[index].text = title
-
-    for row in rows:
-        cells = table.add_row().cells
-        for index, value in enumerate(row):
-            cells[index].text = value
-
-
-def _build_admin_report_docx(db: Session) -> bytes:
-    now = datetime.now()
-
-    def scalar_or_default(statement, default=0):
-        try:
-            return db.scalar(statement) or default
-        except OperationalError:
-            return default
-
-    def scalars_or_empty(statement):
-        try:
-            return db.scalars(statement).all()
-        except OperationalError:
-            return []
-
-    def rows_or_empty(statement):
-        try:
-            return db.execute(statement).mappings().all()
-        except OperationalError:
-            return []
-
-    categories_count = scalar_or_default(text("SELECT COUNT(*) FROM categories"), 0)
-    products_count = scalar_or_default(text("SELECT COUNT(*) FROM products"), 0)
-    orders_count = scalar_or_default(text("SELECT COUNT(*) FROM orders"), 0)
-    users_count = scalar_or_default(text("SELECT COUNT(*) FROM users"), 0)
-
-    inventory_rows = rows_or_empty(text("""
-        SELECT
-            i.id,
-            i.product_id,
-            COALESCE(i.quantity, 0) AS quantity,
-            COALESCE(i.min_quantity, 0) AS min_quantity,
-            COALESCE(i.min_quantity_alert, i.min_quantity, 0) AS threshold,
-            COALESCE(i.max_quantity, 0) AS max_quantity,
-            COALESCE(i.location, '-') AS location,
-            p.name AS product_name,
-            p.sku AS product_sku
-        FROM inventory i
-        LEFT JOIN products p ON p.id = i.product_id
-        ORDER BY COALESCE(i.quantity, 0) ASC, i.id ASC
-    """))
-
-    low_stock_rows = [row for row in inventory_rows if _safe_int(row["quantity"], 0) < _safe_int(row["threshold"], 0)]
-    out_of_stock_rows = [row for row in inventory_rows if _safe_int(row["quantity"], 0) <= 0]
-    total_stock_units = sum(max(_safe_int(row["quantity"], 0), 0) for row in inventory_rows)
-
-    status_rows = rows_or_empty(text("""
-        SELECT COALESCE(status, 'new') AS status, COUNT(*) AS count
-        FROM orders
-        GROUP BY COALESCE(status, 'new')
-        ORDER BY count DESC
-    """))
-    status_map = {str(row["status"]): _safe_int(row["count"], 0) for row in status_rows}
-
-    paid_revenue = scalar_or_default(text("""
-        SELECT COALESCE(SUM(total), 0)
-        FROM orders
-        WHERE status IN ('delivered', 'picked_up')
-    """), 0)
-
-    latest_orders = rows_or_empty(text("""
-        SELECT
-            id,
-            user_id,
-            contact_name,
-            contact_phone,
-            contact_email,
-            delivery_city,
-            delivery_address,
-            COALESCE(status, 'new') AS status,
-            COALESCE(total, 0) AS total,
-            created_at
-        FROM orders
-        ORDER BY created_at DESC
-        LIMIT 12
-    """))
-
-    expensive_products = rows_or_empty(text("""
-        SELECT id, name, sku, COALESCE(price, 0) AS price, COALESCE(is_active, 0) AS is_active
-        FROM products
-        ORDER BY COALESCE(price, 0) DESC, id DESC
-        LIMIT 10
-    """))
-
-    doc = Document()
-    doc.add_heading("BuildShop - Адміністративний звіт", level=0)
-    doc.add_paragraph(f"Дата формування: {now.strftime('%d.%m.%Y %H:%M')}")
-    doc.add_paragraph("Звіт містить ключові показники, статуси замовлень, дорогі товари та ризики по складу.")
-
-    doc.add_heading("1. Ключові показники", level=1)
-    _add_docx_table(
-        doc,
-        ["Показник", "Значення"],
-        [
-            ["Категорії", str(categories_count)],
-            ["Товари", str(products_count)],
-            ["Замовлення", str(orders_count)],
-            ["Користувачі", str(users_count)],
-            ["Одиниць товару на складі", str(total_stock_units)],
-            ["Низький запас", str(len(low_stock_rows))],
-            ["Немає в наявності", str(len(out_of_stock_rows))],
-            ["Виторг (доставлено/забрано), грн", _safe_money(paid_revenue)],
-        ],
-    )
-
-    doc.add_heading("2. Статуси замовлень", level=1)
-    if status_map:
-        _add_docx_table(
-            doc,
-            ["Статус", "Кількість"],
-            [[get_order_status_ua(status), str(count)] for status, count in sorted(status_map.items())],
-        )
-    else:
-        doc.add_paragraph("Немає даних по замовленнях.")
-
-    doc.add_heading("3. Останні замовлення", level=1)
-    if latest_orders:
-        _add_docx_table(
-            doc,
-            ["№", "Дата", "Клієнт", "Статус", "Сума, грн"],
-            [
-                [
-                    f"#{row['id']}",
-                    str(row["created_at"])[:16].replace("T", " ") if row.get("created_at") else "-",
-                    row.get("contact_name") or f"user #{row.get('user_id')}",
-                    get_order_status_ua(str(row.get("status") or "new")),
-                    _safe_money(row.get("total")),
-                ]
-                for row in latest_orders
-            ],
-        )
-    else:
-        doc.add_paragraph("Останні замовлення відсутні.")
-
-    doc.add_heading("4. Найдорожчі товари", level=1)
-    if expensive_products:
-        _add_docx_table(
-            doc,
-            ["Товар", "SKU", "Ціна, грн", "Активний"],
-            [
-                [
-                    row.get("name") or "-",
-                    row.get("sku") or "-",
-                    _safe_money(row.get("price")),
-                    "Так" if _safe_int(row.get("is_active"), 0) else "Ні",
-                ]
-                for row in expensive_products
-            ],
-        )
-    else:
-        doc.add_paragraph("Товари не знайдено.")
-
-    doc.add_heading("5. Критичні позиції складу", level=1)
-    if low_stock_rows:
-        _add_docx_table(
-            doc,
-            ["Товар", "SKU", "К-сть", "Поріг", "Локація"],
-            [
-                [
-                    row.get("product_name") or "Невідомо",
-                    row.get("product_sku") or "-",
-                    str(_safe_int(row.get("quantity"), 0)),
-                    str(_safe_int(row.get("threshold"), 0)),
-                    row.get("location") or "-",
-                ]
-                for row in low_stock_rows[:30]
-            ],
-        )
-        if len(low_stock_rows) > 30:
-            doc.add_paragraph(f"Показано перші 30 позицій із {len(low_stock_rows)}.")
-    else:
-        doc.add_paragraph("Критичних позицій по складу немає.")
-
-    stream = BytesIO()
-    doc.save(stream)
-    return stream.getvalue()
+def _build_admin_report_xlsx(db: Session) -> bytes:
+    return build_admin_report_xlsx(_build_admin_report_data(db))
 
 
 def get_order_status_ua(status_value: str) -> str:
@@ -1657,23 +1461,32 @@ def api_stats(db: DbSession):
 def download_admin_report(
     db: DbSession,
     current_user: Annotated[User, Depends(get_current_admin_user)],
-    format: str = "docx",
+    format: str = "pdf",
 ):
-    _ = current_user
-    requested_format = str(format or "docx").lower()
-    if requested_format != "docx":
-        raise HTTPException(status_code=400, detail={"code": "UNSUPPORTED_REPORT_FORMAT", "message": "Підтримується лише формат docx"})
     try:
-        report_content = _build_admin_report_docx(db)
+        requested_format = str(format or "pdf").strip().lower()
+        if requested_format == "pdf":
+            report_content = _build_admin_report_pdf(db)
+            media_type = "application/pdf"
+            ext = "pdf"
+        elif requested_format == "xlsx":
+            report_content = _build_admin_report_xlsx(db)
+            media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ext = "xlsx"
+        else:
+            raise HTTPException(status_code=400, detail={"code": "UNSUPPORTED_REPORT_FORMAT", "message": "Підтримуються лише формати pdf та xlsx"})
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        filename = f"buildshop_admin_report_{timestamp}.docx"
+        filename = f"buildshop_admin_report_{timestamp}.{ext}"
         return Response(
             content=report_content,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            media_type=media_type,
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+    except HTTPException:
+        raise
     except Exception as error:
-        logger.exception("Failed to generate admin report", extra={"user_id": getattr(current_user, "id", None)})
+        logger.exception("Failed to generate admin report", extra={"user_id": getattr(current_user, "id", None), "format": format})
         raise HTTPException(status_code=500, detail={"code": "REPORT_GENERATION_FAILED", "message": "Не вдалося сформувати звіт. Спробуйте пізніше."}) from error
 
 
