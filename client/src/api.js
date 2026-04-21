@@ -126,8 +126,9 @@ api.interceptors.response.use(
     if (status && RETRYABLE_STATUSES.has(status)) {
       config.__retryCount = config.__retryCount || 0;
       const retryEnabled = localStorage.getItem('feature:apiRetryFor5xx') !== 'false';
+      const retryDisabledForRequest = config.__disableRetry === true;
 
-      if (retryEnabled && config.__retryCount < MAX_RETRIES) {
+      if (retryEnabled && !retryDisabledForRequest && config.__retryCount < MAX_RETRIES) {
         config.__retryCount += 1;
         const delayMs = 300 * (2 ** (config.__retryCount - 1));
         await wait(delayMs);

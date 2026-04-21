@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from io import BytesIO
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +19,10 @@ from reportlab.pdfbase.pdfmetrics import registerFontFamily
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 ORDER_STATUS_LABELS = {
     "new": "Нове",
@@ -76,14 +79,16 @@ def _format_dt(value: Any) -> str:
 def _scalar_or_default(db: Session, statement, default=0):
     try:
         return db.scalar(statement) or default
-    except OperationalError:
+    except SQLAlchemyError as error:
+        logger.warning("report scalar query failed", extra={"error": str(error)})
         return default
 
 
 def _rows_or_empty(db: Session, statement):
     try:
         return db.execute(statement).mappings().all()
-    except OperationalError:
+    except SQLAlchemyError as error:
+        logger.warning("report rows query failed", extra={"error": str(error)})
         return []
 
 
@@ -151,7 +156,12 @@ def collect_admin_report_data(db: Session) -> dict[str, Any]:
     """))
 
     top_products = _rows_or_empty(db, text("""
-        SELECT id, name, sku, COALESCE(price, 0) AS price, COALESCE(is_active, 0) AS is_active
+        SELECT
+            id,
+            name,
+            sku,
+            COALESCE(price, 0) AS price,
+            CASE WHEN is_active IS TRUE THEN 1 ELSE 0 END AS is_active
         FROM products
         ORDER BY COALESCE(price, 0) DESC, id DESC
         LIMIT 10

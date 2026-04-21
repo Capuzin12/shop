@@ -101,6 +101,7 @@ export default function AdminDashboard() {
       setReportFormatLoading(format);
       const response = await api.get(`/api/admin/report?format=${format}`, {
         responseType: 'blob',
+        __disableRetry: true,
       });
 
       const disposition = response.headers?.['content-disposition'] || '';
