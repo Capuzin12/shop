@@ -2,7 +2,7 @@ import api from '../../api';
 import { RefreshCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-21import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
+import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
 
 export default function ManagerProducts() {
   const { user } = useAuth();
