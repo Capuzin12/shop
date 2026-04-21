@@ -2115,7 +2115,9 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
         if cart:
             db.execute(delete(CartItem).where(CartItem.cart_id == cart.id))
 
-        db.refresh(order)
+        # Keep calculated totals in-memory; refresh before commit would overwrite
+        # them with DB defaults (0) and persist wrong values.
+        db.flush()
 
         # Notify customer about successful order creation
         if order.user_id:

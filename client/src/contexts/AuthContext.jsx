@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useState, useEffect, useRef } from 'react';
-import api from '../api';
+import api, { clearAuthToken, hasStoredAuthToken, setAuthToken } from '../api';
 
 const AuthContext = createContext();
 
@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }) => {
 
   const clearAuth = useCallback(() => {
     localStorage.removeItem('user');
+    clearAuthToken();
     setUser(null);
   }, []);
 
@@ -45,7 +46,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       const savedUser = localStorage.getItem('user');
-      if (savedUser) {
+      if (savedUser || hasStoredAuthToken()) {
         try {
           await refreshUser();
         } catch (error) {
@@ -61,10 +62,15 @@ export const AuthProvider = ({ children }) => {
   }, [clearAuth, refreshUser]);
 
   const login = useCallback(async (email, password) => {
-    await api.post('/token', new URLSearchParams({
+    const tokenResponse = await api.post('/token', new URLSearchParams({
       username: email,
       password,
     }));
+    const accessToken = tokenResponse?.data?.access_token;
+    if (accessToken) {
+      // Keep login functional even when browser blocks third-party cookies.
+      setAuthToken(accessToken, true);
+    }
     const userResponse = await api.get('/api/me');
     return persistUser(userResponse.data);
   }, [persistUser]);
