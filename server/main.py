@@ -108,6 +108,8 @@ _cors_mw_kwargs = {
 }
 if settings.cors_origin_regex:
     _cors_mw_kwargs["allow_origin_regex"] = settings.cors_origin_regex
+else:
+    _cors_mw_kwargs["allow_origin_regex"] = r"^https://.*\.vercel\.app$"
 
 # Add gzip compression for responses > 1KB (helps with large JSON)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
@@ -861,56 +863,72 @@ def _build_admin_report_docx(db: Session) -> bytes:
 
     def rows_or_empty(statement):
         try:
-            return db.execute(statement).all()
+            return db.execute(statement).mappings().all()
         except OperationalError:
             return []
 
-    categories_count = scalar_or_default(select(func.count()).select_from(Category), 0)
-    products_count = scalar_or_default(select(func.count()).select_from(Product), 0)
-    orders_count = scalar_or_default(select(func.count()).select_from(Order), 0)
-    users_count = scalar_or_default(select(func.count()).select_from(User), 0)
+    categories_count = scalar_or_default(text("SELECT COUNT(*) FROM categories"), 0)
+    products_count = scalar_or_default(text("SELECT COUNT(*) FROM products"), 0)
+    orders_count = scalar_or_default(text("SELECT COUNT(*) FROM orders"), 0)
+    users_count = scalar_or_default(text("SELECT COUNT(*) FROM users"), 0)
 
-    inventory_items = scalars_or_empty(
-        select(Inventory).options(selectinload(Inventory.product)).order_by(Inventory.quantity.asc())
-    )
+    inventory_rows = rows_or_empty(text("""
+        SELECT
+            i.id,
+            i.product_id,
+            COALESCE(i.quantity, 0) AS quantity,
+            COALESCE(i.min_quantity, 0) AS min_quantity,
+            COALESCE(i.min_quantity_alert, i.min_quantity, 0) AS threshold,
+            COALESCE(i.max_quantity, 0) AS max_quantity,
+            COALESCE(i.location, '-') AS location,
+            p.name AS product_name,
+            p.sku AS product_sku
+        FROM inventory i
+        LEFT JOIN products p ON p.id = i.product_id
+        ORDER BY COALESCE(i.quantity, 0) ASC, i.id ASC
+    """))
 
-    def threshold(item: Inventory) -> int:
-        return _safe_int(item.min_quantity_alert if item.min_quantity_alert is not None else item.min_quantity, 0)
+    low_stock_rows = [row for row in inventory_rows if _safe_int(row["quantity"], 0) < _safe_int(row["threshold"], 0)]
+    out_of_stock_rows = [row for row in inventory_rows if _safe_int(row["quantity"], 0) <= 0]
+    total_stock_units = sum(max(_safe_int(row["quantity"], 0), 0) for row in inventory_rows)
 
-    def quantity(item: Inventory) -> int:
-        return _safe_int(item.quantity, 0)
+    status_rows = rows_or_empty(text("""
+        SELECT COALESCE(status, 'new') AS status, COUNT(*) AS count
+        FROM orders
+        GROUP BY COALESCE(status, 'new')
+        ORDER BY count DESC
+    """))
+    status_map = {str(row["status"]): _safe_int(row["count"], 0) for row in status_rows}
 
-    low_stock_items = [
-        item
-        for item in inventory_items
-        if quantity(item) < threshold(item)
-    ]
-    out_of_stock_items = [item for item in inventory_items if quantity(item) <= 0]
-    total_stock_units = sum(max(quantity(item), 0) for item in inventory_items)
+    paid_revenue = scalar_or_default(text("""
+        SELECT COALESCE(SUM(total), 0)
+        FROM orders
+        WHERE status IN ('delivered', 'picked_up')
+    """), 0)
 
-    status_rows = rows_or_empty(
-        select(Order.status, func.count(Order.id))
-        .group_by(Order.status)
-    )
-    status_map = {_safe_enum_value(status): count for status, count in status_rows}
+    latest_orders = rows_or_empty(text("""
+        SELECT
+            id,
+            user_id,
+            contact_name,
+            contact_phone,
+            contact_email,
+            delivery_city,
+            delivery_address,
+            COALESCE(status, 'new') AS status,
+            COALESCE(total, 0) AS total,
+            created_at
+        FROM orders
+        ORDER BY created_at DESC
+        LIMIT 12
+    """))
 
-    paid_revenue = scalar_or_default(
-        select(func.coalesce(func.sum(Order.total), 0)).where(
-            Order.status.in_([OrderStatus.delivered, OrderStatus.picked_up])
-        )
-    , 0)
-
-    latest_orders = scalars_or_empty(
-        select(Order)
-        .order_by(Order.created_at.desc())
-        .limit(12)
-    )
-
-    expensive_products = scalars_or_empty(
-        select(Product)
-        .order_by(Product.price.desc())
-        .limit(10)
-    )
+    expensive_products = rows_or_empty(text("""
+        SELECT id, name, sku, COALESCE(price, 0) AS price, COALESCE(is_active, 0) AS is_active
+        FROM products
+        ORDER BY COALESCE(price, 0) DESC, id DESC
+        LIMIT 10
+    """))
 
     doc = Document()
     doc.add_heading("BuildShop - Адміністративний звіт", level=0)
@@ -927,8 +945,8 @@ def _build_admin_report_docx(db: Session) -> bytes:
             ["Замовлення", str(orders_count)],
             ["Користувачі", str(users_count)],
             ["Одиниць товару на складі", str(total_stock_units)],
-            ["Низький запас", str(len(low_stock_items))],
-            ["Немає в наявності", str(len(out_of_stock_items))],
+            ["Низький запас", str(len(low_stock_rows))],
+            ["Немає в наявності", str(len(out_of_stock_rows))],
             ["Виторг (доставлено/забрано), грн", _safe_money(paid_revenue)],
         ],
     )
@@ -950,13 +968,13 @@ def _build_admin_report_docx(db: Session) -> bytes:
             ["№", "Дата", "Клієнт", "Статус", "Сума, грн"],
             [
                 [
-                    f"#{order.id}",
-                    order.created_at.strftime("%d.%m.%Y %H:%M") if order.created_at else "-",
-                    order.contact_name or f"user #{order.user_id}",
-                    get_order_status_ua(_safe_enum_value(order.status)),
-                    _safe_money(order.total),
+                    f"#{row['id']}",
+                    str(row["created_at"])[:16].replace("T", " ") if row.get("created_at") else "-",
+                    row.get("contact_name") or f"user #{row.get('user_id')}",
+                    get_order_status_ua(str(row.get("status") or "new")),
+                    _safe_money(row.get("total")),
                 ]
-                for order in latest_orders
+                for row in latest_orders
             ],
         )
     else:
@@ -969,35 +987,35 @@ def _build_admin_report_docx(db: Session) -> bytes:
             ["Товар", "SKU", "Ціна, грн", "Активний"],
             [
                 [
-                    product.name,
-                    product.sku or "-",
-                    _safe_money(product.price),
-                    "Так" if product.is_active else "Ні",
+                    row.get("name") or "-",
+                    row.get("sku") or "-",
+                    _safe_money(row.get("price")),
+                    "Так" if _safe_int(row.get("is_active"), 0) else "Ні",
                 ]
-                for product in expensive_products
+                for row in expensive_products
             ],
         )
     else:
         doc.add_paragraph("Товари не знайдено.")
 
     doc.add_heading("5. Критичні позиції складу", level=1)
-    if low_stock_items:
+    if low_stock_rows:
         _add_docx_table(
             doc,
             ["Товар", "SKU", "К-сть", "Поріг", "Локація"],
             [
                 [
-                    item.product.name if item.product else "Невідомо",
-                    item.product.sku if item.product else "-",
-                    str(quantity(item)),
-                    str(threshold(item)),
-                    item.location or "-",
+                    row.get("product_name") or "Невідомо",
+                    row.get("product_sku") or "-",
+                    str(_safe_int(row.get("quantity"), 0)),
+                    str(_safe_int(row.get("threshold"), 0)),
+                    row.get("location") or "-",
                 ]
-                for item in low_stock_items[:30]
+                for row in low_stock_rows[:30]
             ],
         )
-        if len(low_stock_items) > 30:
-            doc.add_paragraph(f"Показано перші 30 позицій із {len(low_stock_items)}.")
+        if len(low_stock_rows) > 30:
+            doc.add_paragraph(f"Показано перші 30 позицій із {len(low_stock_rows)}.")
     else:
         doc.add_paragraph("Критичних позицій по складу немає.")
 
