@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import reportlab
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -184,7 +185,11 @@ def collect_admin_report_data(db: Session) -> dict[str, Any]:
 
 
 def _resolve_pdf_font() -> str:
-    for candidate in REPORT_FONT_CANDIDATES:
+    dynamic_candidates = [
+        str(Path(reportlab.__file__).resolve().parent / "fonts" / "Vera.ttf"),
+    ]
+
+    for candidate in [*REPORT_FONT_CANDIDATES, *dynamic_candidates]:
         path = Path(candidate)
         if not candidate or not path.exists():
             continue
@@ -197,8 +202,7 @@ def _resolve_pdf_font() -> str:
                 pass
         logger.info("PDF report font selected", extra={"font_name": font_name, "font_path": str(path)})
         return font_name
-    logger.warning("PDF report font fallback to Helvetica; Cyrillic may render incorrectly")
-    return "Helvetica"
+    raise RuntimeError("Unicode PDF font not found. Configure REPORT_FONT_PATH or add server/fonts/DejaVuSans.ttf")
 
 
 def _make_paragraph_style(font_name: str, size: int = 9, bold: bool = False, alignment: int | None = None):
