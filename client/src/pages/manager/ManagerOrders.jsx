@@ -3,7 +3,7 @@ import { RefreshCcw, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { EmptyState, FilterButton, Panel, StatusBadge } from '../../components/BackofficeUI';
+import { EmptyState, FilterButton, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
 import OrderChatWindow from '../../components/OrderChatWindow';
 
 const ORDER_STATUS_OPTIONS = ['new', 'processing', 'shipped', 'delivered', 'picked_up', 'cancelled', 'refunded'];
@@ -43,8 +43,18 @@ export default function ManagerOrders({ onUpdate }) {
   const [messageDrafts, setMessageDrafts] = useState({});
   const [loadingMessages, setLoadingMessages] = useState({});
   const [sendingMessages, setSendingMessages] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
 
-  const fetchOrders = async () => {
+  const getAllowedNextStatuses = (status) => ORDER_STATUS_FLOW[status] || [];
+
+  const getPrimaryNextStatus = (status) => {
+    const next = getAllowedNextStatuses(status);
+    return next.find((item) => item !== 'cancelled') || next[0] || null;
+  };
+
+  const fetchOrders = async ({ showLoading = true } = {}) => {
+    if (showLoading) setIsLoading(true);
     try {
       const response = await api.get('/api/orders');
       const ordersData = response.data;
@@ -55,6 +65,8 @@ export default function ManagerOrders({ onUpdate }) {
     } catch (error) {
       console.error('Error fetching orders:', error);
       setOrders([]);
+    } finally {
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -107,10 +119,15 @@ export default function ManagerOrders({ onUpdate }) {
   const activeChatOrder = selectedOrder;
 
   const updateOrderStatus = async (orderId, status) => {
-    await api.put(`/api/orders/${orderId}`, { status });
-    window.dispatchEvent(new Event('buildshop:notifications-refresh'));
-    await fetchOrders();
-    onUpdate?.();
+    try {
+      setUpdatingOrderId(orderId);
+      await api.put(`/api/orders/${orderId}`, { status });
+      window.dispatchEvent(new Event('buildshop:notifications-refresh'));
+      await fetchOrders({ showLoading: false });
+      onUpdate?.();
+    } finally {
+      setUpdatingOrderId(null);
+    }
   };
 
   const statusCounts = orders.reduce((acc, order) => {
@@ -141,7 +158,7 @@ export default function ManagerOrders({ onUpdate }) {
       title="Замовлення"
       subtitle="Виконання, статуси та деталі кожного кейсу"
       actions={(
-        <button onClick={fetchOrders} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5" type="button">
+        <button onClick={() => fetchOrders()} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5" type="button">
           <RefreshCcw className="h-4 w-4" />
           Оновити
         </button>
@@ -170,7 +187,9 @@ export default function ManagerOrders({ onUpdate }) {
         </div>
       </div>
 
-      {filteredOrders.length === 0 ? (
+      {isLoading ? (
+        <LoadingState />
+      ) : filteredOrders.length === 0 ? (
         <EmptyState title="Замовлень немає" text="Тут з’являться активні та завершені замовлення." />
       ) : (
         <div className="space-y-4">
@@ -197,7 +216,7 @@ export default function ManagerOrders({ onUpdate }) {
                   <select
                     value={order.status || 'new'}
                     onChange={async (e) => updateOrderStatus(order.id, e.target.value)}
-                    disabled={getAllowedStatuses(order.status || 'new').length <= 1}
+                    disabled={updatingOrderId === order.id || getAllowedStatuses(order.status || 'new').length <= 1}
                     className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm dark:border-white/10 dark:bg-slate-950/60"
                   >
                     {getAllowedStatuses(order.status || 'new')
@@ -213,16 +232,26 @@ export default function ManagerOrders({ onUpdate }) {
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                {order.status === 'new' ? (
-                  <button onClick={() => updateOrderStatus(order.id, 'processing')} className="rounded-2xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white" type="button">
-                    Взяти в обробку
+                {getPrimaryNextStatus(order.status || 'new') ? (
+                  <button
+                    onClick={() => updateOrderStatus(order.id, getPrimaryNextStatus(order.status || 'new'))}
+                    disabled={updatingOrderId === order.id}
+                    className="rounded-2xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                  >
+                    {updatingOrderId === order.id
+                      ? 'Оновлення...'
+                      : `Наступна дія: ${STATUS_LABELS[getPrimaryNextStatus(order.status || 'new')] || getPrimaryNextStatus(order.status || 'new')}`}
                   </button>
                 ) : null}
-                {['processing', 'shipped'].includes(order.status) ? (
-                  <button onClick={() => updateOrderStatus(order.id, 'delivered')} className="rounded-2xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white" type="button">
-                    Позначити виконаним
-                  </button>
-                ) : null}
+                <button
+                  onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                  disabled={updatingOrderId === order.id || !getAllowedNextStatuses(order.status || 'new').includes('cancelled')}
+                  className="rounded-2xl bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  type="button"
+                >
+                  {updatingOrderId === order.id ? 'Оновлення...' : 'Скасувати'}
+                </button>
               </div>
 
               {selectedOrder?.id === order.id ? (

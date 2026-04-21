@@ -2,14 +2,16 @@ import api from '../../api';
 import { RefreshCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { DataTable, EmptyState, Panel, StatusBadge } from '../../components/BackofficeUI';
+21import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
 
 export default function ManagerProducts() {
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const fetchProducts = async () => {
+  const fetchProducts = async ({ showLoading = true } = {}) => {
+    if (showLoading) setIsLoading(true);
     try {
       const response = await api.get('/api/products?limit=100');
       const productsData = response.data;
@@ -20,6 +22,8 @@ export default function ManagerProducts() {
     } catch (error) {
       console.error('Error fetching products:', error);
       setProducts([]);
+    } finally {
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -40,12 +44,14 @@ export default function ManagerProducts() {
     <Panel
       title="Товари"
       subtitle="Швидкий огляд асортименту для менеджера"
-      actions={<button onClick={fetchProducts} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button"><RefreshCcw className="h-4 w-4" />Оновити</button>}
+      actions={<button onClick={() => fetchProducts()} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button"><RefreshCcw className="h-4 w-4" />Оновити</button>}
     >
       <div className="mb-5">
         <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Пошук по назві або SKU" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm md:w-72 dark:border-white/10 dark:bg-slate-950/60" />
       </div>
-      {filteredProducts.length === 0 ? (
+      {isLoading ? (
+        <LoadingState />
+      ) : filteredProducts.length === 0 ? (
         <EmptyState title="Товарів не знайдено" text="Спробуйте інший пошуковий запит." />
       ) : (
         <DataTable columns={['ID', 'Назва', 'SKU', 'Ціна', 'Стара ціна', 'Badge', 'Одиниця']}>

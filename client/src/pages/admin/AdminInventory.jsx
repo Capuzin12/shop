@@ -2,7 +2,7 @@ import api from '../../api';
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { DataTable, EmptyState, Panel, StatusBadge } from '../../components/BackofficeUI';
+import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
 
 export default function AdminInventory() {
   const { user } = useAuth();
@@ -10,6 +10,7 @@ export default function AdminInventory() {
   const [inventory, setInventory] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   const rowRefs = useRef({});
 
   const targetInventoryId = Number(searchParams.get('inventory_id') || 0);
@@ -19,7 +20,8 @@ export default function AdminInventory() {
     || (targetProductId && item.product_id === targetProductId)
   )?.id;
 
-  const fetchInventory = async () => {
+  const fetchInventory = async ({ showLoading = true } = {}) => {
+    if (showLoading) setIsLoading(true);
     try {
       const response = await api.get('/api/inventory');
       const inventoryData = response.data;
@@ -30,6 +32,8 @@ export default function AdminInventory() {
     } catch (error) {
       console.error('Error fetching inventory:', error);
       setInventory([]);
+    } finally {
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -90,7 +94,9 @@ export default function AdminInventory() {
         </div>
       </div>
 
-      {filteredInventory.length === 0 ? (
+      {isLoading ? (
+        <LoadingState />
+      ) : filteredInventory.length === 0 ? (
         <EmptyState title="Немає даних по складу" text="Перевірте seed або додайте товари до каталогу." />
       ) : (
         <DataTable columns={['Товар', 'Кількість', 'Мін / Макс', 'Поріг', 'Місце', 'Статус', 'Дії']}>
@@ -118,7 +124,7 @@ export default function AdminInventory() {
                 <td className="px-4 py-4">
                   {editingId === item.id ? (
                     <div className="flex gap-3">
-                      <button onClick={async () => { const current = inventory.find((entry) => entry.id === item.id); await api.put(`/api/inventory/${item.id}`, { quantity: current.quantity, min_quantity: current.min_quantity, min_quantity_alert: current.min_quantity_alert }); setEditingId(null); fetchInventory(); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
+                      <button onClick={async () => { const current = inventory.find((entry) => entry.id === item.id); await api.put(`/api/inventory/${item.id}`, { quantity: current.quantity, min_quantity: current.min_quantity, min_quantity_alert: current.min_quantity_alert }); setEditingId(null); fetchInventory({ showLoading: false }); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
                       <button onClick={() => setEditingId(null)} className="text-sm font-semibold text-slate-500 dark:text-slate-400" type="button">Скасувати</button>
                     </div>
                   ) : (

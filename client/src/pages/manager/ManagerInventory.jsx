@@ -3,7 +3,7 @@ import { RefreshCcw, Siren } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationsContext';
-import { DataTable, EmptyState, FilterButton, Panel, StatCard, StatusBadge } from '../../components/BackofficeUI';
+import { DataTable, EmptyState, FilterButton, LoadingState, Panel, StatCard, StatusBadge } from '../../components/BackofficeUI';
 
 const FILTER_LABELS = {
   all: 'Усі',
@@ -19,8 +19,10 @@ export default function ManagerInventory({ onUpdate }) {
   const [filter, setFilter] = useState('all');
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const fetchInventory = useCallback(async () => {
+  const fetchInventory = useCallback(async ({ showLoading = true } = {}) => {
+    if (showLoading) setIsLoading(true);
     try {
       const response = await api.get('/api/inventory');
       const inventoryData = response.data;
@@ -31,6 +33,8 @@ export default function ManagerInventory({ onUpdate }) {
     } catch (error) {
       console.error('Error fetching inventory:', error);
       setInventory([]);
+    } finally {
+      if (showLoading) setIsLoading(false);
     }
   }, []);
 
@@ -38,7 +42,7 @@ export default function ManagerInventory({ onUpdate }) {
     try {
       await api.get('/api/notifications/check-low-stock');
       await refreshNotifications();
-      await fetchInventory();
+      await fetchInventory({ showLoading: false });
     } catch (error) {
       console.error('Error checking low stock:', error);
     }
@@ -118,7 +122,9 @@ export default function ManagerInventory({ onUpdate }) {
           </div>
         </div>
 
-        {filteredInventory.length === 0 ? (
+        {isLoading ? (
+          <LoadingState />
+        ) : filteredInventory.length === 0 ? (
           <EmptyState title="Нічого не знайдено" text="Спробуйте інший фільтр або пошуковий запит." />
         ) : (
           <DataTable columns={['Товар', 'Кількість', 'Мін / Макс', 'Поріг', 'Місце', 'Статус', 'Дії']}>
@@ -133,7 +139,7 @@ export default function ManagerInventory({ onUpdate }) {
                 <td className="px-4 py-4">
                   {editingItem?.id === item.id ? (
                     <div className="flex gap-3">
-                      <button onClick={async () => { await api.put(`/api/inventory/${item.id}`, { quantity: editingItem.quantity, min_quantity: item.min_quantity, min_quantity_alert: editingItem.min_quantity_alert }); setEditingItem(null); refreshNotifications(); await fetchInventory(); onUpdate?.(); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
+                      <button onClick={async () => { await api.put(`/api/inventory/${item.id}`, { quantity: editingItem.quantity, min_quantity: item.min_quantity, min_quantity_alert: editingItem.min_quantity_alert }); setEditingItem(null); refreshNotifications(); await fetchInventory({ showLoading: false }); onUpdate?.(); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
                       <button onClick={() => setEditingItem(null)} className="text-sm font-semibold text-slate-500 dark:text-slate-400" type="button">Скасувати</button>
                     </div>
                   ) : (

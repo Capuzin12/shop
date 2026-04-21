@@ -2,7 +2,7 @@ import api from '../../api';
 import { FolderPlus, RefreshCcw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { DataTable, EmptyState, Panel } from '../../components/BackofficeUI';
+import { DataTable, EmptyState, LoadingState, Panel } from '../../components/BackofficeUI';
 
 export default function AdminCategories() {
   const { user } = useAuth();
@@ -11,6 +11,7 @@ export default function AdminCategories() {
   const [formData, setFormData] = useState({ name: '', slug: '', description: '' });
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -21,7 +22,8 @@ export default function AdminCategories() {
     });
   };
 
-  const fetchCategories = async () => {
+  const fetchCategories = async ({ showLoading = true } = {}) => {
+    if (showLoading) setIsLoading(true);
     try {
       const response = await api.get('/api/categories');
       const categoriesData = response.data;
@@ -32,6 +34,8 @@ export default function AdminCategories() {
     } catch (error) {
       console.error('Error fetching categories:', error);
       setCategories([]);
+    } finally {
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -65,7 +69,7 @@ export default function AdminCategories() {
       setEditing(null);
       setFormData({ name: '', slug: '', description: '' });
       setFieldErrors({});
-      fetchCategories();
+      fetchCategories({ showLoading: false });
     } catch (error) {
       const detail = error?.response?.data?.detail;
       setFormError(detail?.message || detail || 'Не вдалося зберегти категорію.');
@@ -77,7 +81,7 @@ export default function AdminCategories() {
       <Panel
         title="Категорії"
         subtitle="Структура каталогу й навігація користувача"
-        actions={<button onClick={fetchCategories} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button"><RefreshCcw className="h-4 w-4" />Оновити</button>}
+        actions={<button onClick={() => fetchCategories()} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button"><RefreshCcw className="h-4 w-4" />Оновити</button>}
       >
         <form noValidate onSubmit={submit} className="space-y-4">
           {formError ? <p className="form-error-banner">{formError}</p> : null}
@@ -98,7 +102,9 @@ export default function AdminCategories() {
       </Panel>
 
       <Panel title="Усі категорії">
-        {categories.length === 0 ? (
+        {isLoading ? (
+          <LoadingState />
+        ) : categories.length === 0 ? (
           <EmptyState title="Категорій ще немає" text="Створіть першу категорію для каталогу." />
         ) : (
           <DataTable columns={['Назва', 'Slug', 'Опис', 'Дії']}>
@@ -110,7 +116,7 @@ export default function AdminCategories() {
                 <td className="px-4 py-4">
                   <div className="flex flex-wrap gap-3">
                     <button onClick={() => { setEditing(category.id); setFormData({ name: category.name, slug: category.slug, description: category.description || '' }); }} className="text-sm font-semibold text-blue-600 dark:text-blue-300" type="button">Редагувати</button>
-                    <button onClick={async () => { if (!confirm('Видалити категорію?')) return; await api.delete(`/api/categories/${category.id}`); fetchCategories(); }} className="inline-flex items-center gap-1 text-sm font-semibold text-rose-600 dark:text-rose-300" type="button"><Trash2 className="h-4 w-4" />Видалити</button>
+                    <button onClick={async () => { if (!confirm('Видалити категорію?')) return; await api.delete(`/api/categories/${category.id}`); fetchCategories({ showLoading: false }); }} className="inline-flex items-center gap-1 text-sm font-semibold text-rose-600 dark:text-rose-300" type="button"><Trash2 className="h-4 w-4" />Видалити</button>
                   </div>
                 </td>
               </tr>

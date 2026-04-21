@@ -2,7 +2,7 @@ import api from '../../api';
 import { RefreshCcw, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { EmptyState, FilterButton, Panel, StatusBadge } from '../../components/BackofficeUI';
+import { EmptyState, FilterButton, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
 
 const ORDER_STATUS_OPTIONS = ['new', 'processing', 'shipped', 'delivered', 'picked_up', 'cancelled', 'refunded'];
 const STATUS_LABELS = {
@@ -32,6 +32,7 @@ export default function AdminOrders() {
   const [searchTerm, setSearchTerm] = useState('');
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
   const [actionMessage, setActionMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   const getAllowedStatuses = (currentStatus) => {
     const normalized = currentStatus || 'new';
@@ -45,7 +46,8 @@ export default function AdminOrders() {
     return fallback;
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = async ({ showLoading = true } = {}) => {
+    if (showLoading) setIsLoading(true);
     try {
       const response = await api.get('/api/orders');
       const ordersData = response.data;
@@ -56,6 +58,8 @@ export default function AdminOrders() {
     } catch (error) {
       console.error('Error fetching orders:', error);
       setOrders([]);
+    } finally {
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -88,7 +92,7 @@ export default function AdminOrders() {
     <Panel
       title="Замовлення"
       subtitle="Оновлюйте статуси та контролюйте виконання"
-      actions={<button onClick={fetchOrders} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button"><RefreshCcw className="h-4 w-4" />Оновити</button>}
+      actions={<button onClick={() => fetchOrders()} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button"><RefreshCcw className="h-4 w-4" />Оновити</button>}
     >
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <label className="relative block w-full lg:max-w-sm">
@@ -118,7 +122,9 @@ export default function AdminOrders() {
         </p>
       ) : null}
 
-      {filteredOrders.length === 0 ? (
+      {isLoading ? (
+        <LoadingState />
+      ) : filteredOrders.length === 0 ? (
         <EmptyState title="Замовлень не знайдено" text="Спробуйте інший фільтр або дочекайтесь нових замовлень." />
       ) : (
         <div className="space-y-4">
@@ -154,7 +160,7 @@ export default function AdminOrders() {
                         setActionMessage('');
                         await api.put(`/api/orders/${order.id}`, { status: nextStatus });
                         window.dispatchEvent(new Event('buildshop:notifications-refresh'));
-                        await fetchOrders();
+                        await fetchOrders({ showLoading: false });
                         setActionMessage(`Статус замовлення #${order.id} оновлено: ${STATUS_LABELS[nextStatus] || nextStatus}.`);
                       } catch (error) {
                         setActionMessage(extractApiMessage(error, `Не вдалося змінити статус замовлення #${order.id}.`));

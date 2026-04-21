@@ -1,14 +1,16 @@
 import api from '../../api';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { DataTable, EmptyState, Panel, StatusBadge } from '../../components/BackofficeUI';
+import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
 import { ROLE_LABELS } from '../../utils/roles';
 
 export default function AdminUsers() {
   const { user, refreshUser } = useAuth();
   const [users, setUsers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async ({ showLoading = true } = {}) => {
+    if (showLoading) setIsLoading(true);
     try {
       const response = await api.get('/api/users');
       const usersData = response.data;
@@ -19,6 +21,8 @@ export default function AdminUsers() {
     } catch (error) {
       console.error('Error fetching users:', error);
       setUsers([]);
+    } finally {
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -35,12 +39,14 @@ export default function AdminUsers() {
     if (itemId === user?.id) {
       await refreshUser?.();
     }
-    await fetchUsers();
+    await fetchUsers({ showLoading: false });
   };
 
   return (
     <Panel title="Користувачі" subtitle="Ролі, активність та контроль доступу">
-      {users.length === 0 ? (
+      {isLoading ? (
+        <LoadingState />
+      ) : users.length === 0 ? (
         <EmptyState title="Користувачів не знайдено" text="Список з’явиться після реєстрацій або seed-даних." />
       ) : (
         <DataTable columns={['Email', 'Ім’я', 'Роль', 'Статус']}>

@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, LoaderCircle } from 'lucide-react';
 
 export function BackofficeShell({ eyebrow, title, description, actions, stats, sidebar, children }) {
   return (
@@ -135,6 +135,18 @@ export function EmptyState({ title, text }) {
     <div className="rounded-[1.5rem] border border-dashed border-amber-200 bg-white/70 p-8 text-center dark:border-amber-500/20 dark:bg-white/5">
       <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
         <AlertTriangle className="h-5 w-5" />
+      </div>
+      <p className="text-lg font-bold text-slate-900 dark:text-white">{title}</p>
+      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{text}</p>
+    </div>
+  );
+}
+
+export function LoadingState({ title = 'Завантаження', text = 'Зачекайте, дані оновлюються...' }) {
+  return (
+    <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-white/70 p-8 text-center dark:border-white/10 dark:bg-white/5">
+      <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200">
+        <LoaderCircle className="h-5 w-5 animate-spin" />
       </div>
       <p className="text-lg font-bold text-slate-900 dark:text-white">{title}</p>
       <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{text}</p>

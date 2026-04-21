@@ -2,7 +2,7 @@ import api from '../../api';
 import { Plus, RefreshCcw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { DataTable, EmptyState, Panel, StatusBadge } from '../../components/BackofficeUI';
+import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
 
    const DEFAULT_FORM = {
   name: '',
@@ -34,6 +34,7 @@ export default function AdminProducts() {
   const [formData, setFormData] = useState(DEFAULT_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -65,6 +66,15 @@ export default function AdminProducts() {
     } catch (error) {
       console.error('Error fetching categories:', error);
       setCategories([]);
+    }
+  };
+
+  const loadProductsAndCategories = async ({ showLoading = true } = {}) => {
+    if (showLoading) setIsLoading(true);
+    try {
+      await Promise.all([fetchProducts(), fetchCategories()]);
+    } finally {
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -140,10 +150,7 @@ export default function AdminProducts() {
 
   useEffect(() => {
     if (!user) return;
-    const loadProducts = async () => {
-      await Promise.all([fetchProducts(), fetchCategories()]);
-    };
-    loadProducts();
+    loadProductsAndCategories();
   }, [user]);
 
   const handleSubmit = async (e) => {
@@ -192,7 +199,7 @@ export default function AdminProducts() {
         title="Товари"
         subtitle="Швидке редагування позицій каталогу"
         actions={(
-          <button onClick={fetchProducts} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5" type="button">
+          <button onClick={() => loadProductsAndCategories()} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5" type="button">
             <RefreshCcw className="h-4 w-4" />
             Оновити
           </button>
@@ -270,7 +277,9 @@ export default function AdminProducts() {
       </Panel>
 
       <Panel title="Список товарів" subtitle={`Усього позицій: ${products.length}`}>
-        {products.length === 0 ? (
+        {isLoading ? (
+          <LoadingState />
+        ) : products.length === 0 ? (
           <EmptyState title="Товарів немає" text="Додайте перші позиції в каталог." />
         ) : (
           <DataTable columns={['Назва', 'SKU', 'Ціна', 'Категорія', 'Статус', 'Дії']}>
