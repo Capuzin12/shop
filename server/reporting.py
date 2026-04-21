@@ -39,10 +39,13 @@ ORDER_STATUS_LABELS = {
 
 REPORT_FONT_CANDIDATES = [
     os.getenv("REPORT_FONT_PATH", "").strip(),
-    str(Path(__file__).resolve().parent / "fonts" / "DejaVuSans.ttf"),
+    # Windows fonts - prioritize Unicode-capable fonts
+    str(Path("C:/Windows/Fonts/segoeui.ttf")),  # Segoe UI has excellent Unicode/Cyrillic support
+    str(Path("C:/Windows/Fonts/arialuni.ttf")),  # Arial Unicode MS if available
     str(Path("C:/Windows/Fonts/arial.ttf")),
-    str(Path("C:/Windows/Fonts/arialuni.ttf")),
-    str(Path("C:/Windows/Fonts/segoeui.ttf")),
+    # Local project fonts
+    str(Path(__file__).resolve().parent / "fonts" / "DejaVuSans.ttf"),
+    # Linux fonts
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
     "/usr/share/fonts/dejavu/DejaVuSans.ttf",
