@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = Field(default='http://localhost:5173', env='CORS_ORIGINS')
     # Опційно: regex для Origin (напр. усі Vercel preview), якщо не хочете перелічувати кожен URL у CORS_ORIGINS
-    cors_origin_regex: Optional[str] = Field(default=None, env='CORS_ORIGIN_REGEX')
+    cors_origin_regex: Optional[str] = Field(default=r'^https://.*\.vercel\.app$', env='CORS_ORIGIN_REGEX')
     
     # API Server
     api_host: str = Field(default='0.0.0.0', env='API_HOST')

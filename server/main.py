@@ -822,6 +822,15 @@ def _safe_money(value) -> str:
         return "0.00"
 
 
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _add_docx_table(document: Document, headers: list[str], rows: list[list[str]]):
     table = document.add_table(rows=1, cols=len(headers))
     table.style = "Table Grid"
@@ -864,13 +873,20 @@ def _build_admin_report_docx(db: Session) -> bytes:
     inventory_items = scalars_or_empty(
         select(Inventory).options(selectinload(Inventory.product)).order_by(Inventory.quantity.asc())
     )
+
+    def threshold(item: Inventory) -> int:
+        return _safe_int(item.min_quantity_alert if item.min_quantity_alert is not None else item.min_quantity, 0)
+
+    def quantity(item: Inventory) -> int:
+        return _safe_int(item.quantity, 0)
+
     low_stock_items = [
         item
         for item in inventory_items
-        if item.quantity < (item.min_quantity_alert if item.min_quantity_alert is not None else item.min_quantity)
+        if quantity(item) < threshold(item)
     ]
-    out_of_stock_items = [item for item in inventory_items if item.quantity <= 0]
-    total_stock_units = sum(max(item.quantity or 0, 0) for item in inventory_items)
+    out_of_stock_items = [item for item in inventory_items if quantity(item) <= 0]
+    total_stock_units = sum(max(quantity(item), 0) for item in inventory_items)
 
     status_rows = rows_or_empty(
         select(Order.status, func.count(Order.id))
@@ -973,8 +989,8 @@ def _build_admin_report_docx(db: Session) -> bytes:
                 [
                     item.product.name if item.product else "Невідомо",
                     item.product.sku if item.product else "-",
-                    str(item.quantity),
-                    str(item.min_quantity_alert if item.min_quantity_alert is not None else item.min_quantity),
+                    str(quantity(item)),
+                    str(threshold(item)),
                     item.location or "-",
                 ]
                 for item in low_stock_items[:30]
@@ -1629,15 +1645,18 @@ def download_admin_report(
     requested_format = str(format or "docx").lower()
     if requested_format != "docx":
         raise HTTPException(status_code=400, detail={"code": "UNSUPPORTED_REPORT_FORMAT", "message": "Підтримується лише формат docx"})
-
-    report_content = _build_admin_report_docx(db)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"buildshop_admin_report_{timestamp}.docx"
-    return Response(
-        content=report_content,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    try:
+        report_content = _build_admin_report_docx(db)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        filename = f"buildshop_admin_report_{timestamp}.docx"
+        return Response(
+            content=report_content,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as error:
+        logger.exception("Failed to generate admin report", extra={"user_id": getattr(current_user, "id", None)})
+        raise HTTPException(status_code=500, detail={"code": "REPORT_GENERATION_FAILED", "message": "Не вдалося сформувати звіт. Спробуйте пізніше."}) from error
 
 
 # Categories
