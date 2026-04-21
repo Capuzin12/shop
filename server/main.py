@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from database import SessionLocal, DATABASE_URL
-from models import Category, Product, User, UserRole, Inventory, Brand, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, Review, OrderStatus, OrderMessage, AuditLog, ClientError
+from models import Category, Product, User, UserRole, Inventory, Brand, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, ProductImage, ProductBadge, Review, OrderStatus, OrderMessage, AuditLog, ClientError
 from logging_config import configure_logging, get_logger, set_request_id, set_user_id, get_request_id, generate_request_id
 from config import settings, validate_settings
 from security import add_request_id_middleware, add_security_headers_middleware, add_timing_middleware, limiter
@@ -392,6 +392,136 @@ def serialize_product_summary(product: Product):
     }
 
 
+def serialize_product_image(image: ProductImage):
+    return {
+        "id": image.id,
+        "url": image.url,
+        "alt_text": image.alt_text,
+        "is_main": image.is_main,
+        "sort_order": image.sort_order,
+    }
+
+
+def serialize_product_detail(product: Product):
+    result = serialize_product_summary(product)
+    result.update({
+        "weight_kg": product.weight_kg,
+        "meta_title": product.meta_title,
+        "meta_description": product.meta_description,
+        "images": [
+            serialize_product_image(image)
+            for image in sorted((product.images or []), key=lambda i: ((i.sort_order or 0), (i.id or 0)))
+        ],
+        "attributes": [
+            {
+                "id": attr.id,
+                "key": attr.key,
+                "value": attr.value,
+                "unit": attr.unit,
+                "sort_order": attr.sort_order,
+            }
+            for attr in sorted((product.attributes or []), key=lambda a: ((a.sort_order or 0), (a.id or 0)))
+        ],
+    })
+    return result
+
+
+def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[dict, list[dict] | None]:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_PAYLOAD", "message": "Некоректний формат товару"})
+
+    normalized: dict = {}
+    editable = {
+        "category_id", "brand_id", "name", "slug", "sku", "description", "price", "old_price", "unit",
+        "weight_kg", "icon", "badge", "is_active", "is_featured", "meta_title", "meta_description",
+    }
+    for key in editable:
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if key == "category_id":
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле має бути числом"})
+            if parsed <= 0:
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле має бути більше за 0"})
+            normalized[key] = parsed
+        elif key == "brand_id":
+            if value in (None, ""):
+                normalized[key] = None
+            else:
+                try:
+                    parsed = int(value)
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле має бути числом"})
+                if parsed <= 0:
+                    raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле має бути більше за 0"})
+                normalized[key] = parsed
+        elif key in {"price", "old_price", "weight_kg"}:
+            if value in (None, ""):
+                if key in {"old_price", "weight_kg"}:
+                    normalized[key] = None
+                continue
+            try:
+                parsed = float(value)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле має бути числом"})
+            if key == "price" and parsed <= 0:
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Ціна має бути більшою за 0"})
+            if key in {"old_price", "weight_kg"} and parsed < 0:
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле не може бути від'ємним"})
+            normalized[key] = parsed
+        elif key in {"is_active", "is_featured"}:
+            normalized[key] = bool(value)
+        elif key == "badge":
+            if value in (None, ""):
+                normalized[key] = None
+            else:
+                try:
+                    normalized[key] = ProductBadge(str(value))
+                except ValueError:
+                    raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Некоректний badge"})
+        else:
+            cleaned = str(value or "").strip()
+            if key in {"name", "slug", "sku"} and cleaned == "":
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле не може бути порожнім"})
+            normalized[key] = cleaned if cleaned else None
+
+    if require_basic:
+        for field in ("name", "slug", "sku", "category_id", "price"):
+            if normalized.get(field) in (None, ""):
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": field, "message": "Поле обов'язкове"})
+
+    images_payload = payload.get("images") if "images" in payload else None
+    images: list[dict] | None = None
+    if images_payload is not None:
+        if not isinstance(images_payload, list):
+            raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_IMAGES", "message": "images має бути масивом"})
+        images = []
+        for index, raw in enumerate(images_payload):
+            if not isinstance(raw, dict):
+                continue
+            url = str(raw.get("url") or "").strip()
+            if not url:
+                continue
+            alt_text = str(raw.get("alt_text") or "").strip() or None
+            try:
+                sort_order = int(raw.get("sort_order", index))
+            except (TypeError, ValueError):
+                sort_order = index
+            images.append({
+                "url": url,
+                "alt_text": alt_text,
+                "is_main": bool(raw.get("is_main", False)),
+                "sort_order": sort_order,
+            })
+        if images and not any(img["is_main"] for img in images):
+            images[0]["is_main"] = True
+
+    return normalized, images
+
+
 def serialize_inventory_summary(item: Inventory):
     product = item.product
     return {
@@ -475,8 +605,8 @@ ORDER_STATUS_FLOW: dict[OrderStatus, set[OrderStatus]] = {
     OrderStatus.new: {OrderStatus.processing, OrderStatus.cancelled},
     OrderStatus.processing: {OrderStatus.shipped, OrderStatus.cancelled},
     OrderStatus.shipped: {OrderStatus.delivered, OrderStatus.picked_up},
-    OrderStatus.delivered: {OrderStatus.refunded},
-    OrderStatus.picked_up: {OrderStatus.refunded},
+    OrderStatus.delivered: {OrderStatus.picked_up, OrderStatus.refunded},
+    OrderStatus.picked_up: {OrderStatus.delivered, OrderStatus.refunded},
     OrderStatus.cancelled: set(),
     OrderStatus.refunded: set(),
 }
@@ -1589,30 +1719,26 @@ def search_suggestions(q: str, db: DbSession):
 
 @app.get("/api/products/{product_id}")
 def get_product(product_id: int, db: DbSession):
-    product = db.get(Product, product_id)
+    product = db.scalar(
+        select(Product)
+        .where(Product.id == product_id)
+        .options(
+            selectinload(Product.images),
+            selectinload(Product.attributes),
+            selectinload(Product.category),
+            selectinload(Product.brand),
+        )
+    )
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     inventory = db.scalar(select(Inventory).where(Inventory.product_id == product.id))
     stock_quantity = inventory.quantity if inventory and inventory.quantity is not None else 0
-    return {
-        "id": product.id,
-        "name": product.name,
-        "slug": product.slug,
-        "price": product.price,
-        "old_price": product.old_price,
-        "unit": product.unit,
-        "icon": product.icon,
-        "badge": product.badge,
-        "is_featured": product.is_featured,
-        "category_id": product.category_id,
-        "category_name": product.category.name if product.category else None,
-        "brand_id": product.brand_id,
-        "brand_name": product.brand.name if product.brand else None,
-        "sku": product.sku,
-        "description": product.description,
+    payload = serialize_product_detail(product)
+    payload.update({
         "quantity": stock_quantity,
         "in_stock": stock_quantity > 0,
-    }
+    })
+    return payload
 
 
 def serialize_review(review: Review):
@@ -1769,23 +1895,58 @@ def get_public_user_profile(user_id: int, db: DbSession):
 
 @app.post("/api/products")
 def create_product(product: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
-    new_product = Product(**product)
+    normalized_product, images_data = _normalize_product_payload(product, require_basic=True)
+    new_product = Product(**normalized_product)
     db.add(new_product)
+    db.flush()
+    if images_data is not None:
+        for image in images_data:
+            db.add(ProductImage(product_id=new_product.id, **image))
     db.commit()
-    db.refresh(new_product)
-    return serialize_product_summary(new_product)
+    created = db.scalar(
+        select(Product)
+        .where(Product.id == new_product.id)
+        .options(
+            selectinload(Product.images),
+            selectinload(Product.attributes),
+            selectinload(Product.category),
+            selectinload(Product.brand),
+        )
+    )
+    return serialize_product_detail(created)
 
 
 @app.put("/api/products/{product_id}")
 def update_product(product_id: int, product: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
-    db_product = db.get(Product, product_id)
+    db_product = db.scalar(
+        select(Product)
+        .where(Product.id == product_id)
+        .options(selectinload(Product.images))
+    )
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
-    for key, value in product.items():
+
+    normalized_product, images_data = _normalize_product_payload(product, require_basic=False)
+    for key, value in normalized_product.items():
         setattr(db_product, key, value)
+
+    if images_data is not None:
+        db.execute(delete(ProductImage).where(ProductImage.product_id == db_product.id))
+        for image in images_data:
+            db.add(ProductImage(product_id=db_product.id, **image))
+
     db.commit()
-    db.refresh(db_product)
-    return serialize_product_summary(db_product)
+    updated = db.scalar(
+        select(Product)
+        .where(Product.id == db_product.id)
+        .options(
+            selectinload(Product.images),
+            selectinload(Product.attributes),
+            selectinload(Product.category),
+            selectinload(Product.brand),
+        )
+    )
+    return serialize_product_detail(updated)
 
 
 @app.delete("/api/products/{product_id}")

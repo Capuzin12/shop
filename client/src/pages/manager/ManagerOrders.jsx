@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { EmptyState, FilterButton, Panel, StatusBadge } from '../../components/BackofficeUI';
 import OrderChatWindow from '../../components/OrderChatWindow';
 
-const ORDER_STATUS_OPTIONS = ['new', 'processing', 'shipped', 'delivered', 'picked_up', 'cancelled'];
+const ORDER_STATUS_OPTIONS = ['new', 'processing', 'shipped', 'delivered', 'picked_up', 'cancelled', 'refunded'];
 const STATUS_LABELS = {
   new: 'Нове',
   processing: 'В обробці',
@@ -14,6 +14,22 @@ const STATUS_LABELS = {
   delivered: 'Доставлено',
   picked_up: 'Забрано',
   cancelled: 'Скасовано',
+  refunded: 'Повернено',
+};
+
+const ORDER_STATUS_FLOW = {
+  new: ['processing', 'cancelled'],
+  processing: ['shipped', 'cancelled'],
+  shipped: ['delivered', 'picked_up'],
+  delivered: ['picked_up', 'refunded'],
+  picked_up: ['delivered', 'refunded'],
+  cancelled: [],
+  refunded: [],
+};
+
+const getAllowedStatuses = (status) => {
+  const next = ORDER_STATUS_FLOW[status] || [];
+  return [status, ...next.filter((item) => item !== status)];
 };
 
 export default function ManagerOrders({ onUpdate }) {
@@ -181,9 +197,12 @@ export default function ManagerOrders({ onUpdate }) {
                   <select
                     value={order.status || 'new'}
                     onChange={async (e) => updateOrderStatus(order.id, e.target.value)}
+                    disabled={getAllowedStatuses(order.status || 'new').length <= 1}
                     className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm dark:border-white/10 dark:bg-slate-950/60"
                   >
-                    {ORDER_STATUS_OPTIONS.map((status) => <option key={status} value={status}>{STATUS_LABELS[status]}</option>)}
+                    {getAllowedStatuses(order.status || 'new')
+                      .filter((status) => ORDER_STATUS_OPTIONS.includes(status))
+                      .map((status) => <option key={status} value={status}>{STATUS_LABELS[status] || status}</option>)}
                   </select>
                 </div>
               </div>
