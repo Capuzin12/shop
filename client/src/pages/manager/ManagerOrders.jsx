@@ -34,7 +34,7 @@ const getAllowedStatuses = (status) => {
 
 export default function ManagerOrders({ onUpdate }) {
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,6 +51,13 @@ export default function ManagerOrders({ onUpdate }) {
   const getPrimaryNextStatus = (status) => {
     const next = getAllowedNextStatuses(status);
     return next.find((item) => item !== 'cancelled') || next[0] || null;
+  };
+
+  const clearOrderQueryParam = () => {
+    if (!searchParams.get('order_id')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('order_id');
+    setSearchParams(next, { replace: true });
   };
 
   const fetchOrders = async ({ showLoading = true } = {}) => {
@@ -86,6 +93,7 @@ export default function ManagerOrders({ onUpdate }) {
     if (selectedOrder?.id !== matched.id) {
       setSelectedOrder(matched);
       loadMessages(matched.id);
+      clearOrderQueryParam();
     }
   }, [orders, searchParams, selectedOrder]);
 
@@ -209,6 +217,7 @@ export default function ManagerOrders({ onUpdate }) {
                   <button onClick={async () => {
                     const next = selectedOrder?.id === order.id ? null : order;
                     setSelectedOrder(next);
+                    if (!next) clearOrderQueryParam();
                     if (next) await loadMessages(order.id);
                   }} className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-white/10 dark:text-slate-200" type="button">
                     {selectedOrder?.id === order.id ? 'Сховати' : 'Деталі'}
@@ -287,7 +296,10 @@ export default function ManagerOrders({ onUpdate }) {
           if (!activeChatOrder) return;
           sendMessage(activeChatOrder.id);
         }}
-        onClose={() => setSelectedOrder(null)}
+        onClose={() => {
+          setSelectedOrder(null);
+          clearOrderQueryParam();
+        }}
         senderLabel="Покупець"
         staffLabel="Менеджер"
         inputPlaceholder="Відповідь покупцю..."

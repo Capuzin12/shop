@@ -9,11 +9,10 @@ export default function Notifications() {
   const { notifications, loading, unreadCount, markRead, markAllRead } = useNotifications();
   const [filter, setFilter] = useState('all');
   const navigate = useNavigate();
+  const isStaff = ['admin', 'manager', 'warehouse_manager', 'sales_processor', 'content_manager'].includes(user?.role);
+  const canManageInventory = ['admin', 'manager', 'warehouse_manager'].includes(user?.role);
 
   const resolveFallbackPath = (notification) => {
-    const isStaff = ['admin', 'manager', 'warehouse_manager', 'sales_processor', 'content_manager'].includes(user?.role);
-    const canManageInventory = ['admin', 'manager', 'warehouse_manager'].includes(user?.role);
-
     if (notification?.target_order_id) {
       return isStaff ? '/manager?tab=orders' : '/profile';
     }
@@ -29,7 +28,16 @@ export default function Notifications() {
     return isStaff ? '/manager' : '/profile';
   };
 
+  const isOrderContextNotification = (notification) => {
+    if (notification?.target_order_id || notification?.type === 'order_status') return true;
+    const basePath = notification?.target_path || resolveFallbackPath(notification);
+    const [pathname, existingQuery = ''] = String(basePath || '').split('?');
+    const params = new URLSearchParams(existingQuery);
+    return pathname === '/manager' && params.get('tab') === 'orders';
+  };
+
   const inferOrderIdFromNotification = (notification) => {
+    if (!isOrderContextNotification(notification)) return 0;
     const explicit = Number(notification?.target_order_id || 0);
     if (explicit > 0) return explicit;
 
@@ -40,17 +48,17 @@ export default function Notifications() {
   };
 
   const getNotificationCta = (notification) => {
+    const isOrderContext = isOrderContextNotification(notification);
     const orderId = inferOrderIdFromNotification(notification);
-    if (orderId) return `Відкрити чат замовлення #${orderId}`;
+    if (isOrderContext && orderId) return isStaff ? `Відкрити чат замовлення #${orderId}` : `Відкрити замовлення #${orderId}`;
+    if (isOrderContext) return isStaff ? 'Відкрити чат замовлення' : 'Відкрити замовлення';
     if (notification?.target_inventory_id || notification?.type === 'low_stock' || notification?.type === 'supply_arrival') return 'Перейти до складу';
     if (notification?.target_product_id) return 'Відкрити картку товару';
-    if (notification?.type === 'order_status') return 'Відкрити замовлення';
     return 'Відкрити деталі';
   };
 
   const getNotificationCtaTone = (notification) => {
-    const orderId = inferOrderIdFromNotification(notification);
-    if (orderId) {
+    if (isOrderContextNotification(notification)) {
       return 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300';
     }
     if (notification?.target_inventory_id || notification?.type === 'low_stock' || notification?.type === 'supply_arrival') {
@@ -72,15 +80,15 @@ export default function Notifications() {
     const basePath = notification.target_path || resolveFallbackPath(notification);
     const [pathname, existingQuery = ''] = basePath.split('?');
     const params = new URLSearchParams(existingQuery);
+    const isOrderContext = isOrderContextNotification(notification);
     const orderId = inferOrderIdFromNotification(notification);
-    const isStaff = ['admin', 'manager', 'warehouse_manager', 'sales_processor', 'content_manager'].includes(user?.role);
 
     if (notification.target_product_id) params.set('product_id', String(notification.target_product_id));
     if (notification.target_inventory_id) params.set('inventory_id', String(notification.target_inventory_id));
-    if (orderId) params.set('order_id', String(orderId));
+    if (isOrderContext && orderId) params.set('order_id', String(orderId));
 
     // Chat/order notifications should always land on the orders workspace for staff users.
-    if (orderId && isStaff && pathname === '/manager' && !params.get('tab')) {
+    if (isOrderContext && isStaff && pathname === '/manager' && !params.get('tab')) {
       params.set('tab', 'orders');
     }
 

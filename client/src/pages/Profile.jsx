@@ -26,7 +26,7 @@ const ORDER_STATUS_LABELS = {
 export default function Profile() {
   const { userId } = useParams();
   const isPublicView = Boolean(userId);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, loading, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
@@ -50,6 +50,13 @@ export default function Profile() {
 
   const normalizePhone = (value) => {
     return normalizePhoneInput(value);
+  };
+
+  const clearOrderQueryParam = () => {
+    if (!searchParams.get('order_id')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('order_id');
+    setSearchParams(next, { replace: true });
   };
 
   useEffect(() => {
@@ -111,6 +118,7 @@ export default function Profile() {
     if (openedOrderId !== matched.id) {
       setOpenedOrderId(matched.id);
       loadOrderMessages(matched.id);
+      clearOrderQueryParam();
     }
   }, [isPublicView, orders, searchParams, openedOrderId]);
 
@@ -419,6 +427,7 @@ export default function Profile() {
                       onClick={async () => {
                         const nextOpened = openedOrderId === order.id ? null : order.id;
                         setOpenedOrderId(nextOpened);
+                        if (!nextOpened) clearOrderQueryParam();
                         if (nextOpened) await loadOrderMessages(order.id);
                       }}
                       className="rounded-2xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-white dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
@@ -478,7 +487,10 @@ export default function Profile() {
           if (!activeChatOrder) return;
           sendOrderMessage(activeChatOrder.id);
         }}
-        onClose={() => setOpenedOrderId(null)}
+        onClose={() => {
+          setOpenedOrderId(null);
+          clearOrderQueryParam();
+        }}
         senderLabel="Ви"
         staffLabel="Менеджер продажів"
         inputPlaceholder="Напишіть питання по доставці або скасуванню..."
