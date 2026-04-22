@@ -46,7 +46,7 @@ export default function Register() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="page-shell-comfy">
       <div className="grid gap-8 lg:grid-cols-[0.9fr,1.1fr]">
         <div className="rounded-[2.5rem] border border-white/50 bg-white/75 p-8 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-300">Новий акаунт</p>

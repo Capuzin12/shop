@@ -14,7 +14,7 @@ export default function Wishlist() {
   const { items, loading, refreshWishlist, removeFromWishlist } = useWishlist();
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="page-shell">
       <div className="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Saved List</p>

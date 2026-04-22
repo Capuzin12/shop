@@ -61,7 +61,7 @@ export default class AppErrorBoundary extends React.Component {
       }
 
       return (
-        <div className="mx-auto max-w-3xl px-4 py-16 text-center">
+        <div className="page-shell-comfy py-16 text-center">
           <div className="rounded-[1.5rem] border border-rose-200 bg-white/90 p-8 shadow dark:border-rose-500/30 dark:bg-slate-900/80">
             <h1 className="text-2xl font-black text-slate-900 dark:text-white">Сталася помилка інтерфейсу</h1>
             <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">

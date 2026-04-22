@@ -26,7 +26,7 @@ const features = [
 
 export default function Home() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="page-shell">
       <section className="relative overflow-hidden rounded-[2.5rem] border border-white/50 bg-white/75 px-6 py-12 shadow-2xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none sm:px-10 lg:px-14">
         <div className="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_center,_rgba(245,158,11,0.18),_transparent_60%)] lg:block dark:bg-[radial-gradient(circle_at_center,_rgba(251,191,36,0.12),_transparent_60%)]" />
         <div className="relative max-w-3xl">

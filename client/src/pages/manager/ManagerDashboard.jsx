@@ -57,7 +57,7 @@ export default function ManagerDashboard() {
 
   if (!user || (!canManageOrders && !canManageInventory && !canManageProducts)) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-10 text-center text-slate-600 dark:text-slate-300">
+      <div className="page-shell-comfy text-center text-slate-600 dark:text-slate-300">
         Ви не маєте доступу до панелі менеджера.
       </div>
     );

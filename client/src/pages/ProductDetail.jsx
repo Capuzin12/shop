@@ -124,7 +124,7 @@ export default function ProductDetail() {
   const liked = isWishlisted(product.id);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="page-shell">
       <div className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr]">
 
         <div className="rounded-[2.5rem] border border-white/50 bg-white/75 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">

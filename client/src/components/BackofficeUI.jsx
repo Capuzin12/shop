@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2, LoaderCircle } from 'lucide-react';
 
 export function BackofficeShell({ eyebrow, title, description, actions, stats, sidebar, children }) {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="page-shell">
       <div className="mb-8 rounded-[2rem] border border-white/50 bg-white/75 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>

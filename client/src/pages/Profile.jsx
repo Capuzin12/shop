@@ -130,7 +130,7 @@ export default function Profile() {
   if (isPublicView) {
     if (publicLoading) {
       return (
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="page-shell">
           <div className="rounded-[2rem] border border-white/50 bg-white/70 p-10 text-center text-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-400">
             Завантаження профілю...
           </div>
@@ -140,7 +140,7 @@ export default function Profile() {
 
     if (!publicProfile) {
       return (
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="page-shell">
           <div className="rounded-[2rem] border border-white/50 bg-white/70 p-10 text-center text-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-400">
             {publicError || 'Профіль недоступний.'}
           </div>
@@ -149,7 +149,7 @@ export default function Profile() {
     }
 
     return (
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="page-shell">
         <div className="mb-8 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Публічний профіль</p>
           <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">
@@ -186,7 +186,7 @@ export default function Profile() {
 
   if (loading || !user) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="page-shell">
         <div className="rounded-[2rem] border border-white/50 bg-white/70 p-10 text-center text-slate-500 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-400">
           Завантаження...
         </div>
@@ -277,7 +277,7 @@ export default function Profile() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="page-shell">
       <div className="mb-8 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
         <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Центр облікового запису</p>
         <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">Профіль</h1>

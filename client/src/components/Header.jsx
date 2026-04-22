@@ -48,7 +48,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/40 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
-      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+      <div className="flex w-full items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <Link to="/" className="shrink-0">
           <div className="rounded-3xl bg-slate-950 px-4 py-2 text-lg font-black tracking-[0.2em] text-amber-300 shadow-lg shadow-slate-950/20 dark:bg-amber-400 dark:text-slate-950">
             BUILDSHOP
