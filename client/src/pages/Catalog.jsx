@@ -480,17 +480,20 @@ export default function Catalog() {
                   </select>
 
                   <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 sm:ml-2">
-                    На сторінці
+                    Завантажети за раз:
                   </label>
                   <select
                     value={pagination.limit}
                     onChange={(e) => handleLimitChange(e.target.value)}
                     className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-200"
                   >
-                    {[8, 12, 16, 24, 32].map((limit) => (
+                    {[8, 12, 16, 24, 32, 48].map((limit) => (
                       <option key={limit} value={limit}>{limit}</option>
                     ))}
                   </select>
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 sm:ml-2">
+                    товарів.
+                  </label>
                 </div>
               </div>
 
