@@ -34,6 +34,20 @@ const normalizeGuestItem = (product) => ({
   added_at: new Date().toISOString(),
 });
 
+const normalizeWishlistItem = (product) => ({
+  product_id: product.id,
+  product: {
+    id: product.id,
+    name: product.name || 'Товар',
+    price: product.price || 0,
+    old_price: product.old_price ?? null,
+    sku: product.sku ?? '',
+    slug: product.slug ?? '',
+    badge: product.badge ?? null,
+  },
+  added_at: new Date().toISOString(),
+});
+
 export function WishlistProvider({ children }) {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
@@ -81,18 +95,10 @@ export function WishlistProvider({ children }) {
 
       const guestItems = readGuestWishlist();
       if (guestItems.length) {
-        for (const item of guestItems) {
-          try {
-            await api.post('/api/wishlist', { product_id: item.product_id });
-          } catch (error) {
-            if (error.response?.status === 401) {
-              break;
-            }
-            if (error?.response?.status !== 400) {
-              console.error('Error syncing wishlist item:', error);
-            }
-          }
-        }
+        const uniqueProductIds = [...new Set(guestItems.map((item) => item.product_id).filter(Boolean))];
+        await Promise.allSettled(uniqueProductIds.map(async (productId) => {
+          await api.post('/api/wishlist', { product_id: productId });
+        }));
         writeGuestWishlist([]);
       }
 
@@ -121,17 +127,16 @@ export function WishlistProvider({ children }) {
 
     try {
       if (existing) {
-        await api.delete(`/api/wishlist/${productId}`);
         const nextItems = items.filter((item) => item.product_id !== productId);
         setItems(nextItems);
+        await api.delete(`/api/wishlist/${productId}`);
         return false;
       }
 
+      const optimisticProduct = typeof product === 'number' ? { id: productId } : product;
+      setItems((prev) => [...prev, normalizeWishlistItem(optimisticProduct)]);
       await api.post('/api/wishlist', { product_id: productId });
-
-      if (options.refresh !== false) {
-        await refreshWishlist();
-      }
+      if (options.refresh !== false) await refreshWishlist();
       return true;
     } catch (error) {
       if (error.response?.status === 401) {
@@ -142,6 +147,11 @@ export function WishlistProvider({ children }) {
         writeGuestWishlist(nextItems);
         setItems(nextItems);
         return !existing;
+      }
+      if (!existing) {
+        setItems((prev) => prev.filter((item) => item.product_id !== productId));
+      } else {
+        setItems((prev) => [...prev, normalizeWishlistItem(typeof product === 'number' ? { id: productId } : product)]);
       }
       console.error('Error toggling wishlist:', error);
       return existing;

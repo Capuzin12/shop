@@ -101,7 +101,18 @@ export function NotificationsProvider({ children }) {
 
   const markAllRead = async () => {
     const unreadIds = notifications.filter((item) => !item.is_read).map((item) => item.id);
-    await Promise.all(unreadIds.map((id) => markRead(id)));
+    if (unreadIds.length === 0) return;
+
+    // Optimistic UI: user sees read-state immediately.
+    setNotifications((prev) => prev.map((item) => ({ ...item, is_read: true })));
+    const results = await Promise.allSettled(
+      unreadIds.map((id) => api.put(`/api/notifications/${id}/read`, {}))
+    );
+
+    const failed = results.some((result) => result.status === 'rejected');
+    if (failed) {
+      await refreshNotifications();
+    }
   };
 
   const value = {

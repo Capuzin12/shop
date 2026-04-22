@@ -32,6 +32,22 @@ const normalizeServerCart = (serverCart) => {
   }));
 };
 
+const normalizeProductForCart = (product) => {
+  const stockQuantity = product?.quantity ?? product?.stock_quantity ?? 0;
+  return {
+    id: product.id,
+    name: product.name || 'Товар',
+    price: product.price || 0,
+    quantity: 1,
+    slug: product.slug || '',
+    sku: product.sku || '',
+    description: product.description || '',
+    old_price: product.old_price || null,
+    stock_quantity: stockQuantity,
+    in_stock: product.in_stock ?? stockQuantity > 0,
+  };
+};
+
 export const useCart = () => useContext(CartContext);
 
 export const CartProvider = ({ children }) => {
@@ -39,6 +55,126 @@ export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState(() => readLocalCart());
   const [serverCart, setServerCart] = useState(null);
   const syncedRef = useRef(false);
+  const syncTimersRef = useRef(new Map());
+  const syncingRef = useRef(new Set());
+  const serverItemMapRef = useRef(new Map());
+  const serverCartRef = useRef(null);
+
+  const setServerCartSnapshot = (serverData) => {
+    serverCartRef.current = serverData || null;
+    const map = new Map();
+    (serverData?.items || []).forEach((item) => {
+      if (item?.product_id && item?.id) {
+        map.set(item.product_id, item.id);
+      }
+    });
+    serverItemMapRef.current = map;
+    setServerCart(serverData || null);
+  };
+
+  const updateLocalCartQuantity = (productLike, quantity) => {
+    const productId = productLike?.id;
+    if (!productId) return;
+    setCart((prev) => {
+      if (quantity <= 0) {
+        return prev.filter((item) => item.id !== productId);
+      }
+      const existing = prev.find((item) => item.id === productId);
+      if (existing) {
+        return prev.map((item) => (item.id === productId ? { ...item, quantity } : item));
+      }
+      return [...prev, { ...normalizeProductForCart(productLike), quantity }];
+    });
+  };
+
+  const syncServerQuantity = async (productLike, desiredQuantity) => {
+    const productId = productLike?.id;
+    if (!user || !productId || syncingRef.current.has(productId)) {
+      return;
+    }
+    syncingRef.current.add(productId);
+    try {
+      if (!serverCartRef.current) {
+        const snapshot = await refreshServerCart();
+        if (!snapshot) {
+          return;
+        }
+      }
+
+      const itemId = serverItemMapRef.current.get(productId);
+      if (desiredQuantity <= 0) {
+        if (itemId) {
+          await api.delete(`/api/cart/items/${itemId}`);
+          const nextServer = {
+            ...(serverCartRef.current || {}),
+            items: (serverCartRef.current?.items || []).filter((item) => item.product_id !== productId),
+          };
+          setServerCartSnapshot(nextServer);
+        }
+        return;
+      }
+
+      if (itemId) {
+        await api.put(`/api/cart/items/${itemId}`, { quantity: desiredQuantity });
+        const nextServer = {
+          ...(serverCartRef.current || {}),
+          items: (serverCartRef.current?.items || []).map((item) => (
+            item.product_id === productId ? { ...item, quantity: desiredQuantity } : item
+          )),
+        };
+        setServerCartSnapshot(nextServer);
+      } else {
+        const createResponse = await api.post('/api/cart/items', {
+          product_id: productId,
+          quantity: desiredQuantity,
+        });
+        const createdId = createResponse?.data?.id;
+        const normalizedProduct = normalizeProductForCart(productLike);
+        const nextItem = {
+          id: createdId || `tmp-${productId}`,
+          product_id: productId,
+          quantity: desiredQuantity,
+          product: {
+            id: productId,
+            name: normalizedProduct.name,
+            price: normalizedProduct.price,
+            slug: normalizedProduct.slug,
+            sku: normalizedProduct.sku,
+            description: normalizedProduct.description,
+            old_price: normalizedProduct.old_price,
+            quantity: normalizedProduct.stock_quantity,
+            in_stock: normalizedProduct.in_stock,
+          },
+        };
+        const nextServer = {
+          ...(serverCartRef.current || {}),
+          items: [...(serverCartRef.current?.items || []), nextItem],
+        };
+        setServerCartSnapshot(nextServer);
+      }
+    } catch (error) {
+      if (error.response?.status !== 401) {
+        console.error('Error syncing cart item:', error);
+      }
+      await refreshServerCart();
+    } finally {
+      syncingRef.current.delete(productId);
+    }
+  };
+
+  const queueServerSync = (productLike, quantity) => {
+    const productId = productLike?.id;
+    if (!productId || !user) return;
+    const currentTimer = syncTimersRef.current.get(productId);
+    if (currentTimer) {
+      window.clearTimeout(currentTimer);
+    }
+    const timerId = window.setTimeout(() => {
+      syncTimersRef.current.delete(productId);
+      syncServerQuantity(productLike, quantity);
+    }, 300);
+    syncTimersRef.current.set(productId, timerId);
+  };
 
   const refreshServerCart = async () => {
     if (!user) {
@@ -48,13 +184,13 @@ export const CartProvider = ({ children }) => {
 
     try {
       const response = await api.get('/api/cart');
-      setServerCart(response.data);
+      setServerCartSnapshot(response.data);
       const normalized = normalizeServerCart(response.data);
       setCart(normalized);
       return response.data;
     } catch (error) {
       if (error.response?.status === 401) {
-        setServerCart(null);
+        setServerCartSnapshot(null);
         return null;
       }
       console.error('Error syncing cart:', error);
@@ -77,19 +213,24 @@ export const CartProvider = ({ children }) => {
       const serverSnapshot = await refreshServerCart();
 
       if (guestCart.length) {
-        const existingIds = new Set((serverSnapshot?.items || []).map((item) => item.product_id));
-        for (const item of guestCart) {
-          try {
-            if (!existingIds.has(item.id)) {
-              await api.post('/api/cart/items', {
-                product_id: item.id,
-                quantity: item.quantity,
-              });
+        const serverQuantities = new Map((serverSnapshot?.items || []).map((item) => [item.product_id, item.quantity]));
+        const mergedGuest = guestCart.reduce((acc, item) => {
+          const current = acc.get(item.id) || 0;
+          acc.set(item.id, current + item.quantity);
+          return acc;
+        }, new Map());
+
+        await Promise.allSettled(Array.from(mergedGuest.entries()).map(async ([productId, guestQuantity]) => {
+          const currentQuantity = serverQuantities.get(productId);
+          if (currentQuantity) {
+            const itemId = serverItemMapRef.current.get(productId);
+            if (itemId) {
+              await api.put(`/api/cart/items/${itemId}`, { quantity: currentQuantity + guestQuantity });
             }
-          } catch (error) {
-            console.error('Error syncing cart item:', error);
+            return;
           }
-        }
+          await api.post('/api/cart/items', { product_id: productId, quantity: guestQuantity });
+        }));
       }
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
@@ -102,39 +243,19 @@ export const CartProvider = ({ children }) => {
   }, [user]);
 
   const addToCart = async (product, quantity = 1) => {
-    if (user) {
-      try {
-        const currentCart = serverCart || await refreshServerCart();
-        const existingItem = currentCart?.items?.find((item) => item.product_id === product.id);
-        
-        if (existingItem) {
-          await api.put(`/api/cart/items/${existingItem.id}`, { 
-            quantity: existingItem.quantity + quantity 
-          });
-        } else {
-          await api.post('/api/cart/items', {
-            product_id: product.id,
-            quantity,
-          });
-        }
-        await refreshServerCart();
-        return;
-      } catch (error) {
-        if (error.response?.status === 401) {
-          console.log('Token expired, adding to local cart instead');
-        } else {
-          console.error('Error adding to server cart:', error);
-        }
-      }
-    }
-
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       const stock_quantity = product.quantity ?? product.stock_quantity ?? 0;
       if (existing) {
+        if (user) {
+          queueServerSync({ ...product, id: product.id }, existing.quantity + quantity);
+        }
         return prev.map((item) => (
           item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item
         ));
+      }
+      if (user) {
+        queueServerSync({ ...product, id: product.id }, quantity);
       }
       return [...prev, {
         ...product,
@@ -146,23 +267,11 @@ export const CartProvider = ({ children }) => {
   };
 
   const removeFromCart = async (productId) => {
-    if (user) {
-      const cartSnapshot = serverCart || await refreshServerCart();
-      const item = cartSnapshot?.items?.find((entry) => entry.product_id === productId);
-      if (item) {
-        try {
-          await api.delete(`/api/cart/items/${item.id}`);
-          await refreshServerCart();
-          return;
-        } catch (error) {
-          if (error.response?.status !== 401) {
-            console.error('Error removing from server cart:', error);
-          }
-        }
-      }
-    }
-
+    const previousItem = cart.find((item) => item.id === productId);
     setCart((prev) => prev.filter((item) => item.id !== productId));
+    if (user && previousItem) {
+      queueServerSync(previousItem, 0);
+    }
   };
 
   const updateQuantity = async (productId, quantity) => {
@@ -171,25 +280,12 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
+    const currentItem = cart.find((item) => item.id === productId);
+    if (!currentItem) return;
+    updateLocalCartQuantity(currentItem, quantity);
     if (user) {
-      const cartSnapshot = serverCart || await refreshServerCart();
-      const item = cartSnapshot?.items?.find((entry) => entry.product_id === productId);
-      if (item) {
-        try {
-          await api.put(`/api/cart/items/${item.id}`, { quantity });
-          await refreshServerCart();
-          return;
-        } catch (error) {
-          if (error.response?.status !== 401) {
-            console.error('Error updating server cart:', error);
-          }
-        }
-      }
+      queueServerSync(currentItem, quantity);
     }
-
-    setCart((prev) => prev.map((item) => (
-      item.id === productId ? { ...item, quantity } : item
-    )));
   };
 
   const clearCart = () => {
