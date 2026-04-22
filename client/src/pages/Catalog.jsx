@@ -1,5 +1,5 @@
 import { Heart, ShoppingCart } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import Feature from '../components/Feature';
@@ -32,10 +32,14 @@ export default function Catalog() {
   const [brandFacets, setBrandFacets] = useState([]);
   const [suggestions, setSuggestions] = useState({ products: [], categories: [], brands: [] });
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchMeta, setSearchMeta] = useState({ mode: 'strict', hint: null });
   const [searchParams, setSearchParams] = useSearchParams();
   const { addToCart } = useCart();
   const { wishlistIds, toggleWishlist } = useWishlist();
+  const loadMoreRef = useRef(null);
+  const loadMoreObserverRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   const [filters, setFilters] = useState({
     category_id: searchParams.get('category_id') || '',
@@ -57,6 +61,13 @@ export default function Catalog() {
   const [cardView, setCardView] = useState(searchParams.get('card_view') || 'comfortable');
 
   useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const searchParam = searchParams.get('search') || '';
     const categoryParam = searchParams.get('category_id') || '';
     const minPriceParam = searchParams.get('min_price') || '';
@@ -64,7 +75,6 @@ export default function Catalog() {
     const brandIdsParam = searchParams.get('brand_ids') || '';
     const sortByParam = searchParams.get('sort_by') || 'name';
     const sortOrderParam = searchParams.get('sort_order') || 'asc';
-    const pageParam = parseInt(searchParams.get('page'), 10) || 1;
     const limitParam = parseInt(searchParams.get('limit'), 10) || 12;
     const cardViewParam = searchParams.get('card_view') || 'comfortable';
 
@@ -78,17 +88,14 @@ export default function Catalog() {
       sort_order: sortOrderParam,
     });
 
-    setPagination((prev) => ({ ...prev, page: pageParam, limit: limitParam }));
+    // Infinite scroll: page is managed internally (reset to 1 when filters/limit change).
+    setPagination((prev) => ({ ...prev, page: 1, limit: limitParam }));
     setCardView(CARD_VIEW_OPTIONS[cardViewParam] ? cardViewParam : 'comfortable');
   }, [searchParams]);
 
   useEffect(() => {
     fetchCategories();
   }, []);
-
-  useEffect(() => {
-    fetchProducts();
-  }, [filters, pagination.page, pagination.limit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const query = (filters.search || '').trim();
@@ -122,11 +129,20 @@ export default function Catalog() {
     }
   };
 
-  const fetchProducts = async () => {
-    setLoading(true);
+  const productsRequestKey = useMemo(() => JSON.stringify({
+    ...filters,
+    limit: pagination.limit,
+  }), [filters, pagination.limit]);
+
+  const fetchProducts = async ({ page = 1, append = false } = {}) => {
+    if (!append) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
     try {
       const params = {
-        page: pagination.page,
+        page,
         limit: pagination.limit,
         sort_by: filters.sort_by,
         sort_order: filters.sort_order,
@@ -143,7 +159,15 @@ export default function Catalog() {
       const validProducts = Array.isArray(productsData) 
         ? productsData.filter(p => p && p.id)
         : [];
-      setProducts(validProducts);
+      setProducts((prev) => {
+        if (!append) return validProducts;
+        const next = [...prev];
+        const existing = new Set(prev.map((item) => item.id));
+        validProducts.forEach((item) => {
+          if (!existing.has(item.id)) next.push(item);
+        });
+        return next;
+      });
       setBrandFacets(response.data?.facets?.brands || []);
       setSearchMeta({
         mode: response.data?.search_mode || 'strict',
@@ -153,11 +177,13 @@ export default function Catalog() {
         ...prev,
         total: response.data.total || 0,
         totalPages: response.data.total_pages || 0,
+        page,
       }));
     } catch (error) {
       console.error('Error fetching products:', error);
     } finally {
-      setLoading(false);
+      if (!append) setLoading(false);
+      else setLoadingMore(false);
     }
   };
 
@@ -206,17 +232,10 @@ export default function Catalog() {
     setSearchParams(nextParams);
   };
 
-  const handlePageChange = (newPage) => {
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('page', String(newPage));
-    setSearchParams(nextParams);
-  };
-
   const handleLimitChange = (value) => {
     const parsedLimit = Number(value) || 12;
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('limit', String(parsedLimit));
-    nextParams.set('page', '1');
     setSearchParams(nextParams);
   };
 
@@ -233,29 +252,38 @@ export default function Catalog() {
     gridTemplateColumns: `repeat(auto-fit, minmax(${viewConfig.minWidth}px, 1fr))`,
   };
 
-  const renderPagination = () => {
-    const { page, totalPages } = pagination;
-    if (totalPages <= 1) return null;
+  const hasMore = pagination.totalPages ? pagination.page < pagination.totalPages : false;
 
-    return (
-      <div className="mt-10 flex flex-wrap justify-center gap-2">
-        {Array.from({ length: totalPages }, (_, index) => index + 1).map((current) => (
-          <button
-            key={current}
-            onClick={() => handlePageChange(current)}
-            className={`h-11 min-w-11 rounded-2xl px-4 text-sm font-semibold transition ${
-              current === page
-                ? 'bg-slate-950 text-white dark:bg-amber-400 dark:text-slate-950'
-                : 'border border-white/60 bg-white/70 text-slate-700 hover:bg-white dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-slate-900'
-            }`}
-            type="button"
-          >
-            {current}
-          </button>
-        ))}
-      </div>
-    );
-  };
+  useEffect(() => {
+    // Reset list and load first page when filters/limit change.
+    setProducts([]);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+    fetchProducts({ page: 1, append: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productsRequestKey]);
+
+  useEffect(() => {
+    if (!loadMoreRef.current) return undefined;
+    if (loadMoreObserverRef.current) {
+      loadMoreObserverRef.current.disconnect();
+    }
+
+    loadMoreObserverRef.current = new IntersectionObserver((entries) => {
+      const first = entries[0];
+      if (!first?.isIntersecting) return;
+      if (loading || loadingMore) return;
+      if (!hasMore) return;
+
+      const nextPage = pagination.page + 1;
+      fetchProducts({ page: nextPage, append: true });
+    }, { root: null, rootMargin: '600px 0px', threshold: 0 });
+
+    loadMoreObserverRef.current.observe(loadMoreRef.current);
+    return () => {
+      loadMoreObserverRef.current?.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, loading, loadingMore, pagination.page, productsRequestKey]);
 
   return (
     <div className="page-shell">
@@ -562,7 +590,20 @@ export default function Catalog() {
                 })}
               </div>
 
-              {renderPagination()}
+              <div className="mt-10">
+                {loadingMore ? (
+                  <div className="rounded-2xl border border-white/50 bg-white/70 px-6 py-4 text-center text-sm font-semibold text-slate-600 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-300">
+                    Завантаження ще товарів...
+                  </div>
+                ) : !hasMore && products.length > 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white/50 px-6 py-5 text-center text-sm text-slate-500 dark:border-white/10 dark:bg-slate-900/40 dark:text-slate-400">
+                    Ви переглянули всі товари за цим запитом.
+                  </div>
+                ) : null}
+
+                {/* Sentinel for infinite scroll */}
+                <div ref={loadMoreRef} className="h-1 w-full" />
+              </div>
             </>
           )}
         </main>
