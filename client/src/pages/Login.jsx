@@ -46,10 +46,10 @@ export default function Login() {
     <div className="page-shell-comfy">
       <div className="grid gap-8 lg:grid-cols-[0.95fr,1.05fr]">
         <div className="rounded-[2.5rem] border border-white/50 bg-white/75 p-8 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-300">BuildShop ID</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-300">Акаунт</p>
           <h1 className="mt-4 text-5xl font-black text-slate-950 dark:text-white">Вхід до акаунта</h1>
           <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
-            Після входу синхронізуються вподобайки, кошик і сповіщення про замовлення та низький запас.
+            Увійдіть, щоб переглядати замовлення, керувати профілем та швидше оформлювати покупки.
           </p>
         </div>
 

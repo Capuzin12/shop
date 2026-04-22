@@ -260,10 +260,10 @@ export default function Catalog() {
   return (
     <div className="page-shell">
       <div className="mb-8 rounded-[2.25rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Material Library</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Каталог</p>
         <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">Каталог товарів</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
-          Один стиль для всіх екранів: теплі світлі поверхні, глибокий темний режим і акцент на важливих діях.
+          Обирайте матеріали, порівнюйте ціни та додавайте в кошик — швидко і без зайвих кроків.
         </p>
       </div>
 

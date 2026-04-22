@@ -52,7 +52,7 @@ export default function Register() {
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-300">Новий акаунт</p>
           <h1 className="mt-4 text-5xl font-black text-slate-950 dark:text-white">Реєстрація</h1>
           <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
-            Після створення профілю ви зможете керувати замовленнями, отримувати сповіщення і синхронізувати локально збережені дані.
+            Створіть профіль, щоб швидше оформлювати покупки та відстежувати замовлення.
           </p>
         </div>
 

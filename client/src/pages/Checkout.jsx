@@ -254,7 +254,7 @@ export default function Checkout() {
             delivery_address: prev.delivery_address || geocoded.address || '',
           }));
 
-          setLocationMessage(`Місто та адреса заповнені за геолокацією (${geocoded.provider}). За потреби відредагуйте вручну.`);
+          setLocationMessage('Місто та адреса заповнені за геолокацією. За потреби відредагуйте вручну.');
         } catch (error) {
           setLocationMessage(error?.message || 'Не вдалося визначити адресу.');
         } finally {
@@ -284,7 +284,7 @@ export default function Checkout() {
     setMessage('');
 
     if (!user) {
-      setMessage('Чернетку збережено локально. Увійдіть, щоб завершити оформлення замовлення.');
+      setMessage('Дані збережено. Увійдіть, щоб завершити оформлення замовлення.');
       navigate('/login');
       return;
     }
@@ -347,10 +347,10 @@ export default function Checkout() {
   return (
     <div className="page-shell">
       <div className="mb-8 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Checkout Draft</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Замовлення</p>
         <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">Оформлення замовлення</h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          Дані форми зберігаються локально, тому навіть без входу ви не втратите введену інформацію.
+          Заповніть контактні дані та адресу доставки — це займе кілька хвилин.
         </p>
       </div>
 
