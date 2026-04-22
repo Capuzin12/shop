@@ -77,11 +77,27 @@ export default function Notifications() {
       await markRead(notification.id);
     }
 
-    const basePath = notification.target_path || resolveFallbackPath(notification);
-    const [pathname, existingQuery = ''] = basePath.split('?');
-    const params = new URLSearchParams(existingQuery);
     const isOrderContext = isOrderContextNotification(notification);
     const orderId = inferOrderIdFromNotification(notification);
+    const basePath = notification.target_path || resolveFallbackPath(notification);
+    const [rawPathname, existingQuery = ''] = String(basePath || '').split('?');
+    const params = new URLSearchParams(existingQuery);
+
+    // Guardrail: some legacy notifications may contain "/" as target_path even when they refer to an order chat.
+    // For chat/order notifications we always prefer the correct workspace route.
+    let pathname = rawPathname || '';
+    if (isOrderContext) {
+      pathname = isStaff ? '/manager' : '/profile';
+      if (isStaff) {
+        params.set('tab', 'orders');
+      }
+    } else if (pathname === '/' || pathname === '') {
+      pathname = resolveFallbackPath(notification);
+      const [fallbackPathname, fallbackQuery = ''] = String(pathname || '').split('?');
+      pathname = fallbackPathname;
+      const fallbackParams = new URLSearchParams(fallbackQuery);
+      fallbackParams.forEach((value, key) => params.set(key, value));
+    }
 
     if (notification.target_product_id) params.set('product_id', String(notification.target_product_id));
     if (notification.target_inventory_id) params.set('inventory_id', String(notification.target_inventory_id));
