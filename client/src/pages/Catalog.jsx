@@ -21,6 +21,12 @@ const getStockCopy = (product) => {
 };
 
 export default function Catalog() {
+  const CARD_VIEW_OPTIONS = {
+    compact: { label: 'Компактно', minWidth: 220, cardPadding: 'p-4', previewPadding: 'p-5', titleClass: 'text-xl', detailsMinHeight: 'min-h-[96px]' },
+    comfortable: { label: 'Комфортно', minWidth: 280, cardPadding: 'p-5', previewPadding: 'p-6', titleClass: 'text-2xl', detailsMinHeight: 'min-h-[120px]' },
+    spacious: { label: 'Великий вигляд', minWidth: 340, cardPadding: 'p-6', previewPadding: 'p-7', titleClass: 'text-3xl', detailsMinHeight: 'min-h-[136px]' },
+  };
+
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brandFacets, setBrandFacets] = useState([]);
@@ -43,10 +49,12 @@ export default function Catalog() {
 
   const [pagination, setPagination] = useState({
     page: parseInt(searchParams.get('page'), 10) || 1,
-    limit: 12,
+    limit: parseInt(searchParams.get('limit'), 10) || 12,
     total: 0,
     totalPages: 0,
   });
+
+  const [cardView, setCardView] = useState(searchParams.get('card_view') || 'comfortable');
 
   useEffect(() => {
     const searchParam = searchParams.get('search') || '';
@@ -57,6 +65,8 @@ export default function Catalog() {
     const sortByParam = searchParams.get('sort_by') || 'name';
     const sortOrderParam = searchParams.get('sort_order') || 'asc';
     const pageParam = parseInt(searchParams.get('page'), 10) || 1;
+    const limitParam = parseInt(searchParams.get('limit'), 10) || 12;
+    const cardViewParam = searchParams.get('card_view') || 'comfortable';
 
     setFilters({
       category_id: categoryParam,
@@ -68,7 +78,8 @@ export default function Catalog() {
       sort_order: sortOrderParam,
     });
 
-    setPagination((prev) => ({ ...prev, page: pageParam }));
+    setPagination((prev) => ({ ...prev, page: pageParam, limit: limitParam }));
+    setCardView(CARD_VIEW_OPTIONS[cardViewParam] ? cardViewParam : 'comfortable');
   }, [searchParams]);
 
   useEffect(() => {
@@ -77,7 +88,7 @@ export default function Catalog() {
 
   useEffect(() => {
     fetchProducts();
-  }, [filters, pagination.page]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filters, pagination.page, pagination.limit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const query = (filters.search || '').trim();
@@ -199,6 +210,27 @@ export default function Catalog() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('page', String(newPage));
     setSearchParams(nextParams);
+  };
+
+  const handleLimitChange = (value) => {
+    const parsedLimit = Number(value) || 12;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('limit', String(parsedLimit));
+    nextParams.set('page', '1');
+    setSearchParams(nextParams);
+  };
+
+  const handleCardViewChange = (value) => {
+    const nextView = CARD_VIEW_OPTIONS[value] ? value : 'comfortable';
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('card_view', nextView);
+    setSearchParams(nextParams);
+  };
+
+  const selectedCardView = CARD_VIEW_OPTIONS[cardView] ? cardView : 'comfortable';
+  const viewConfig = CARD_VIEW_OPTIONS[selectedCardView];
+  const productGridStyle = {
+    gridTemplateColumns: `repeat(auto-fit, minmax(${viewConfig.minWidth}px, 1fr))`,
   };
 
   const renderPagination = () => {
@@ -393,7 +425,7 @@ export default function Catalog() {
             </div>
           ) : (
             <>
-              <div className="mb-5 flex items-center justify-between">
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">Знайдено {pagination.total} товарів</p>
                   {filters.search || filters.category_id || filters.brand_ids ? (
@@ -404,6 +436,34 @@ export default function Catalog() {
                     </p>
                   ) : null}
                 </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    Картки
+                  </label>
+                  <select
+                    value={selectedCardView}
+                    onChange={(e) => handleCardViewChange(e.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-200"
+                  >
+                    {Object.entries(CARD_VIEW_OPTIONS).map(([value, config]) => (
+                      <option key={value} value={value}>{config.label}</option>
+                    ))}
+                  </select>
+
+                  <label className="ml-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    На сторінці
+                  </label>
+                  <select
+                    value={pagination.limit}
+                    onChange={(e) => handleLimitChange(e.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-200"
+                  >
+                    {[8, 12, 16, 24, 32].map((limit) => (
+                      <option key={limit} value={limit}>{limit}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {filters.search && searchMeta.mode === 'fuzzy' ? (
@@ -413,7 +473,7 @@ export default function Catalog() {
                 </div>
               ) : null}
 
-              <div className="grid gap-6 md:grid-cols-2">
+              <div className="grid gap-6" style={productGridStyle}>
                 {products.map((product) => {
                   const liked = wishlistIds.includes(product.id);
                   const stock = getStockCopy(product);
@@ -427,9 +487,9 @@ export default function Catalog() {
                       }
                     : undefined;
                   return (
-                    <div key={product.id} className="group rounded-[2rem] border border-white/50 bg-white/80 p-5 shadow-lg shadow-amber-100/30 transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none">
+                    <div key={product.id} className={`group rounded-[2rem] border border-white/50 bg-white/80 ${viewConfig.cardPadding} shadow-lg shadow-amber-100/30 transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none`}>
                       <div
-                        className={`mb-5 rounded-[1.5rem] p-6 ${hasCardImage ? '' : 'bg-[linear-gradient(135deg,#fff1de,_#fff9f3)] dark:bg-[linear-gradient(135deg,#251d18,_#18181f)]'}`}
+                        className={`mb-5 rounded-[1.5rem] ${viewConfig.previewPadding} ${hasCardImage ? '' : 'bg-[linear-gradient(135deg,#fff1de,_#fff9f3)] dark:bg-[linear-gradient(135deg,#251d18,_#18181f)]'}`}
                         style={cardBackgroundStyle}
                       >
                         <div className="flex items-center justify-between">
@@ -452,8 +512,8 @@ export default function Catalog() {
                           </button>
                         </div>
 
-                        <div className="mt-10 min-h-[120px]">
-                          <h2 className={`text-2xl font-bold transition ${hasCardImage ? 'text-white group-hover:text-amber-200' : 'text-slate-900 group-hover:text-amber-700 dark:text-white dark:group-hover:text-amber-300'}`}>
+                        <div className={`mt-10 ${viewConfig.detailsMinHeight}`}>
+                          <h2 className={`${viewConfig.titleClass} font-bold transition ${hasCardImage ? 'text-white group-hover:text-amber-200' : 'text-slate-900 group-hover:text-amber-700 dark:text-white dark:group-hover:text-amber-300'}`}>
                             {product.name}
                           </h2>
                           <p className={`mt-3 text-sm ${hasCardImage ? 'text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
