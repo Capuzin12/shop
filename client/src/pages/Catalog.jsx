@@ -480,7 +480,7 @@ export default function Catalog() {
                   </select>
 
                   <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 sm:ml-2">
-                    Завантажети за раз:
+                    Зантажувати по
                   </label>
                   <select
                     value={pagination.limit}
