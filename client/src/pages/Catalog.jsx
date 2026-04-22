@@ -22,7 +22,7 @@ const getStockCopy = (product) => {
 
 export default function Catalog() {
   const CARD_VIEW_OPTIONS = {
-    compact: { label: 'Компактно', minWidth: 220, cardPadding: 'p-4', previewPadding: 'p-5', titleClass: 'text-xl', detailsMinHeight: 'min-h-[96px]' },
+    compact: { label: 'Компактно', minWidth: 240, cardPadding: 'p-4', previewPadding: 'p-5', titleClass: 'text-xl', detailsMinHeight: 'min-h-[96px]' },
     comfortable: { label: 'Комфортно', minWidth: 280, cardPadding: 'p-5', previewPadding: 'p-6', titleClass: 'text-2xl', detailsMinHeight: 'min-h-[120px]' },
     spacious: { label: 'Великий вигляд', minWidth: 340, cardPadding: 'p-6', previewPadding: 'p-7', titleClass: 'text-3xl', detailsMinHeight: 'min-h-[136px]' },
   };
@@ -384,7 +384,7 @@ export default function Catalog() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Ціна від</span>
                   <input type="number" name="min_price" value={filters.min_price} onChange={handleFilterChange} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" />
@@ -395,7 +395,7 @@ export default function Catalog() {
                 </label>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Сортувати</span>
                   <select name="sort_by" value={filters.sort_by} onChange={handleFilterChange} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100">
@@ -425,7 +425,7 @@ export default function Catalog() {
             </div>
           ) : (
             <>
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">Знайдено {pagination.total} товарів</p>
                   {filters.search || filters.category_id || filters.brand_ids ? (
@@ -437,7 +437,7 @@ export default function Catalog() {
                   ) : null}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                   <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                     Картки
                   </label>
@@ -451,7 +451,7 @@ export default function Catalog() {
                     ))}
                   </select>
 
-                  <label className="ml-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 sm:ml-2">
                     На сторінці
                   </label>
                   <select
@@ -473,7 +473,7 @@ export default function Catalog() {
                 </div>
               ) : null}
 
-              <div className="grid gap-6" style={productGridStyle}>
+              <div className="grid gap-7" style={productGridStyle}>
                 {products.map((product) => {
                   const liked = wishlistIds.includes(product.id);
                   const stock = getStockCopy(product);
@@ -487,7 +487,7 @@ export default function Catalog() {
                       }
                     : undefined;
                   return (
-                    <div key={product.id} className={`group rounded-[2rem] border border-white/50 bg-white/80 ${viewConfig.cardPadding} shadow-lg shadow-amber-100/30 transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none`}>
+                    <div key={product.id} className={`group flex h-full flex-col rounded-[2rem] border border-white/50 bg-white/80 ${viewConfig.cardPadding} shadow-lg shadow-amber-100/30 transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none`}>
                       <div
                         className={`mb-5 rounded-[1.5rem] ${viewConfig.previewPadding} ${hasCardImage ? '' : 'bg-[linear-gradient(135deg,#fff1de,_#fff9f3)] dark:bg-[linear-gradient(135deg,#251d18,_#18181f)]'}`}
                         style={cardBackgroundStyle}
@@ -525,8 +525,8 @@ export default function Catalog() {
                         </div>
                       </div>
 
-                      <div className="space-y-4">
-                        <div className="flex items-end justify-between gap-3">
+                      <div className="mt-auto space-y-4">
+                        <div className="flex flex-wrap items-end justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Ціна</p>
                           <div className="flex items-center gap-2">
@@ -534,18 +534,18 @@ export default function Catalog() {
                             {product.old_price ? <span className="text-sm text-slate-400 line-through">{formatPrice(product.old_price)}</span> : null}
                           </div>
                         </div>
-                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${stock.tone === 'emerald' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : stock.tone === 'amber' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'}`}>
+                        <span className={`inline-flex max-w-full rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${stock.tone === 'emerald' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : stock.tone === 'amber' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'}`}>
                           {stock.label}
                         </span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <Link to={`/product/${product.id}`} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5">
                             Деталі
                           </Link>
                           <button
                             onClick={() => addToCart(product)}
                             disabled={!product.is_active || product.quantity <= 0}
-                            className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                            className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
                               product.is_active && product.quantity > 0
                                 ? 'bg-slate-950 text-white hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300'
                                 : 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'
