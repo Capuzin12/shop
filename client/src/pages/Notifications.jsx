@@ -10,11 +10,12 @@ export default function Notifications() {
   const [filter, setFilter] = useState('all');
   const navigate = useNavigate();
   const isStaff = ['admin', 'manager', 'warehouse_manager', 'sales_processor', 'content_manager'].includes(user?.role);
+  const isAdmin = user?.role === 'admin';
   const canManageInventory = ['admin', 'manager', 'warehouse_manager'].includes(user?.role);
 
   const resolveFallbackPath = (notification) => {
     if (notification?.target_order_id) {
-      return isStaff ? '/manager?tab=orders' : '/profile';
+      return isAdmin ? '/admin/orders' : (isStaff ? '/manager?tab=orders' : '/profile');
     }
     if (notification?.target_inventory_id || notification?.target_product_id || notification?.type === 'low_stock' || notification?.type === 'supply_arrival') {
       if (canManageInventory) {
@@ -23,7 +24,7 @@ export default function Notifications() {
       return '/catalog';
     }
     if (notification?.type === 'order_status') {
-      return isStaff ? '/manager?tab=orders' : '/profile';
+      return isAdmin ? '/admin/orders' : (isStaff ? '/manager?tab=orders' : '/profile');
     }
     return isStaff ? '/manager' : '/profile';
   };
@@ -87,8 +88,12 @@ export default function Notifications() {
     // For chat/order notifications we always prefer the correct workspace route.
     let pathname = rawPathname || '';
     if (isOrderContext) {
-      pathname = isStaff ? '/manager' : '/profile';
-      if (isStaff) {
+      if (isAdmin) {
+        pathname = '/admin/orders';
+      } else {
+        pathname = isStaff ? '/manager' : '/profile';
+      }
+      if (isStaff && !isAdmin) {
         params.set('tab', 'orders');
       }
     } else if (pathname === '/' || pathname === '') {
@@ -104,7 +109,7 @@ export default function Notifications() {
     if (isOrderContext && orderId) params.set('order_id', String(orderId));
 
     // Chat/order notifications should always land on the orders workspace for staff users.
-    if (isOrderContext && isStaff && pathname === '/manager' && !params.get('tab')) {
+    if (isOrderContext && isStaff && !isAdmin && pathname === '/manager' && !params.get('tab')) {
       params.set('tab', 'orders');
     }
 

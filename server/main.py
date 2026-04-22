@@ -902,7 +902,8 @@ ORDER_STATUS_FLOW: dict[OrderStatus, set[OrderStatus]] = {
     OrderStatus.processing: {OrderStatus.shipped, OrderStatus.cancelled},
     OrderStatus.shipped: {OrderStatus.delivered, OrderStatus.picked_up},
     OrderStatus.delivered: {OrderStatus.picked_up, OrderStatus.refunded},
-    OrderStatus.picked_up: {OrderStatus.delivered, OrderStatus.refunded},
+    # Once the order is picked up, it can only be returned (refunded).
+    OrderStatus.picked_up: {OrderStatus.refunded},
     OrderStatus.cancelled: set(),
     OrderStatus.refunded: set(),
 }
@@ -2949,6 +2950,17 @@ def update_order(request: Request, order_id: int, order_data: dict, db: DbSessio
             ensure_status_transition_allowed(old_status, new_status)
             db_order.status = new_status
 
+        # Hard guardrail: once an order is picked up, staff may only mark it as refunded (return).
+        # No other operational fields should be editable in this state.
+        if old_status == OrderStatus.picked_up and new_status != OrderStatus.refunded:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "ORDER_LOCKED",
+                    "message": "Замовлення зі статусом 'Забрано' можна лише повернути.",
+                },
+            )
+
         allowed_fields = {
             "tracking_number",
             "admin_note",
@@ -2959,6 +2971,8 @@ def update_order(request: Request, order_id: int, order_data: dict, db: DbSessio
         changes = {}
         for key, value in order_data.items():
             if key in allowed_fields:
+                if old_status == OrderStatus.picked_up:
+                    continue
                 old_value = getattr(db_order, key, None)
                 if old_value != value:
                     changes[key] = {'from': old_value, 'to': value}

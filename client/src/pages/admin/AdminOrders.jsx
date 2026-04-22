@@ -1,8 +1,10 @@
 import api from '../../api';
 import { RefreshCcw, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { EmptyState, FilterButton, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
+import OrderChatWindow from '../../components/OrderChatWindow';
 
 const ORDER_STATUS_OPTIONS = ['new', 'processing', 'shipped', 'delivered', 'picked_up', 'cancelled', 'refunded'];
 const STATUS_LABELS = {
@@ -27,9 +29,15 @@ const ORDER_STATUS_FLOW = {
 
 export default function AdminOrders() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [orderMessages, setOrderMessages] = useState({});
+  const [messageDrafts, setMessageDrafts] = useState({});
+  const [loadingMessages, setLoadingMessages] = useState({});
+  const [sendingMessages, setSendingMessages] = useState({});
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
   const [actionMessage, setActionMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -70,6 +78,52 @@ export default function AdminOrders() {
     };
     loadOrders();
   }, [user]);
+
+  const clearOrderQueryParam = () => {
+    if (!searchParams.get('order_id')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('order_id');
+    setSearchParams(next, { replace: true });
+  };
+
+  const loadMessages = async (orderId) => {
+    setLoadingMessages((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      const response = await api.get(`/api/orders/${orderId}/messages`, { params: { limit: 100 } });
+      setOrderMessages((prev) => ({ ...prev, [orderId]: response.data?.messages || [] }));
+    } catch (error) {
+      console.error('Error fetching order messages:', error);
+    } finally {
+      setLoadingMessages((prev) => ({ ...prev, [orderId]: false }));
+    }
+  };
+
+  const sendMessage = async (orderId) => {
+    const body = String(messageDrafts[orderId] || '').trim();
+    if (body.length < 2) return;
+    setSendingMessages((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      const response = await api.post(`/api/orders/${orderId}/messages`, { body });
+      setOrderMessages((prev) => ({ ...prev, [orderId]: [...(prev[orderId] || []), response.data] }));
+      setMessageDrafts((prev) => ({ ...prev, [orderId]: '' }));
+    } catch (error) {
+      console.error('Error sending order message:', error);
+    } finally {
+      setSendingMessages((prev) => ({ ...prev, [orderId]: false }));
+    }
+  };
+
+  useEffect(() => {
+    const orderId = Number(searchParams.get('order_id') || 0);
+    if (!orderId || !orders.length) return;
+    const matched = orders.find((order) => order.id === orderId);
+    if (!matched) return;
+    if (selectedOrder?.id !== matched.id) {
+      setSelectedOrder(matched);
+      loadMessages(matched.id);
+      clearOrderQueryParam();
+    }
+  }, [orders, searchParams, selectedOrder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusCounts = orders.reduce((acc, order) => {
     acc[order.status] = (acc[order.status] || 0) + 1;
@@ -148,6 +202,18 @@ export default function AdminOrders() {
                     <p className="text-xs uppercase tracking-[0.2em]">Сума</p>
                     <p className="mt-1 text-2xl font-black text-amber-600 dark:text-amber-300">{order.total || 0}</p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const next = selectedOrder?.id === order.id ? null : order;
+                      setSelectedOrder(next);
+                      if (!next) clearOrderQueryParam();
+                      if (next) await loadMessages(order.id);
+                    }}
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+                  >
+                    {selectedOrder?.id === order.id ? 'Закрити чат' : 'Відкрити чат'}
+                  </button>
                   <select
                     value={order.status || 'new'}
                     onChange={async (e) => {
@@ -179,6 +245,33 @@ export default function AdminOrders() {
           ))}
         </div>
       )}
+
+      <OrderChatWindow
+        open={Boolean(selectedOrder)}
+        title={selectedOrder ? `Замовлення #${selectedOrder.id}` : ''}
+        subtitle={selectedOrder ? `${STATUS_LABELS[selectedOrder.status] || selectedOrder.status} • ${selectedOrder.contact_name || 'Покупець'}` : ''}
+        messages={selectedOrder ? (orderMessages[selectedOrder.id] || []) : []}
+        loading={selectedOrder ? Boolean(loadingMessages[selectedOrder.id]) : false}
+        sending={selectedOrder ? Boolean(sendingMessages[selectedOrder.id]) : false}
+        draft={selectedOrder ? (messageDrafts[selectedOrder.id] || '') : ''}
+        onDraftChange={(value) => {
+          if (!selectedOrder) return;
+          setMessageDrafts((prev) => ({ ...prev, [selectedOrder.id]: value }));
+        }}
+        onSend={() => {
+          if (!selectedOrder) return;
+          sendMessage(selectedOrder.id);
+        }}
+        onClose={() => {
+          setSelectedOrder(null);
+          clearOrderQueryParam();
+        }}
+        senderLabel="Покупець"
+        staffLabel="Адмін"
+        inputPlaceholder="Відповідь покупцю..."
+        sendLabel="Надіслати покупцю"
+        emptyLabel="Поки що немає повідомлень."
+      />
     </Panel>
   );
 }

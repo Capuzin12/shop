@@ -22,7 +22,7 @@ const ORDER_STATUS_FLOW = {
   processing: ['shipped', 'cancelled'],
   shipped: ['delivered', 'picked_up'],
   delivered: ['picked_up', 'refunded'],
-  picked_up: ['delivered', 'refunded'],
+  picked_up: ['refunded'],
   cancelled: [],
   refunded: [],
 };
@@ -261,6 +261,11 @@ export default function ManagerOrders({ onUpdate }) {
                 >
                   {updatingOrderId === order.id ? 'Оновлення...' : 'Скасувати'}
                 </button>
+                {(order.status === 'picked_up' || order.status === 'refunded') ? (
+                  <span className="inline-flex items-center rounded-2xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                    {order.status === 'picked_up' ? 'Замовлення забрано: доступне лише повернення.' : 'Замовлення завершене.'}
+                  </span>
+                ) : null}
               </div>
 
               {selectedOrder?.id === order.id ? (
