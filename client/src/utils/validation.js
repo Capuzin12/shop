@@ -39,6 +39,9 @@ export const checkoutSchema = z.object({
   delivery_address: z.string().trim().min(1, 'Вкажіть адресу доставки'),
   delivery_method: z.enum(['nova_poshta', 'ukrposhta', 'courier', 'pickup']),
   payment_method: z.enum(['card', 'cash', 'bank_transfer']),
+  promo_code: z.string().trim().max(50, 'Промокод занадто довгий').optional().or(z.literal('')).refine((value) => !value || /^[A-Za-z0-9_-]+$/.test(value), {
+    message: 'Промокод може містити лише літери, цифри, дефіс або підкреслення',
+  }),
 });
 
 export const productFilterSchema = z.object({

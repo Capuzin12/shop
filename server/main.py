@@ -432,6 +432,12 @@ def serialize_promo_code(promo: PromoCode):
         "created_at": promo.created_at.isoformat() if promo.created_at else None,
     }
 
+def _find_promo_code_by_code(db: Session, code: str | None) -> PromoCode | None:
+    normalized = str(code or "").strip()
+    if not normalized:
+        return None
+    return db.scalar(select(PromoCode).where(func.lower(PromoCode.code) == normalized.lower()))
+
 
 def _parse_optional_datetime(value):
     if value in (None, ""):
@@ -1660,6 +1666,37 @@ def get_promo_codes(db: DbSession, current_user: Annotated[User, Depends(get_cur
     return [serialize_promo_code(promo) for promo in promo_codes]
 
 
+@app.post("/api/promo-codes/validate")
+def validate_promo_code(payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PROMO_PAYLOAD", "message": "Некоректний формат перевірки промокоду"})
+
+    code = str(payload.get("code") or "").strip()
+    if not code:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PROMO_CODE", "field": "code", "message": "Вкажіть промокод"})
+
+    order_amount_raw = payload.get("order_amount", 0)
+    try:
+        order_amount = float(order_amount_raw or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_ORDER_AMOUNT", "field": "order_amount", "message": "Сума замовлення має бути числом"})
+    if order_amount < 0:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_ORDER_AMOUNT", "field": "order_amount", "message": "Сума замовлення не може бути від'ємною"})
+
+    promo = _find_promo_code_by_code(db, code)
+    if not promo:
+        return {"valid": False, "message": "Промокод не знайдено", "discount": 0.0, "promo": None}
+
+    is_valid, message = promo.is_valid(order_amount)
+    discount = round(promo.calculate_discount(order_amount), 2) if is_valid else 0.0
+    return {
+        "valid": is_valid,
+        "message": message,
+        "discount": discount,
+        "promo": serialize_promo_code(promo),
+    }
+
+
 @app.get("/api/promo-codes/{promo_code_id}")
 def get_promo_code(promo_code_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
     promo_code = db.get(PromoCode, promo_code_id)
@@ -2678,8 +2715,8 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
         raise HTTPException(status_code=400, detail={"code": "INVALID_PAYMENT_METHOD", "field": "payment_method", "message": "Некоректний спосіб оплати"})
 
     delivery_cost = _parse_non_negative("delivery_cost", order_data.get("delivery_cost"), 0.0)
-    discount = _parse_non_negative("discount", order_data.get("discount"), 0.0)
     comment = _clean_text(order_data.get("comment"), 1000)
+    promo_code_text = str(order_data.get("promo_code") or "").strip()
 
     merged_items: dict[int, int] = {}
     for idx, item in enumerate(items_raw):
@@ -2709,14 +2746,11 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
         "delivery_method": delivery_method,
         "payment_method": payment_method,
         "delivery_cost": delivery_cost,
-        "discount": discount,
+        "discount": 0.0,
         "comment": comment,
     }
     if order_data.get("address_id"):
         filtered_data["address_id"] = order_data.get("address_id")
-    if order_data.get("promo_code_id"):
-        filtered_data["promo_code_id"] = order_data.get("promo_code_id")
-
     try:
         order = Order(user_id=current_user.id, **filtered_data)
         db.add(order)
@@ -2773,12 +2807,44 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
             inventory_changes.append((product_id, quantity, quantity_before, quantity_after))
 
         delivery_cost = float(order.delivery_cost or 0)
-        discount = float(order.discount or 0)
+        discount = 0.0
+
+        promo = None
+        if promo_code_text:
+            promo = _find_promo_code_by_code(db, promo_code_text)
+            if not promo:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "PROMO_INVALID",
+                        "field": "promo_code",
+                        "message": "Промокод не знайдено",
+                    },
+                )
+
+            promo_is_valid, promo_message = promo.is_valid(subtotal)
+            if not promo_is_valid:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "PROMO_INVALID",
+                        "field": "promo_code",
+                        "message": promo_message,
+                    },
+                )
+
+            discount = round(float(promo.calculate_discount(subtotal)), 2)
+            order.promo_code_id = promo.id
+
         if discount > subtotal + delivery_cost:
             discount = subtotal + delivery_cost
-            order.discount = discount
+        order.discount = discount
         order.subtotal = subtotal
         order.total = max(subtotal + delivery_cost - discount, 0)
+
+        if promo is not None:
+            promo.used_count = int(promo.used_count or 0) + 1
+            db.add(promo)
 
         for product_id, quantity, quantity_before, quantity_after in inventory_changes:
             db.add(InventoryMovement(

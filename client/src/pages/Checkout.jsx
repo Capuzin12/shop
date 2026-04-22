@@ -53,6 +53,13 @@ const mapOrderError = (errorPayload, fallbackMessage) => {
     };
   }
 
+  if (detail?.code === 'PROMO_INVALID') {
+    return {
+      message: detail.message || 'Промокод недійсний.',
+      fieldErrors: { promo_code: detail.message || 'Промокод недійсний.' },
+    };
+  }
+
   return { message: detail?.message || fallbackMessage };
 };
 
@@ -145,6 +152,7 @@ export default function Checkout() {
     delivery_city: '',
     delivery_address: '',
     comment: '',
+    promo_code: '',
     delivery_method: 'nova_poshta',
     payment_method: 'card',
   });
@@ -154,8 +162,13 @@ export default function Checkout() {
   const [locationConsent, setLocationConsent] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationMessage, setLocationMessage] = useState('');
+  const [promoValidation, setPromoValidation] = useState(null);
+  const [promoLoading, setPromoLoading] = useState(false);
 
   const getInputClass = (field) => `form-input ${fieldErrors[field] ? 'form-input-error' : ''}`;
+  const orderSubtotal = getTotal();
+  const promoDiscountPreview = promoValidation?.valid ? Number(promoValidation.discount || 0) : 0;
+  const estimatedTotal = Math.max(orderSubtotal - promoDiscountPreview, 0);
 
   useEffect(() => {
     localStorage.setItem(GUEST_CHECKOUT_KEY, JSON.stringify(formData));
@@ -173,11 +186,47 @@ export default function Checkout() {
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    if (field === 'promo_code') {
+      setPromoValidation(null);
+    }
     setFieldErrors((prev) => {
       if (!prev[field]) return prev;
       const { [field]: _removed, ...rest } = prev;
       return rest;
     });
+  };
+
+  const applyPromoCode = async () => {
+    const promoCode = trimValue(formData.promo_code);
+    if (!promoCode) {
+      setPromoValidation(null);
+      return;
+    }
+
+    try {
+      setPromoLoading(true);
+      const response = await api.post('/api/promo-codes/validate', {
+        code: promoCode,
+        order_amount: orderSubtotal,
+      });
+
+      const result = response.data || {};
+      setPromoValidation({
+        valid: Boolean(result.valid),
+        message: result.message || '',
+        discount: Number(result.discount || 0),
+        promo: result.promo || null,
+      });
+    } catch (error) {
+      setPromoValidation({
+        valid: false,
+        message: error?.response?.data?.detail?.message || 'Не вдалося перевірити промокод.',
+        discount: 0,
+        promo: null,
+      });
+    } finally {
+      setPromoLoading(false);
+    }
   };
 
   const autofillAddressFromLocation = async () => {
@@ -248,6 +297,7 @@ export default function Checkout() {
       delivery_city: trimValue(formData.delivery_city),
       delivery_address: trimValue(formData.delivery_address),
       comment: trimValue(formData.comment),
+      promo_code: trimValue(formData.promo_code),
       items: cart.map((item) => ({
         product_id: item.id,
         quantity: item.quantity,
@@ -358,6 +408,35 @@ export default function Checkout() {
               <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Коментар</span>
               <textarea value={formData.comment} onChange={(e) => updateField('comment', e.target.value)} rows="4" className={getInputClass('comment')} />
             </label>
+
+            <div className="block md:col-span-2">
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Промокод</span>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                <div className="w-full">
+                  <input
+                    value={formData.promo_code || ''}
+                    onChange={(e) => updateField('promo_code', e.target.value.toUpperCase())}
+                    placeholder="Наприклад, BUD10"
+                    className={getInputClass('promo_code')}
+                  />
+                  {fieldErrors.promo_code ? <p className="form-error-text">{fieldErrors.promo_code}</p> : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={applyPromoCode}
+                  disabled={promoLoading}
+                  className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
+                >
+                  {promoLoading ? 'Перевірка...' : 'Застосувати'}
+                </button>
+              </div>
+              {promoValidation ? (
+                <p className={`mt-2 text-xs ${promoValidation.valid ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>
+                  {promoValidation.message}
+                  {promoValidation.valid && promoValidation.discount > 0 ? ` Знижка: ${formatPrice(promoValidation.discount)}.` : ''}
+                </p>
+              ) : null}
+            </div>
           </div>
 
           {message ? (
@@ -403,7 +482,10 @@ export default function Checkout() {
 
           <div className="mt-6 rounded-[1.75rem] bg-slate-950 p-5 text-white dark:bg-amber-400 dark:text-slate-950">
             <p className="text-xs uppercase tracking-[0.2em] text-white/70 dark:text-slate-800/70">Разом</p>
-            <p className="mt-2 text-3xl font-black">{formatPrice(getTotal())}</p>
+            {promoDiscountPreview > 0 ? (
+              <p className="mt-1 text-sm text-emerald-200 dark:text-emerald-900">Знижка: -{formatPrice(promoDiscountPreview)}</p>
+            ) : null}
+            <p className="mt-2 text-3xl font-black">{formatPrice(estimatedTotal)}</p>
           </div>
         </div>
       </div>
