@@ -5,8 +5,8 @@ export const defaultFeatureFlags = {
 };
 
 export const featureFlagDescriptions = {
-  experimentalCatalogSuggestions: 'Покращені підказки пошуку в каталозі',
-  enhancedErrorReporting: 'Розширене логування клієнтських помилок',
-  apiRetryFor5xx: 'Повторні запити до API при 5xx помилках',
+  experimentalCatalogSuggestions: 'Розумні підказки під час пошуку',
+  enhancedErrorReporting: 'Покращена стабільність додатку',
+  apiRetryFor5xx: 'Стабільніше з’єднання під час навантаження',
 };
 

@@ -17,10 +17,10 @@ export default function Wishlist() {
     <div className="page-shell">
       <div className="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Saved List</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Обране</p>
           <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">Вподобані товари</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-            Список зберігається навіть без авторизації. Після входу ми підтягуємо його до акаунта автоматично.
+            Додавайте товари сюди, щоб швидко повернутися до них пізніше.
           </p>
         </div>
         <button
@@ -56,7 +56,7 @@ export default function Wishlist() {
                 <div className="mb-5 rounded-[1.5rem] bg-[linear-gradient(135deg,#ffe9d2,_#fff7ef)] p-6 dark:bg-[linear-gradient(135deg,#2b231d,_#18181f)]">
                   <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
                     <span>{item.product?.sku || 'BuildShop'}</span>
-                    <span className="rounded-full bg-white/80 px-3 py-1 text-rose-500 dark:bg-white/10 dark:text-rose-300">Favorite</span>
+                    <span className="rounded-full bg-white/80 px-3 py-1 text-rose-500 dark:bg-white/10 dark:text-rose-300">Обране</span>
                   </div>
                   <h2 className="mt-8 min-h-[72px] text-2xl font-bold text-slate-900 dark:text-white">
                     {item.product?.name || 'Товар'}
@@ -106,7 +106,7 @@ export default function Wishlist() {
           </div>
 
           <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
-            У списку збережено {items.length} товарів.
+            У списку {items.length} товарів.
           </p>
         </>
       )}

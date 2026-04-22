@@ -446,7 +446,7 @@ export default function Checkout() {
           ) : null}
 
           <button disabled={submitting} className="mt-6 w-full rounded-2xl bg-slate-950 px-6 py-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300" type="submit">
-            {submitting ? 'Оформлення...' : user ? 'Підтвердити замовлення' : 'Зберегти чернетку і перейти до входу'}
+            {submitting ? 'Оформлення...' : user ? 'Підтвердити замовлення' : 'Увійти, щоб оформити замовлення'}
           </button>
         </form>
 
