@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from database import SessionLocal, DATABASE_URL
-from models import Category, Product, User, UserRole, Inventory, Brand, Supplier, SupplyOrder, SupplyOrderItem, PromoCode, DiscountType, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, ProductImage, ProductBadge, Review, OrderStatus, OrderMessage, AuditLog, ClientError
+from models import Category, Product, User, UserRole, Inventory, Brand, Supplier, SupplyOrder, SupplyOrderItem, PromoCode, DiscountType, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, ProductImage, ProductBadge, Review, OrderStatus, OrderMessage, AuditLog, ClientError, CustomerGroup, ProductPrice, ProductDiscount, PriceHistory
 from logging_config import configure_logging, get_logger, set_request_id, set_user_id, get_request_id, generate_request_id
 from config import settings, validate_settings
 from security import add_request_id_middleware, add_security_headers_middleware, add_timing_middleware, limiter
@@ -366,9 +366,103 @@ def serialize_user_summary(user: User):
         "last_name": user.last_name,
         "phone": user.phone,
         "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+        "customer_group_id": user.customer_group_id,
+        "customer_group_name": user.customer_group.name if getattr(user, "customer_group", None) else None,
         "is_active": user.is_active,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+
+def serialize_customer_group(group: CustomerGroup):
+    users_count = len(group.users or []) if hasattr(group, "users") else 0
+    return {
+        "id": group.id,
+        "name": group.name,
+        "description": group.description,
+        "is_default": bool(group.is_default),
+        "users_count": users_count,
+        "created_at": group.created_at.isoformat() if group.created_at else None,
+    }
+
+
+def get_active_product_discount(db: Session, product_id: int) -> ProductDiscount | None:
+    now = datetime.utcnow()
+    return db.scalar(
+        select(ProductDiscount)
+        .where(
+            ProductDiscount.product_id == product_id,
+            ProductDiscount.is_active == True,
+            or_(ProductDiscount.start_date.is_(None), ProductDiscount.start_date <= now),
+            or_(ProductDiscount.end_date.is_(None), ProductDiscount.end_date >= now),
+        )
+        .order_by(ProductDiscount.id.desc())
+    )
+
+
+def apply_product_discount(base_price: float, discount: ProductDiscount | None) -> float:
+    if not discount:
+        return float(base_price)
+    price = float(base_price)
+    value = float(discount.discount_value or 0)
+    if str(discount.discount_type) == "PERCENTAGE":
+        return round(max(price * (1 - value / 100.0), 0.0), 2)
+    if str(discount.discount_type) == "FIXED_PRICE":
+        return round(max(value, 0.0), 2)
+    return round(price, 2)
+
+
+def resolve_effective_product_price(
+    db: Session,
+    product: Product,
+    customer_group_id: int | None,
+    quantity: int = 1,
+) -> dict:
+    base_price = float(product.price)
+    applied_tier = None
+    group_name = None
+    group_price = None
+    qty = max(int(quantity or 1), 1)
+
+    if customer_group_id:
+        tier = db.scalar(
+            select(ProductPrice)
+            .where(
+                ProductPrice.product_id == product.id,
+                ProductPrice.customer_group_id == customer_group_id,
+                ProductPrice.min_quantity <= qty,
+            )
+            .order_by(ProductPrice.min_quantity.desc())
+        )
+        if tier:
+            group = db.get(CustomerGroup, customer_group_id)
+            group_name = group.name if group else None
+            group_price = float(tier.price)
+            applied_tier = {
+                "id": tier.id,
+                "min_quantity": tier.min_quantity,
+                "price": float(tier.price),
+                "customer_group_id": tier.customer_group_id,
+            }
+
+    active_discount = get_active_product_discount(db, product.id)
+    pre_discount_price = group_price if group_price is not None else base_price
+    effective_price = apply_product_discount(pre_discount_price, active_discount)
+
+    return {
+        "base_price": base_price,
+        "group_price": group_price,
+        "group_name": group_name,
+        "applied_tier": applied_tier,
+        "active_discount": {
+            "id": active_discount.id,
+            "discount_type": active_discount.discount_type,
+            "discount_value": active_discount.discount_value,
+            "start_date": active_discount.start_date.isoformat() if active_discount.start_date else None,
+            "end_date": active_discount.end_date.isoformat() if active_discount.end_date else None,
+            "is_active": active_discount.is_active,
+        } if active_discount else None,
+        "effective_price": effective_price,
     }
 
 
@@ -1751,6 +1845,7 @@ def delete_promo_code(promo_code_id: int, db: DbSession, current_user: Annotated
 @app.get("/api/products")
 def get_products(
     db: DbSession,
+    current_user: Annotated[User | None, Depends(get_optional_user)] = None,
     active_only: bool = True,
     category_id: int | None = None,
     search: str | None = None,
@@ -1951,33 +2046,35 @@ def get_products(
         if row.product_id not in image_map and row.url:
             image_map[row.product_id] = row.url
 
-    products_data = [
-        {
-            "id": p.id,
-            "name": p.name,
-            "slug": p.slug,
-            "price": p.price,
-            "old_price": p.old_price,
-            "unit": p.unit,
-            "icon": p.icon,
-            "description": p.description,
-            "badge": p.badge.value if p.badge and hasattr(p.badge, "value") else str(p.badge) if p.badge else None,
-            "is_featured": p.is_featured,
-            "is_active": p.is_active,
-            "category_id": p.category_id,
-            "brand_id": p.brand_id,
-            "sku": p.sku,
-            "category_name": p.category.name if p.category else None,
-            "brand_name": p.brand.name if p.brand else None,
-            # Додаємо залишок на складі (quantity)
-            "quantity": inventory_map.get(p.id, 0),
-            # Додаємо in_stock для зручності (true/false)
-            "in_stock": inventory_map.get(p.id, 0) > 0,
-             # Головне фото товару для прев'ю в каталозі
-             "image_url": image_map.get(p.id),
-        }
-        for p in products
-    ]
+    products_data = []
+    for p in products:
+        pricing = resolve_effective_product_price(db, p, getattr(current_user, "customer_group_id", None), 1)
+        products_data.append(
+            {
+                "id": p.id,
+                "name": p.name,
+                "slug": p.slug,
+                "price": p.price,
+                "old_price": p.old_price,
+                "effective_price": pricing["effective_price"],
+                "active_discount": pricing["active_discount"],
+                "customer_group_name": pricing["group_name"],
+                "unit": p.unit,
+                "icon": p.icon,
+                "description": p.description,
+                "badge": p.badge.value if p.badge and hasattr(p.badge, "value") else str(p.badge) if p.badge else None,
+                "is_featured": p.is_featured,
+                "is_active": p.is_active,
+                "category_id": p.category_id,
+                "brand_id": p.brand_id,
+                "sku": p.sku,
+                "category_name": p.category.name if p.category else None,
+                "brand_name": p.brand.name if p.brand else None,
+                "quantity": inventory_map.get(p.id, 0),
+                "in_stock": inventory_map.get(p.id, 0) > 0,
+                "image_url": image_map.get(p.id),
+            }
+        )
 
     # Enhanced facets
     facets = {}
@@ -2278,7 +2375,11 @@ def search_suggestions(q: str, db: DbSession):
 
 
 @app.get("/api/products/{product_id}")
-def get_product(product_id: int, db: DbSession):
+def get_product(
+    product_id: int,
+    db: DbSession,
+    current_user: Annotated[User | None, Depends(get_optional_user)] = None,
+):
     product = db.scalar(
         select(Product)
         .where(Product.id == product_id)
@@ -2294,9 +2395,13 @@ def get_product(product_id: int, db: DbSession):
     inventory = db.scalar(select(Inventory).where(Inventory.product_id == product.id))
     stock_quantity = inventory.quantity if inventory and inventory.quantity is not None else 0
     payload = serialize_product_detail(product)
+    pricing = resolve_effective_product_price(db, product, getattr(current_user, "customer_group_id", None), 1)
     payload.update({
         "quantity": stock_quantity,
         "in_stock": stock_quantity > 0,
+        "active_discount": pricing["active_discount"],
+        "effective_price": pricing["effective_price"],
+        "customer_group_name": pricing["group_name"],
     })
     return payload
 
@@ -2490,6 +2595,10 @@ def update_product(product_id: int, product: dict, db: DbSession, current_user: 
         raise HTTPException(status_code=404, detail="Product not found")
 
     normalized_product, images_data, attributes_data = _normalize_product_payload(product, require_basic=False)
+    old_price_value = float(db_product.price)
+    new_price_value = float(normalized_product.get("price", old_price_value))
+    if new_price_value != old_price_value:
+        db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": current_user.id})
     for key, value in normalized_product.items():
         setattr(db_product, key, value)
 
@@ -3170,7 +3279,7 @@ def create_order_message(request: Request, order_id: int, payload: dict, db: DbS
 # Users (admin only)
 @app.get("/api/users")
 def get_users(db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
-    users = db.scalars(select(User)).all()
+    users = db.scalars(select(User).options(selectinload(User.customer_group))).all()
     return [serialize_user_summary(user) for user in users]
 
 
@@ -3184,6 +3293,7 @@ def get_current_user_info(current_user: Annotated[User, Depends(get_current_acti
         "last_name": current_user.last_name,
         "phone": current_user.phone,
         "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+        "customer_group_id": current_user.customer_group_id,
         "is_active": current_user.is_active,
         "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
     }
@@ -3288,6 +3398,444 @@ def update_user(user_id: int, user_data: dict, db: DbSession, current_user: Anno
     db.commit()
     db.refresh(db_user)
     return serialize_user_summary(db_user)
+
+
+@app.get("/api/admin/customer-groups")
+def get_customer_groups(db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    groups = db.scalars(select(CustomerGroup).options(selectinload(CustomerGroup.users)).order_by(CustomerGroup.id.asc())).all()
+    return [serialize_customer_group(group) for group in groups]
+
+
+@app.get("/api/admin/customer-groups/{group_id}")
+def get_customer_group(group_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    group = db.scalar(select(CustomerGroup).where(CustomerGroup.id == group_id).options(selectinload(CustomerGroup.users)))
+    if not group:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_GROUP_NOT_FOUND", "message": "Групу не знайдено"})
+    return serialize_customer_group(group)
+
+
+@app.post("/api/admin/customer-groups", status_code=status.HTTP_201_CREATED)
+def create_customer_group(payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    name = str((payload or {}).get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_NAME", "message": "Назва обов'язкова"})
+    group = CustomerGroup(
+        name=name,
+        description=str((payload or {}).get("description") or "").strip() or None,
+        is_default=bool((payload or {}).get("is_default", False)),
+    )
+    db.add(group)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "CUSTOMER_GROUP_EXISTS", "message": "Група з такою назвою вже існує"})
+    db.refresh(group)
+    return serialize_customer_group(group)
+
+
+@app.put("/api/admin/customer-groups/{group_id}")
+def update_customer_group(group_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    group = db.get(CustomerGroup, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_GROUP_NOT_FOUND", "message": "Групу не знайдено"})
+    if "name" in (payload or {}):
+        name = str((payload or {}).get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_NAME", "message": "Назва обов'язкова"})
+        group.name = name
+    if "description" in (payload or {}):
+        group.description = str((payload or {}).get("description") or "").strip() or None
+    if "is_default" in (payload or {}):
+        group.is_default = bool((payload or {}).get("is_default"))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "CUSTOMER_GROUP_EXISTS", "message": "Група з такою назвою вже існує"})
+    db.refresh(group)
+    return serialize_customer_group(group)
+
+
+@app.delete("/api/admin/customer-groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_customer_group(group_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    group = db.scalar(select(CustomerGroup).where(CustomerGroup.id == group_id).options(selectinload(CustomerGroup.users)))
+    if not group:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_GROUP_NOT_FOUND", "message": "Групу не знайдено"})
+    if group.is_default:
+        raise HTTPException(status_code=400, detail={"code": "DEFAULT_GROUP_DELETE_FORBIDDEN", "message": "Неможливо видалити дефолтну групу"})
+    if group.users:
+        raise HTTPException(status_code=400, detail={"code": "GROUP_HAS_USERS", "message": "Неможливо видалити групу з прив'язаними користувачами"})
+    db.delete(group)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.patch("/api/users/{user_id}/customer-group")
+def assign_user_customer_group(user_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail={"code": "USER_NOT_FOUND", "message": "Користувача не знайдено"})
+    group_id = (payload or {}).get("customer_group_id")
+    if group_id in (None, ""):
+        user.customer_group_id = None
+    else:
+        try:
+            parsed = int(group_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail={"code": "INVALID_GROUP_ID", "message": "Некоректний id групи"})
+        group = db.get(CustomerGroup, parsed)
+        if not group:
+            raise HTTPException(status_code=404, detail={"code": "CUSTOMER_GROUP_NOT_FOUND", "message": "Групу не знайдено"})
+        user.customer_group_id = group.id
+    db.commit()
+    db.refresh(user)
+    return serialize_user_summary(user)
+
+
+@app.get("/api/admin/products/{product_id}/prices")
+def get_product_prices(product_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
+    rows = db.scalars(
+        select(ProductPrice)
+        .where(ProductPrice.product_id == product_id)
+        .options(selectinload(ProductPrice.customer_group))
+        .order_by(ProductPrice.customer_group_id.asc(), ProductPrice.min_quantity.asc())
+    ).all()
+    return [
+        {
+            "id": row.id,
+            "product_id": row.product_id,
+            "customer_group_id": row.customer_group_id,
+            "customer_group_name": row.customer_group.name if row.customer_group else None,
+            "price": row.price,
+            "min_quantity": row.min_quantity,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+        for row in rows
+    ]
+
+
+@app.post("/api/admin/products/{product_id}/prices", status_code=status.HTTP_201_CREATED)
+def upsert_product_price(product_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
+    try:
+        customer_group_id = int((payload or {}).get("customer_group_id"))
+        min_quantity = int((payload or {}).get("min_quantity", 1))
+        price = float((payload or {}).get("price"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRICE_PAYLOAD", "message": "Некоректні дані тарифу"})
+    if min_quantity < 1 or price < 0:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRICE_PAYLOAD", "message": "Перевірте price та min_quantity"})
+    existing = db.scalar(
+        select(ProductPrice).where(
+            ProductPrice.product_id == product_id,
+            ProductPrice.customer_group_id == customer_group_id,
+            ProductPrice.min_quantity == min_quantity,
+        )
+    )
+    if existing:
+        existing.price = price
+        db.add(existing)
+        row = existing
+    else:
+        row = ProductPrice(product_id=product_id, customer_group_id=customer_group_id, min_quantity=min_quantity, price=price)
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": row.id,
+        "product_id": row.product_id,
+        "customer_group_id": row.customer_group_id,
+        "price": row.price,
+        "min_quantity": row.min_quantity,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+@app.put("/api/admin/products/{product_id}/prices/{price_id}")
+def update_product_price(product_id: int, price_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    row = db.get(ProductPrice, price_id)
+    if not row or row.product_id != product_id:
+        raise HTTPException(status_code=404, detail={"code": "PRICE_TIER_NOT_FOUND", "message": "Тариф не знайдено"})
+    if "customer_group_id" in (payload or {}):
+        row.customer_group_id = int((payload or {}).get("customer_group_id"))
+    if "min_quantity" in (payload or {}):
+        row.min_quantity = int((payload or {}).get("min_quantity"))
+    if "price" in (payload or {}):
+        row.price = float((payload or {}).get("price"))
+    if row.min_quantity < 1 or row.price < 0:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRICE_PAYLOAD", "message": "Перевірте price та min_quantity"})
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": row.id,
+        "product_id": row.product_id,
+        "customer_group_id": row.customer_group_id,
+        "price": row.price,
+        "min_quantity": row.min_quantity,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+@app.delete("/api/admin/products/{product_id}/prices/{price_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_product_price(product_id: int, price_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    row = db.get(ProductPrice, price_id)
+    if not row or row.product_id != product_id:
+        raise HTTPException(status_code=404, detail={"code": "PRICE_TIER_NOT_FOUND", "message": "Тариф не знайдено"})
+    db.delete(row)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.get("/api/products/{product_id}/effective-price")
+def get_effective_price_for_product(
+    product_id: int,
+    db: DbSession,
+    quantity: int = 1,
+    current_user: Annotated[User | None, Depends(get_optional_user)] = None,
+):
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
+    pricing = resolve_effective_product_price(db, product, getattr(current_user, "customer_group_id", None), quantity)
+    return {
+        "effective_price": pricing["effective_price"],
+        "base_price": pricing["base_price"],
+        "group_name": pricing["group_name"],
+        "applied_tier": pricing["applied_tier"],
+        "active_discount": pricing["active_discount"],
+    }
+
+
+@app.get("/api/admin/products/{product_id}/discounts")
+def get_product_discounts(product_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
+    now = datetime.utcnow()
+    discounts = db.scalars(select(ProductDiscount).where(ProductDiscount.product_id == product_id).order_by(ProductDiscount.id.desc())).all()
+    return [
+        {
+            "id": d.id,
+            "product_id": d.product_id,
+            "discount_type": d.discount_type,
+            "discount_value": d.discount_value,
+            "start_date": d.start_date.isoformat() if d.start_date else None,
+            "end_date": d.end_date.isoformat() if d.end_date else None,
+            "is_active": d.is_active,
+            "is_currently_active": bool(
+                d.is_active
+                and (d.start_date is None or d.start_date <= now)
+                and (d.end_date is None or d.end_date >= now)
+            ),
+        }
+        for d in discounts
+    ]
+
+
+@app.post("/api/admin/products/{product_id}/discounts", status_code=status.HTTP_201_CREATED)
+def create_product_discount(product_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
+    discount_type = str((payload or {}).get("discount_type") or "").strip().upper()
+    if discount_type not in {"PERCENTAGE", "FIXED_PRICE"}:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_DISCOUNT_TYPE", "message": "Допустимі типи: PERCENTAGE, FIXED_PRICE"})
+    try:
+        discount_value = float((payload or {}).get("discount_value"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_DISCOUNT_VALUE", "message": "Некоректне значення знижки"})
+    if discount_value <= 0:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_DISCOUNT_VALUE", "message": "Значення знижки має бути > 0"})
+    start_date = _parse_optional_datetime((payload or {}).get("start_date"))
+    end_date = _parse_optional_datetime((payload or {}).get("end_date"))
+    discount = ProductDiscount(
+        product_id=product_id,
+        discount_type=discount_type,
+        discount_value=discount_value,
+        start_date=start_date,
+        end_date=end_date,
+        is_active=bool((payload or {}).get("is_active", True)),
+    )
+    db.add(discount)
+    db.commit()
+    db.refresh(discount)
+    return {
+        "id": discount.id,
+        "product_id": discount.product_id,
+        "discount_type": discount.discount_type,
+        "discount_value": discount.discount_value,
+        "start_date": discount.start_date.isoformat() if discount.start_date else None,
+        "end_date": discount.end_date.isoformat() if discount.end_date else None,
+        "is_active": discount.is_active,
+    }
+
+
+@app.put("/api/admin/products/{product_id}/discounts/{discount_id}")
+def update_product_discount(product_id: int, discount_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    discount = db.get(ProductDiscount, discount_id)
+    if not discount or discount.product_id != product_id:
+        raise HTTPException(status_code=404, detail={"code": "DISCOUNT_NOT_FOUND", "message": "Знижку не знайдено"})
+    if "discount_type" in (payload or {}):
+        discount_type = str((payload or {}).get("discount_type") or "").strip().upper()
+        if discount_type not in {"PERCENTAGE", "FIXED_PRICE"}:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_DISCOUNT_TYPE", "message": "Допустимі типи: PERCENTAGE, FIXED_PRICE"})
+        discount.discount_type = discount_type
+    if "discount_value" in (payload or {}):
+        discount.discount_value = float((payload or {}).get("discount_value"))
+        if discount.discount_value <= 0:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_DISCOUNT_VALUE", "message": "Значення знижки має бути > 0"})
+    if "start_date" in (payload or {}):
+        discount.start_date = _parse_optional_datetime((payload or {}).get("start_date"))
+    if "end_date" in (payload or {}):
+        discount.end_date = _parse_optional_datetime((payload or {}).get("end_date"))
+    if "is_active" in (payload or {}):
+        discount.is_active = bool((payload or {}).get("is_active"))
+    db.commit()
+    db.refresh(discount)
+    return {
+        "id": discount.id,
+        "product_id": discount.product_id,
+        "discount_type": discount.discount_type,
+        "discount_value": discount.discount_value,
+        "start_date": discount.start_date.isoformat() if discount.start_date else None,
+        "end_date": discount.end_date.isoformat() if discount.end_date else None,
+        "is_active": discount.is_active,
+    }
+
+
+@app.delete("/api/admin/products/{product_id}/discounts/{discount_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_product_discount(product_id: int, discount_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    discount = db.get(ProductDiscount, discount_id)
+    if not discount or discount.product_id != product_id:
+        raise HTTPException(status_code=404, detail={"code": "DISCOUNT_NOT_FOUND", "message": "Знижку не знайдено"})
+    db.delete(discount)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.get("/api/admin/products/{product_id}/price-history")
+def get_product_price_history(
+    product_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(get_current_admin_user)],
+    page: int = 1,
+    per_page: int = 20,
+):
+    safe_page = max(int(page or 1), 1)
+    safe_per_page = min(max(int(per_page or 20), 1), 100)
+    offset = (safe_page - 1) * safe_per_page
+    total = db.scalar(select(func.count()).select_from(PriceHistory).where(PriceHistory.product_id == product_id)) or 0
+    rows = db.execute(
+        select(
+            PriceHistory.id,
+            PriceHistory.product_id,
+            PriceHistory.old_price,
+            PriceHistory.new_price,
+            PriceHistory.changed_by,
+            PriceHistory.changed_at,
+            User.first_name,
+            User.last_name,
+        )
+        .select_from(PriceHistory)
+        .outerjoin(User, User.id == PriceHistory.changed_by)
+        .where(PriceHistory.product_id == product_id)
+        .order_by(PriceHistory.changed_at.desc())
+        .offset(offset)
+        .limit(safe_per_page)
+    ).all()
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "product_id": row.product_id,
+                "old_price": row.old_price,
+                "new_price": row.new_price,
+                "changed_by": row.changed_by,
+                "changed_by_name": (f"{row.first_name or ''} {row.last_name or ''}").strip() or None,
+                "changed_at": row.changed_at.isoformat() if row.changed_at else None,
+            }
+            for row in rows
+        ],
+        "total": int(total),
+        "page": safe_page,
+        "per_page": safe_per_page,
+    }
+
+
+@app.get("/api/admin/price-history")
+def get_global_price_history(
+    db: DbSession,
+    current_user: Annotated[User, Depends(get_current_admin_user)],
+    product_id: int | None = None,
+    changed_by: int | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    page: int = 1,
+    per_page: int = 20,
+):
+    safe_page = max(int(page or 1), 1)
+    safe_per_page = min(max(int(per_page or 20), 1), 100)
+    offset = (safe_page - 1) * safe_per_page
+
+    query = (
+        select(
+            PriceHistory.id,
+            PriceHistory.product_id,
+            Product.name.label("product_name"),
+            PriceHistory.old_price,
+            PriceHistory.new_price,
+            PriceHistory.changed_by,
+            PriceHistory.changed_at,
+            User.first_name,
+            User.last_name,
+        )
+        .select_from(PriceHistory)
+        .join(Product, Product.id == PriceHistory.product_id)
+        .outerjoin(User, User.id == PriceHistory.changed_by)
+    )
+
+    count_query = select(func.count()).select_from(PriceHistory)
+    filters = []
+    if product_id:
+        filters.append(PriceHistory.product_id == product_id)
+    if changed_by:
+        filters.append(PriceHistory.changed_by == changed_by)
+    parsed_date_from = _parse_optional_datetime(date_from) if date_from else None
+    parsed_date_to = _parse_optional_datetime(date_to) if date_to else None
+    if parsed_date_from:
+        filters.append(PriceHistory.changed_at >= parsed_date_from)
+    if parsed_date_to:
+        filters.append(PriceHistory.changed_at <= parsed_date_to)
+    if filters:
+        query = query.where(*filters)
+        count_query = count_query.where(*filters)
+
+    total = db.scalar(count_query) or 0
+    rows = db.execute(query.order_by(PriceHistory.changed_at.desc()).offset(offset).limit(safe_per_page)).all()
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "product_id": row.product_id,
+                "product_name": row.product_name,
+                "old_price": row.old_price,
+                "new_price": row.new_price,
+                "changed_by": row.changed_by,
+                "changed_by_name": (f"{row.first_name or ''} {row.last_name or ''}").strip() or None,
+                "changed_at": row.changed_at.isoformat() if row.changed_at else None,
+            }
+            for row in rows
+        ],
+        "total": int(total),
+        "page": safe_page,
+        "per_page": safe_per_page,
+    }
 
 
 # Cart

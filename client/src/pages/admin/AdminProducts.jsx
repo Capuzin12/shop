@@ -3,6 +3,9 @@ import { Plus, RefreshCcw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
+import ProductPricingTable from '../../components/ProductPricingTable';
+import ProductDiscountsManager from '../../components/ProductDiscountsManager';
+import PriceHistoryLog from '../../components/PriceHistoryLog';
 
 const DEFAULT_FORM = {
   name: '',
@@ -37,6 +40,7 @@ export default function AdminProducts() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [showPriceHistory, setShowPriceHistory] = useState(false);
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -347,6 +351,23 @@ export default function AdminProducts() {
             </label>
           </div>
         </form>
+
+        {editing ? (
+          <div className="mt-6 space-y-4 border-t border-slate-200 pt-6 dark:border-white/10">
+            <ProductPricingTable productId={editing} basePrice={Number(formData.price) || 0} />
+            <ProductDiscountsManager productId={editing} />
+            <div className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
+              <button
+                type="button"
+                className="text-sm font-semibold text-blue-600 dark:text-blue-300"
+                onClick={() => setShowPriceHistory((prev) => !prev)}
+              >
+                {showPriceHistory ? 'Сховати історію цін' : 'Показати історію цін'}
+              </button>
+              {showPriceHistory ? <div className="mt-3"><PriceHistoryLog productId={editing} /></div> : null}
+            </div>
+          </div>
+        ) : null}
       </Panel>
 
       <Panel title="Список товарів" subtitle={`Усього позицій: ${products.length}`}>

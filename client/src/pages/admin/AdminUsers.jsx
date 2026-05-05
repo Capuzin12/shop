@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
 import { ROLE_LABELS } from '../../utils/roles';
+import { useAssignCustomerGroup, useCustomerGroups } from '../../hooks/useCustomerGroups';
 
 export default function AdminUsers() {
   const { user, refreshUser } = useAuth();
@@ -12,6 +13,8 @@ export default function AdminUsers() {
   const [formData, setFormData] = useState({ email: '', first_name: '', last_name: '', phone: '', role: 'customer', is_active: true, password: '' });
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
+  const { data: customerGroups = [] } = useCustomerGroups();
+  const assignGroup = useAssignCustomerGroup();
 
   const fetchUsers = async ({ showLoading = true } = {}) => {
     if (showLoading) setIsLoading(true);
@@ -151,7 +154,7 @@ export default function AdminUsers() {
       ) : users.length === 0 ? (
         <EmptyState title="Користувачів не знайдено" text="Список з’явиться після реєстрацій або seed-даних." />
       ) : (
-        <DataTable columns={['Електронна пошта', 'Імʼя', 'Роль', 'Статус', 'Дії']}>
+        <DataTable columns={['Електронна пошта', 'Імʼя', 'Роль', 'Група', 'Статус', 'Дії']}>
           {users.map((item) => (
             <tr key={item.id}>
               <td className="px-4 py-4 font-semibold text-slate-900 dark:text-white">{item.email}</td>
@@ -164,6 +167,25 @@ export default function AdminUsers() {
                   <option value="sales_processor">{ROLE_LABELS.sales_processor}</option>
                   <option value="manager">{ROLE_LABELS.manager}</option>
                   <option value="admin">{ROLE_LABELS.admin}</option>
+                </select>
+              </td>
+              <td className="px-4 py-4">
+                <select
+                  value={item.customer_group_id || ''}
+                  onChange={async (e) => {
+                    const rawValue = e.target.value;
+                    await assignGroup.mutateAsync({
+                      userId: item.id,
+                      customer_group_id: rawValue === '' ? null : Number(rawValue),
+                    });
+                    await fetchUsers({ showLoading: false });
+                  }}
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-950/60"
+                >
+                  <option value="">Без групи</option>
+                  {customerGroups.map((group) => (
+                    <option key={group.id} value={group.id}>{group.name}</option>
+                  ))}
                 </select>
               </td>
               <td className="px-4 py-4">

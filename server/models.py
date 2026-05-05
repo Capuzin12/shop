@@ -110,6 +110,7 @@ class User(Base):
     first_name    : Mapped[str]           = mapped_column(String(100), nullable=False)
     last_name     : Mapped[str]           = mapped_column(String(100), nullable=False)
     phone         : Mapped[Optional[str]] = mapped_column(String(20))
+    customer_group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("customer_groups.id", ondelete="SET NULL"))
     role          : Mapped[UserRole]      = mapped_column(_py_enum(UserRole), default=UserRole.customer)
     is_active     : Mapped[bool]          = mapped_column(Boolean, default=True)
     created_at    : Mapped[datetime]      = mapped_column(default=func.now())
@@ -123,6 +124,7 @@ class User(Base):
     carts      : Mapped[List["Cart"]]     = relationship(back_populates="user", cascade="all, delete-orphan")
     notifications: Mapped[List["Notification"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     order_messages: Mapped[List["OrderMessage"]] = relationship(back_populates="sender")
+    customer_group: Mapped[Optional["CustomerGroup"]] = relationship(back_populates="users")
 
     def __repr__(self):
         return f"<User {self.email}>"
@@ -144,6 +146,19 @@ class Address(Base):
 
     user   : Mapped["User"]         = relationship(back_populates="addresses")
     orders : Mapped[List["Order"]]  = relationship(back_populates="address")
+
+
+class CustomerGroup(Base):
+    __tablename__ = "customer_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
+
+    users: Mapped[List["User"]] = relationship(back_populates="customer_group")
+    product_prices: Mapped[List["ProductPrice"]] = relationship(back_populates="customer_group", cascade="all, delete-orphan")
 
 
 # ============================================================
@@ -218,6 +233,9 @@ class Product(Base):
     inventory  : Mapped[Optional["Inventory"]]        = relationship(back_populates="product", uselist=False, cascade="all, delete-orphan")
     reviews    : Mapped[List["Review"]]               = relationship(back_populates="product")
     wishlist   : Mapped[List["Wishlist"]]             = relationship(back_populates="product")
+    product_prices: Mapped[List["ProductPrice"]]      = relationship(back_populates="product", cascade="all, delete-orphan")
+    product_discounts: Mapped[List["ProductDiscount"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+    price_history: Mapped[List["PriceHistory"]]       = relationship(back_populates="product")
 
     def __repr__(self):
         return f"<Product {self.sku}: {self.name}>"
@@ -260,6 +278,51 @@ class ProductImage(Base):
     sort_order : Mapped[int]           = mapped_column(Integer, default=0)
 
     product : Mapped["Product"] = relationship(back_populates="images")
+
+
+class ProductPrice(Base):
+    __tablename__ = "product_prices"
+    __table_args__ = (
+        UniqueConstraint("product_id", "customer_group_id", "min_quantity", name="product_prices_unique_combo"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    customer_group_id: Mapped[int] = mapped_column(ForeignKey("customer_groups.id", ondelete="CASCADE"), nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    min_quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now(), nullable=False)
+
+    product: Mapped["Product"] = relationship(back_populates="product_prices")
+    customer_group: Mapped["CustomerGroup"] = relationship(back_populates="product_prices")
+
+
+class ProductDiscount(Base):
+    __tablename__ = "product_discounts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    discount_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    discount_value: Mapped[float] = mapped_column(Float, nullable=False)
+    start_date: Mapped[Optional[datetime]] = mapped_column()
+    end_date: Mapped[Optional[datetime]] = mapped_column()
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    product: Mapped["Product"] = relationship(back_populates="product_discounts")
+
+
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    old_price: Mapped[float] = mapped_column(Float, nullable=False)
+    new_price: Mapped[float] = mapped_column(Float, nullable=False)
+    changed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    changed_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
+
+    product: Mapped["Product"] = relationship(back_populates="price_history")
+    changed_by_user: Mapped[Optional["User"]] = relationship("User")
 
 
 # ============================================================

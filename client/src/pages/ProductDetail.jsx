@@ -2,6 +2,7 @@ import { Heart, Minus, Plus, ShoppingCart } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../api';
+import { useEffectivePrice } from '../hooks/useProductPrices';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useWishlist } from '../contexts/WishlistContext';
@@ -53,6 +54,7 @@ export default function ProductDetail() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [wishlistMessage, setWishlistMessage] = useState('');
+  const { data: effectivePricing } = useEffectivePrice(id, quantity);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -122,6 +124,9 @@ export default function ProductDetail() {
   const normalizedQuantity = Math.min(quantity, Math.max(availableQuantity || 1, 1));
 
   const liked = isWishlisted(product.id);
+  const effectivePrice = Number(effectivePricing?.effective_price ?? product.effective_price ?? product.price);
+  const basePrice = Number(effectivePricing?.base_price ?? product.price);
+  const hasPersonalPrice = effectivePrice < basePrice;
 
   return (
     <div className="page-shell">
@@ -158,8 +163,13 @@ export default function ProductDetail() {
           <p className="mt-5 text-sm leading-7 text-slate-600 dark:text-slate-300">{product.description || 'Опис для цього товару ще додається.'}</p>
 
           <div className="mt-8 flex items-end gap-4">
-            <span className="text-4xl font-black text-amber-600 dark:text-amber-300">{formatPrice(product.price)}</span>
-            {product.old_price ? <span className="pb-1 text-lg text-slate-400 line-through">{formatPrice(product.old_price)}</span> : null}
+            <span className="text-4xl font-black text-amber-600 dark:text-amber-300">{formatPrice(effectivePrice)}</span>
+            {hasPersonalPrice ? <span className="pb-1 text-lg text-slate-400 line-through">{formatPrice(basePrice)}</span> : null}
+            {effectivePricing?.group_name ? (
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                {effectivePricing.group_name}
+              </span>
+            ) : null}
           </div>
 
           <div className="mt-4 inline-flex flex-wrap items-center gap-2">

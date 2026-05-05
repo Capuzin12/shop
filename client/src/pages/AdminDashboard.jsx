@@ -9,6 +9,8 @@ import AdminInventory from './admin/AdminInventory';
 import AdminOrders from './admin/AdminOrders';
 import AdminPromoCodes from './admin/AdminPromoCodes';
 import AdminProducts from './admin/AdminProducts';
+import AdminCustomerGroups from './admin/AdminCustomerGroups';
+import AdminPriceHistory from './admin/AdminPriceHistory';
 import AdminSuppliers from './admin/AdminSuppliers';
 import AdminUsers from './admin/AdminUsers';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,6 +25,8 @@ const navItems = {
     { to: '/admin/promo-codes', label: 'Промокоди', icon: PackageCheck },
     { to: '/admin/orders', label: 'Замовлення', icon: PackageCheck },
     { to: '/admin/users', label: 'Користувачі', icon: Users },
+    { to: '/admin/customer-groups', label: 'Групи клієнтів', icon: Users },
+    { to: '/admin/price-history', label: 'Історія цін', icon: BadgePercent },
     { to: '/admin/inventory', label: 'Склад', icon: Shield },
   ],
   content_manager: [
@@ -277,6 +281,8 @@ export default function AdminDashboard() {
         {availableNavItems.some((item) => item.to === '/admin/promo-codes') && <Route path="promo-codes" element={<AdminPromoCodes />} />}
         {availableNavItems.some((item) => item.to === '/admin/orders') && <Route path="orders" element={<AdminOrders />} />}
         {availableNavItems.some((item) => item.to === '/admin/users') && <Route path="users" element={<AdminUsers />} />}
+        {availableNavItems.some((item) => item.to === '/admin/customer-groups') && <Route path="customer-groups" element={<AdminCustomerGroups />} />}
+        {availableNavItems.some((item) => item.to === '/admin/price-history') && <Route path="price-history" element={<AdminPriceHistory />} />}
         {availableNavItems.some((item) => item.to === '/admin/inventory') && <Route path="inventory" element={<AdminInventory />} />}
         {firstSectionPath ? <Route path="*" element={<Navigate to={firstSectionPath.replace('/admin/', '')} replace />} /> : null}
       </Routes>

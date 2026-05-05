@@ -527,6 +527,11 @@ export default function Catalog() {
                           <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${hasCardImage ? 'bg-black/45 text-white' : 'bg-white/80 text-slate-500 dark:bg-white/10 dark:text-slate-300'}`}>
                             {product.sku}
                           </span>
+                          {product.active_discount ? (
+                            <span className="rounded-full bg-rose-500 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white">
+                              АКЦIЯ
+                            </span>
+                          ) : null}
                           <button
                             onClick={() => toggleWishlist(product)}
                             className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl transition ${
@@ -561,8 +566,8 @@ export default function Catalog() {
                         <div className="min-w-0">
                           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Ціна</p>
                           <div className="flex items-center gap-2">
-                            <span className="text-2xl font-black text-amber-600 dark:text-amber-300">{formatPrice(product.price)}</span>
-                            {product.old_price ? <span className="text-sm text-slate-400 line-through">{formatPrice(product.old_price)}</span> : null}
+                            <span className="text-2xl font-black text-amber-600 dark:text-amber-300">{formatPrice(product.effective_price ?? product.price)}</span>
+                            {(product.effective_price ?? product.price) < product.price ? <span className="text-sm text-slate-400 line-through">{formatPrice(product.price)}</span> : null}
                           </div>
                         </div>
                         <span className={`inline-flex max-w-full rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${stock.tone === 'emerald' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : stock.tone === 'amber' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'}`}>
