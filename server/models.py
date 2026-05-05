@@ -1,6 +1,13 @@
 """
 БудМарт — SQLAlchemy моделі для FastAPI
 Файл: server/models.py
+
+ЗМІНИ vs попередня версія:
+  - Видалено Product.old_price (колонка відсутня в новій схемі БД)
+  - Видалено Product.discount_percent property (залежав від old_price)
+  - DiscountType: значення змінено з percent/fixed → PERCENTAGE/FIXED
+    (щоб відповідати CHECK constraint у promo_codes та product_discounts)
+  - PromoCode.discount_type тепер використовує оновлений DiscountType
 """
 
 from datetime import datetime
@@ -25,7 +32,7 @@ class Base(DeclarativeBase):
 
 
 def _py_enum(enum_cls: type[enum.Enum], **kwargs):
-    """Переліки як TEXT для SQLite (сумісно з schema.sql)."""
+    """Переліки як TEXT для PostgreSQL/SQLite."""
     return SAEnum(
         enum_cls,
         native_enum=False,
@@ -40,12 +47,12 @@ def _py_enum(enum_cls: type[enum.Enum], **kwargs):
 # ============================================================
 
 class UserRole(str, enum.Enum):
-    customer = "customer"
-    content_manager = "content_manager"
+    customer          = "customer"
+    content_manager   = "content_manager"
     warehouse_manager = "warehouse_manager"
-    sales_processor = "sales_processor"
-    manager  = "manager"
-    admin    = "admin"
+    sales_processor   = "sales_processor"
+    manager           = "manager"
+    admin             = "admin"
 
 class ProductBadge(str, enum.Enum):
     new  = "new"
@@ -92,39 +99,53 @@ class SupplyStatus(str, enum.Enum):
     received   = "received"
     cancelled  = "cancelled"
 
+# ВИПРАВЛЕНО: значення приведено до формату БД (PERCENTAGE / FIXED)
+# Стара схема: percent / fixed → нова: PERCENTAGE / FIXED
 class DiscountType(str, enum.Enum):
-    percent = "percent"
-    fixed   = "fixed"
+    percentage = "PERCENTAGE"
+    fixed      = "FIXED"
 
 
 # ============================================================
 # 1. КОРИСТУВАЧІ
 # ============================================================
 
+class CustomerGroup(Base):
+    __tablename__ = "customer_groups"
+
+    id          : Mapped[int]           = mapped_column(primary_key=True)
+    name        : Mapped[str]           = mapped_column(String(255), nullable=False, unique=True)
+    description : Mapped[Optional[str]] = mapped_column(Text)
+    is_default  : Mapped[bool]          = mapped_column(Boolean, default=False, nullable=False)
+    created_at  : Mapped[datetime]      = mapped_column(default=func.now(), nullable=False)
+
+    users          : Mapped[List["User"]]         = relationship(back_populates="customer_group")
+    product_prices : Mapped[List["ProductPrice"]] = relationship(back_populates="customer_group", cascade="all, delete-orphan")
+
+
 class User(Base):
     __tablename__ = "users"
 
-    id            : Mapped[int]           = mapped_column(primary_key=True)
-    email         : Mapped[str]           = mapped_column(String(255), unique=True, nullable=False)
-    password_hash : Mapped[str]           = mapped_column(String(255), nullable=False)
-    first_name    : Mapped[str]           = mapped_column(String(100), nullable=False)
-    last_name     : Mapped[str]           = mapped_column(String(100), nullable=False)
-    phone         : Mapped[Optional[str]] = mapped_column(String(20))
-    customer_group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("customer_groups.id", ondelete="SET NULL"))
-    role          : Mapped[UserRole]      = mapped_column(_py_enum(UserRole), default=UserRole.customer)
-    is_active     : Mapped[bool]          = mapped_column(Boolean, default=True)
-    created_at    : Mapped[datetime]      = mapped_column(default=func.now())
-    updated_at    : Mapped[datetime]      = mapped_column(default=func.now(), onupdate=func.now())
+    id                : Mapped[int]           = mapped_column(primary_key=True)
+    email             : Mapped[str]           = mapped_column(String(255), unique=True, nullable=False)
+    password_hash     : Mapped[str]           = mapped_column(String(255), nullable=False)
+    first_name        : Mapped[str]           = mapped_column(String(100), nullable=False)
+    last_name         : Mapped[str]           = mapped_column(String(100), nullable=False)
+    phone             : Mapped[Optional[str]] = mapped_column(String(20))
+    customer_group_id : Mapped[Optional[int]] = mapped_column(ForeignKey("customer_groups.id", ondelete="SET NULL"))
+    role              : Mapped[UserRole]      = mapped_column(_py_enum(UserRole), default=UserRole.customer)
+    is_active         : Mapped[bool]          = mapped_column(Boolean, default=True)
+    created_at        : Mapped[datetime]      = mapped_column(default=func.now())
+    updated_at        : Mapped[datetime]      = mapped_column(default=func.now(), onupdate=func.now())
 
-    # Зв'язки
-    addresses  : Mapped[List["Address"]]  = relationship(back_populates="user", cascade="all, delete-orphan")
-    orders     : Mapped[List["Order"]]    = relationship(back_populates="user")
-    reviews    : Mapped[List["Review"]]   = relationship(back_populates="user")
-    wishlist   : Mapped[List["Wishlist"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    carts      : Mapped[List["Cart"]]     = relationship(back_populates="user", cascade="all, delete-orphan")
-    notifications: Mapped[List["Notification"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    order_messages: Mapped[List["OrderMessage"]] = relationship(back_populates="sender")
-    customer_group: Mapped[Optional["CustomerGroup"]] = relationship(back_populates="users")
+    addresses      : Mapped[List["Address"]]      = relationship(back_populates="user", cascade="all, delete-orphan")
+    orders         : Mapped[List["Order"]]        = relationship(back_populates="user")
+    reviews        : Mapped[List["Review"]]       = relationship(back_populates="user")
+    wishlist       : Mapped[List["Wishlist"]]     = relationship(back_populates="user", cascade="all, delete-orphan")
+    carts          : Mapped[List["Cart"]]         = relationship(back_populates="user", cascade="all, delete-orphan")
+    notifications  : Mapped[List["Notification"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    order_messages : Mapped[List["OrderMessage"]] = relationship(back_populates="sender")
+    customer_group : Mapped[Optional["CustomerGroup"]] = relationship(back_populates="users")
 
     def __repr__(self):
         return f"<User {self.email}>"
@@ -144,21 +165,8 @@ class Address(Base):
     is_default  : Mapped[bool]          = mapped_column(Boolean, default=False)
     created_at  : Mapped[datetime]      = mapped_column(default=func.now())
 
-    user   : Mapped["User"]         = relationship(back_populates="addresses")
-    orders : Mapped[List["Order"]]  = relationship(back_populates="address")
-
-
-class CustomerGroup(Base):
-    __tablename__ = "customer_groups"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
-
-    users: Mapped[List["User"]] = relationship(back_populates="customer_group")
-    product_prices: Mapped[List["ProductPrice"]] = relationship(back_populates="customer_group", cascade="all, delete-orphan")
+    user   : Mapped["User"]        = relationship(back_populates="addresses")
+    orders : Mapped[List["Order"]] = relationship(back_populates="address")
 
 
 # ============================================================
@@ -179,9 +187,9 @@ class Category(Base):
     is_active   : Mapped[bool]          = mapped_column(Boolean, default=True)
     created_at  : Mapped[datetime]      = mapped_column(default=func.now())
 
-    parent   : Mapped[Optional["Category"]]  = relationship(back_populates="children", remote_side="Category.id")
-    children : Mapped[List["Category"]]      = relationship(back_populates="parent")
-    products : Mapped[List["Product"]]       = relationship(back_populates="category")
+    parent   : Mapped[Optional["Category"]] = relationship(back_populates="children", remote_side="Category.id")
+    children : Mapped[List["Category"]]     = relationship(back_populates="parent")
+    products : Mapped[List["Product"]]      = relationship(back_populates="category")
 
     def __repr__(self):
         return f"<Category {self.name}>"
@@ -214,7 +222,7 @@ class Product(Base):
     sku              : Mapped[str]                    = mapped_column(String(100), unique=True, nullable=False)
     description      : Mapped[Optional[str]]          = mapped_column(Text)
     price            : Mapped[float]                  = mapped_column(Float, nullable=False)
-    old_price        : Mapped[Optional[float]]        = mapped_column(Float)
+    # old_price ВИДАЛЕНО — використовуйте product_discounts
     unit             : Mapped[str]                    = mapped_column(String(20), default="шт")
     weight_kg        : Mapped[Optional[float]]        = mapped_column(Float)
     icon             : Mapped[Optional[str]]          = mapped_column(String(50))
@@ -226,25 +234,19 @@ class Product(Base):
     created_at       : Mapped[datetime]               = mapped_column(default=func.now())
     updated_at       : Mapped[datetime]               = mapped_column(default=func.now(), onupdate=func.now())
 
-    category   : Mapped["Category"]                   = relationship(back_populates="products")
-    brand      : Mapped[Optional["Brand"]]            = relationship(back_populates="products")
-    attributes : Mapped[List["ProductAttribute"]]     = relationship(back_populates="product", cascade="all, delete-orphan", order_by="ProductAttribute.sort_order")
-    images     : Mapped[List["ProductImage"]]         = relationship(back_populates="product", cascade="all, delete-orphan", order_by="ProductImage.sort_order")
-    inventory  : Mapped[Optional["Inventory"]]        = relationship(back_populates="product", uselist=False, cascade="all, delete-orphan")
-    reviews    : Mapped[List["Review"]]               = relationship(back_populates="product")
-    wishlist   : Mapped[List["Wishlist"]]             = relationship(back_populates="product")
-    product_prices: Mapped[List["ProductPrice"]]      = relationship(back_populates="product", cascade="all, delete-orphan")
-    product_discounts: Mapped[List["ProductDiscount"]] = relationship(back_populates="product", cascade="all, delete-orphan")
-    price_history: Mapped[List["PriceHistory"]]       = relationship(back_populates="product")
+    category          : Mapped["Category"]                    = relationship(back_populates="products")
+    brand             : Mapped[Optional["Brand"]]             = relationship(back_populates="products")
+    attributes        : Mapped[List["ProductAttribute"]]      = relationship(back_populates="product", cascade="all, delete-orphan", order_by="ProductAttribute.sort_order")
+    images            : Mapped[List["ProductImage"]]          = relationship(back_populates="product", cascade="all, delete-orphan", order_by="ProductImage.sort_order")
+    inventory         : Mapped[Optional["Inventory"]]         = relationship(back_populates="product", uselist=False, cascade="all, delete-orphan")
+    reviews           : Mapped[List["Review"]]                = relationship(back_populates="product")
+    wishlist          : Mapped[List["Wishlist"]]              = relationship(back_populates="product")
+    product_prices    : Mapped[List["ProductPrice"]]          = relationship(back_populates="product", cascade="all, delete-orphan")
+    product_discounts : Mapped[List["ProductDiscount"]]       = relationship(back_populates="product", cascade="all, delete-orphan")
+    price_history     : Mapped[List["PriceHistory"]]          = relationship(back_populates="product")
 
     def __repr__(self):
         return f"<Product {self.sku}: {self.name}>"
-
-    @property
-    def discount_percent(self) -> Optional[int]:
-        if self.old_price and self.old_price > self.price:
-            return round((1 - self.price / self.old_price) * 100)
-        return None
 
     @property
     def avg_rating(self) -> Optional[float]:
@@ -286,43 +288,43 @@ class ProductPrice(Base):
         UniqueConstraint("product_id", "customer_group_id", "min_quantity", name="product_prices_unique_combo"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-    customer_group_id: Mapped[int] = mapped_column(ForeignKey("customer_groups.id", ondelete="CASCADE"), nullable=False)
-    price: Mapped[float] = mapped_column(Float, nullable=False)
-    min_quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now(), nullable=False)
+    id                : Mapped[int]      = mapped_column(primary_key=True)
+    product_id        : Mapped[int]      = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    customer_group_id : Mapped[int]      = mapped_column(ForeignKey("customer_groups.id", ondelete="CASCADE"), nullable=False)
+    price             : Mapped[float]    = mapped_column(Float, nullable=False)
+    min_quantity      : Mapped[int]      = mapped_column(Integer, default=1, nullable=False)
+    updated_at        : Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now(), nullable=False)
 
-    product: Mapped["Product"] = relationship(back_populates="product_prices")
-    customer_group: Mapped["CustomerGroup"] = relationship(back_populates="product_prices")
+    product        : Mapped["Product"]       = relationship(back_populates="product_prices")
+    customer_group : Mapped["CustomerGroup"] = relationship(back_populates="product_prices")
 
 
 class ProductDiscount(Base):
     __tablename__ = "product_discounts"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-    discount_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    discount_value: Mapped[float] = mapped_column(Float, nullable=False)
-    start_date: Mapped[Optional[datetime]] = mapped_column()
-    end_date: Mapped[Optional[datetime]] = mapped_column()
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    id             : Mapped[int]                = mapped_column(primary_key=True)
+    product_id     : Mapped[int]                = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    discount_type  : Mapped[str]                = mapped_column(String(32), nullable=False)  # "PERCENTAGE" | "FIXED_PRICE"
+    discount_value : Mapped[float]              = mapped_column(Float, nullable=False)
+    start_date     : Mapped[Optional[datetime]] = mapped_column()
+    end_date       : Mapped[Optional[datetime]] = mapped_column()
+    is_active      : Mapped[bool]               = mapped_column(Boolean, default=True, nullable=False)
 
-    product: Mapped["Product"] = relationship(back_populates="product_discounts")
+    product : Mapped["Product"] = relationship(back_populates="product_discounts")
 
 
 class PriceHistory(Base):
     __tablename__ = "price_history"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-    old_price: Mapped[float] = mapped_column(Float, nullable=False)
-    new_price: Mapped[float] = mapped_column(Float, nullable=False)
-    changed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    changed_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
+    id         : Mapped[int]           = mapped_column(primary_key=True)
+    product_id : Mapped[int]           = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    old_price  : Mapped[float]         = mapped_column(Float, nullable=False)
+    new_price  : Mapped[float]         = mapped_column(Float, nullable=False)
+    changed_by : Mapped[Optional[int]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    changed_at : Mapped[datetime]      = mapped_column(default=func.now(), nullable=False)
 
-    product: Mapped["Product"] = relationship(back_populates="price_history")
-    changed_by_user: Mapped[Optional["User"]] = relationship("User")
+    product          : Mapped["Product"]       = relationship(back_populates="price_history")
+    changed_by_user  : Mapped[Optional["User"]] = relationship("User")
 
 
 # ============================================================
@@ -332,16 +334,16 @@ class PriceHistory(Base):
 class Inventory(Base):
     __tablename__ = "inventory"
 
-    id                  : Mapped[int]           = mapped_column(primary_key=True)
-    product_id          : Mapped[int]           = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), unique=True)
-    quantity            : Mapped[int]           = mapped_column(Integer, default=0)
-    min_quantity        : Mapped[int]           = mapped_column(Integer, default=0)
-    max_quantity        : Mapped[int]           = mapped_column(Integer, default=9999)
-    min_quantity_alert  : Mapped[Optional[int]] = mapped_column(Integer, default=None)
-    location            : Mapped[Optional[str]] = mapped_column(String(50))
-    updated_at          : Mapped[datetime]      = mapped_column(default=func.now(), onupdate=func.now())
+    id                 : Mapped[int]           = mapped_column(primary_key=True)
+    product_id         : Mapped[int]           = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), unique=True)
+    quantity           : Mapped[int]           = mapped_column(Integer, default=0)
+    min_quantity       : Mapped[int]           = mapped_column(Integer, default=0)
+    max_quantity       : Mapped[int]           = mapped_column(Integer, default=9999)
+    min_quantity_alert : Mapped[Optional[int]] = mapped_column(Integer, default=None)
+    location           : Mapped[Optional[str]] = mapped_column(String(50))
+    updated_at         : Mapped[datetime]      = mapped_column(default=func.now(), onupdate=func.now())
 
-    product: Mapped["Product"] = relationship(back_populates="inventory")
+    product : Mapped["Product"] = relationship(back_populates="inventory")
 
     @property
     def status(self) -> str:
@@ -388,8 +390,8 @@ class SupplyOrder(Base):
     created_by     : Mapped[Optional[int]]      = mapped_column(ForeignKey("users.id"))
     created_at     : Mapped[datetime]           = mapped_column(default=func.now())
 
-    supplier : Mapped["Supplier"]               = relationship(back_populates="supply_orders")
-    items    : Mapped[List["SupplyOrderItem"]]  = relationship(back_populates="supply_order", cascade="all, delete-orphan")
+    supplier : Mapped["Supplier"]              = relationship(back_populates="supply_orders")
+    items    : Mapped[List["SupplyOrderItem"]] = relationship(back_populates="supply_order", cascade="all, delete-orphan")
 
 
 class SupplyOrderItem(Base):
@@ -424,7 +426,7 @@ class InventoryMovement(Base):
     created_by      : Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     created_at      : Mapped[datetime]      = mapped_column(default=func.now())
 
-    product: Mapped["Product"] = relationship()
+    product : Mapped["Product"] = relationship()
 
 
 # ============================================================
@@ -434,34 +436,32 @@ class InventoryMovement(Base):
 class Order(Base):
     __tablename__ = "orders"
 
-    id              : Mapped[int]            = mapped_column(primary_key=True)
-    user_id         : Mapped[Optional[int]]  = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    address_id      : Mapped[Optional[int]]  = mapped_column(ForeignKey("addresses.id", ondelete="SET NULL"))
-    contact_name    : Mapped[str]            = mapped_column(String(200), nullable=False)
-    contact_phone   : Mapped[str]            = mapped_column(String(20), nullable=False)
-    contact_email   : Mapped[Optional[str]]  = mapped_column(String(255))
-    delivery_city   : Mapped[Optional[str]]  = mapped_column(String(100))
-    delivery_address: Mapped[Optional[str]]  = mapped_column(Text)
-    status          : Mapped[OrderStatus]    = mapped_column(_py_enum(OrderStatus), default=OrderStatus.new)
-    subtotal        : Mapped[float]          = mapped_column(Float, default=0)
-    delivery_cost   : Mapped[float]          = mapped_column(Float, default=0)
-    discount        : Mapped[float]          = mapped_column(Float, default=0)
-    total           : Mapped[float]          = mapped_column(Float, default=0)
-    delivery_method : Mapped[DeliveryMethod] = mapped_column(
-        _py_enum(DeliveryMethod), default=DeliveryMethod.nova_poshta
-    )
-    tracking_number : Mapped[Optional[str]]  = mapped_column(String(100))
-    payment_method  : Mapped[PaymentMethod]  = mapped_column(_py_enum(PaymentMethod), default=PaymentMethod.card)
-    payment_status  : Mapped[PaymentStatus]  = mapped_column(_py_enum(PaymentStatus), default=PaymentStatus.pending)
-    promo_code_id   : Mapped[Optional[int]]  = mapped_column(ForeignKey("promo_codes.id"))
-    comment         : Mapped[Optional[str]]  = mapped_column(Text)
-    admin_note      : Mapped[Optional[str]]  = mapped_column(Text)
-    created_at      : Mapped[datetime]       = mapped_column(default=func.now())
-    updated_at      : Mapped[datetime]       = mapped_column(default=func.now(), onupdate=func.now())
+    id               : Mapped[int]            = mapped_column(primary_key=True)
+    user_id          : Mapped[Optional[int]]  = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    address_id       : Mapped[Optional[int]]  = mapped_column(ForeignKey("addresses.id", ondelete="SET NULL"))
+    contact_name     : Mapped[str]            = mapped_column(String(200), nullable=False)
+    contact_phone    : Mapped[str]            = mapped_column(String(20), nullable=False)
+    contact_email    : Mapped[Optional[str]]  = mapped_column(String(255))
+    delivery_city    : Mapped[Optional[str]]  = mapped_column(String(100))
+    delivery_address : Mapped[Optional[str]]  = mapped_column(Text)
+    status           : Mapped[OrderStatus]    = mapped_column(_py_enum(OrderStatus), default=OrderStatus.new)
+    subtotal         : Mapped[float]          = mapped_column(Float, default=0)
+    delivery_cost    : Mapped[float]          = mapped_column(Float, default=0)
+    discount         : Mapped[float]          = mapped_column(Float, default=0)
+    total            : Mapped[float]          = mapped_column(Float, default=0)
+    delivery_method  : Mapped[DeliveryMethod] = mapped_column(_py_enum(DeliveryMethod), default=DeliveryMethod.nova_poshta)
+    tracking_number  : Mapped[Optional[str]]  = mapped_column(String(100))
+    payment_method   : Mapped[PaymentMethod]  = mapped_column(_py_enum(PaymentMethod), default=PaymentMethod.card)
+    payment_status   : Mapped[PaymentStatus]  = mapped_column(_py_enum(PaymentStatus), default=PaymentStatus.pending)
+    promo_code_id    : Mapped[Optional[int]]  = mapped_column(ForeignKey("promo_codes.id"))
+    comment          : Mapped[Optional[str]]  = mapped_column(Text)
+    admin_note       : Mapped[Optional[str]]  = mapped_column(Text)
+    created_at       : Mapped[datetime]       = mapped_column(default=func.now())
+    updated_at       : Mapped[datetime]       = mapped_column(default=func.now(), onupdate=func.now())
 
-    user       : Mapped[Optional["User"]]      = relationship(back_populates="orders")
-    address    : Mapped[Optional["Address"]]   = relationship(back_populates="orders")
-    items      : Mapped[List["OrderItem"]]     = relationship(back_populates="order", cascade="all, delete-orphan")
+    user       : Mapped[Optional["User"]]     = relationship(back_populates="orders")
+    address    : Mapped[Optional["Address"]]  = relationship(back_populates="orders")
+    items      : Mapped[List["OrderItem"]]    = relationship(back_populates="order", cascade="all, delete-orphan")
     promo_code : Mapped[Optional["PromoCode"]] = relationship()
     movements  : Mapped[List["InventoryMovement"]] = relationship(
         primaryjoin="Order.id == InventoryMovement.order_id",
@@ -486,7 +486,7 @@ class OrderItem(Base):
     quantity     : Mapped[int]           = mapped_column(Integer, nullable=False)
     unit_price   : Mapped[float]         = mapped_column(Float, nullable=False)
 
-    order   : Mapped["Order"]           = relationship(back_populates="items")
+    order   : Mapped["Order"]             = relationship(back_populates="items")
     product : Mapped[Optional["Product"]] = relationship()
 
     @property
@@ -497,15 +497,15 @@ class OrderItem(Base):
 class OrderMessage(Base):
     __tablename__ = "order_messages"
 
-    id         : Mapped[int]      = mapped_column(primary_key=True)
-    order_id   : Mapped[int]      = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
-    sender_id  : Mapped[int]      = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    body       : Mapped[str]      = mapped_column(Text, nullable=False)
-    is_from_staff: Mapped[bool]   = mapped_column(Boolean, default=False)
-    created_at : Mapped[datetime] = mapped_column(default=func.now())
+    id            : Mapped[int]      = mapped_column(primary_key=True)
+    order_id      : Mapped[int]      = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
+    sender_id     : Mapped[int]      = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    body          : Mapped[str]      = mapped_column(Text, nullable=False)
+    is_from_staff : Mapped[bool]     = mapped_column(Boolean, default=False)
+    created_at    : Mapped[datetime] = mapped_column(default=func.now())
 
     order  : Mapped["Order"] = relationship(back_populates="messages")
-    sender : Mapped["User"] = relationship(back_populates="order_messages")
+    sender : Mapped["User"]  = relationship(back_populates="order_messages")
 
 
 # ============================================================
@@ -539,6 +539,7 @@ class PromoCode(Base):
     id               : Mapped[int]                = mapped_column(primary_key=True)
     code             : Mapped[str]                = mapped_column(String(50), unique=True, nullable=False)
     description      : Mapped[Optional[str]]      = mapped_column(String(255))
+    # ВИПРАВЛЕНО: тип використовує DiscountType з новими значеннями PERCENTAGE / FIXED
     discount_type    : Mapped[DiscountType]       = mapped_column(_py_enum(DiscountType), nullable=False)
     discount_value   : Mapped[float]              = mapped_column(Float, nullable=False)
     min_order_amount : Mapped[float]              = mapped_column(Float, default=0)
@@ -564,7 +565,8 @@ class PromoCode(Base):
         return True, "OK"
 
     def calculate_discount(self, order_amount: float) -> float:
-        if self.discount_type == DiscountType.percent:
+        # ВИПРАВЛЕНО: порівнюємо з новими значеннями enum
+        if self.discount_type == DiscountType.percentage:
             return round(order_amount * self.discount_value / 100, 2)
         return min(self.discount_value, order_amount)
 
@@ -576,26 +578,26 @@ class PromoCode(Base):
 class Cart(Base):
     __tablename__ = "carts"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
+    id         : Mapped[int]      = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id    : Mapped[int]      = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at : Mapped[datetime] = mapped_column(default=func.now())
+    updated_at : Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
 
-    user: Mapped["User"] = relationship("User", back_populates="carts")
-    items: Mapped[List["CartItem"]] = relationship("CartItem", back_populates="cart", cascade="all, delete-orphan")
+    user  : Mapped["User"]          = relationship("User", back_populates="carts")
+    items : Mapped[List["CartItem"]] = relationship("CartItem", back_populates="cart", cascade="all, delete-orphan")
 
 
 class CartItem(Base):
     __tablename__ = "cart_items"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    cart_id: Mapped[int] = mapped_column(Integer, ForeignKey("carts.id"), nullable=False)
-    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    added_at: Mapped[datetime] = mapped_column(default=func.now())
+    id         : Mapped[int]      = mapped_column(Integer, primary_key=True, autoincrement=True)
+    cart_id    : Mapped[int]      = mapped_column(Integer, ForeignKey("carts.id"), nullable=False)
+    product_id : Mapped[int]      = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
+    quantity   : Mapped[int]      = mapped_column(Integer, nullable=False, default=1)
+    added_at   : Mapped[datetime] = mapped_column(default=func.now())
 
-    cart: Mapped["Cart"] = relationship("Cart", back_populates="items")
-    product: Mapped["Product"] = relationship("Product")
+    cart    : Mapped["Cart"]    = relationship("Cart", back_populates="items")
+    product : Mapped["Product"] = relationship("Product")
 
 
 # ============================================================
@@ -603,28 +605,28 @@ class CartItem(Base):
 # ============================================================
 
 class NotificationType(str, enum.Enum):
-    low_stock = "low_stock"
-    order_status = "order_status"
+    low_stock      = "low_stock"
+    order_status   = "order_status"
     supply_arrival = "supply_arrival"
-    system = "system"
+    system         = "system"
 
 
 class Notification(Base):
     __tablename__ = "notifications"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    type: Mapped[NotificationType] = mapped_column(_py_enum(NotificationType), nullable=False)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    target_path: Mapped[Optional[str]] = mapped_column(String(255))
-    target_product_id: Mapped[Optional[int]] = mapped_column(Integer)
-    target_inventory_id: Mapped[Optional[int]] = mapped_column(Integer)
-    target_order_id: Mapped[Optional[int]] = mapped_column(Integer)
-    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(default=func.now())
+    id                  : Mapped[int]           = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id             : Mapped[int]           = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    type                : Mapped[NotificationType] = mapped_column(_py_enum(NotificationType), nullable=False)
+    title               : Mapped[str]           = mapped_column(String(255), nullable=False)
+    message             : Mapped[str]           = mapped_column(Text, nullable=False)
+    target_path         : Mapped[Optional[str]] = mapped_column(String(255))
+    target_product_id   : Mapped[Optional[int]] = mapped_column(Integer)
+    target_inventory_id : Mapped[Optional[int]] = mapped_column(Integer)
+    target_order_id     : Mapped[Optional[int]] = mapped_column(Integer)
+    is_read             : Mapped[bool]          = mapped_column(Boolean, default=False)
+    created_at          : Mapped[datetime]      = mapped_column(default=func.now())
 
-    user: Mapped["User"] = relationship("User", back_populates="notifications")
+    user : Mapped["User"] = relationship("User", back_populates="notifications")
 
 
 # ============================================================
@@ -633,16 +635,15 @@ class Notification(Base):
 
 class Wishlist(Base):
     __tablename__ = "wishlists"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
-    added_at: Mapped[datetime] = mapped_column(default=func.now())
-
-    user: Mapped["User"] = relationship("User", back_populates="wishlist")
-    product: Mapped["Product"] = relationship("Product")
-
     __table_args__ = (UniqueConstraint('user_id', 'product_id', name='unique_user_product_wishlist'),)
+
+    id         : Mapped[int]      = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id    : Mapped[int]      = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    product_id : Mapped[int]      = mapped_column(Integer, ForeignKey("products.id"), nullable=False)
+    added_at   : Mapped[datetime] = mapped_column(default=func.now())
+
+    user    : Mapped["User"]    = relationship("User", back_populates="wishlist")
+    product : Mapped["Product"] = relationship("Product")
 
 
 # ============================================================
@@ -652,34 +653,32 @@ class Wishlist(Base):
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
-    action: Mapped[str] = mapped_column(String(50), nullable=False)  # create, update, delete, status_change
-    resource_type: Mapped[str] = mapped_column(String(50), nullable=False)  # user, product, order, inventory
-    resource_id: Mapped[Optional[int]] = mapped_column(Integer)
-    changes_json: Mapped[Optional[str]] = mapped_column(Text)  # JSON diff of before/after
-    request_id: Mapped[Optional[str]] = mapped_column(String(36))  # UUID from request
-    ip_address: Mapped[Optional[str]] = mapped_column(String(45))  # IPv4 or IPv6
-    details: Mapped[Optional[str]] = mapped_column(Text)  # Additional context
-    created_at: Mapped[datetime] = mapped_column(default=func.now(), index=True)
-    
-    user: Mapped[Optional["User"]] = relationship("User")
+    id            : Mapped[int]           = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id       : Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    action        : Mapped[str]           = mapped_column(String(50), nullable=False)
+    resource_type : Mapped[str]           = mapped_column(String(50), nullable=False)
+    resource_id   : Mapped[Optional[int]] = mapped_column(Integer)
+    changes_json  : Mapped[Optional[str]] = mapped_column(Text)
+    request_id    : Mapped[Optional[str]] = mapped_column(String(36))
+    ip_address    : Mapped[Optional[str]] = mapped_column(String(45))
+    details       : Mapped[Optional[str]] = mapped_column(Text)
+    created_at    : Mapped[datetime]      = mapped_column(default=func.now(), index=True)
+
+    user : Mapped[Optional["User"]] = relationship("User")
 
 
 class ClientError(Base):
     __tablename__ = "client_errors"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
-    path: Mapped[Optional[str]] = mapped_column(String(255))
-    message: Mapped[str] = mapped_column(String(500), nullable=False)
-    stack: Mapped[Optional[str]] = mapped_column(Text)
-    component_stack: Mapped[Optional[str]] = mapped_column(Text)
-    request_id: Mapped[Optional[str]] = mapped_column(String(64))
-    user_agent: Mapped[Optional[str]] = mapped_column(String(500))
-    ip_address: Mapped[Optional[str]] = mapped_column(String(45))
-    created_at: Mapped[datetime] = mapped_column(default=func.now(), index=True)
+    id              : Mapped[int]           = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id         : Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    path            : Mapped[Optional[str]] = mapped_column(String(255))
+    message         : Mapped[str]           = mapped_column(String(500), nullable=False)
+    stack           : Mapped[Optional[str]] = mapped_column(Text)
+    component_stack : Mapped[Optional[str]] = mapped_column(Text)
+    request_id      : Mapped[Optional[str]] = mapped_column(String(64))
+    user_agent      : Mapped[Optional[str]] = mapped_column(String(500))
+    ip_address      : Mapped[Optional[str]] = mapped_column(String(45))
+    created_at      : Mapped[datetime]      = mapped_column(default=func.now(), index=True)
 
-    user: Mapped[Optional["User"]] = relationship("User")
-
-
+    user : Mapped[Optional["User"]] = relationship("User")
