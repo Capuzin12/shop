@@ -466,6 +466,18 @@ def resolve_effective_product_price(
     }
 
 
+def get_presentational_old_price(pricing: dict) -> float | None:
+    """Keep old_price in API responses without relying on a removed DB column."""
+    base_for_display = pricing.get("group_price")
+    if base_for_display is None:
+        base_for_display = pricing.get("base_price")
+    effective_price = pricing.get("effective_price")
+    if pricing.get("active_discount") and base_for_display is not None and effective_price is not None:
+        if float(effective_price) < float(base_for_display):
+            return float(base_for_display)
+    return None
+
+
 def serialize_category(category: Category):
     return {
         "id": category.id,
@@ -701,7 +713,7 @@ def serialize_product_summary(product: Product):
         "sku": product.sku,
         "description": product.description,
         "price": product.price,
-        "old_price": product.old_price,
+        "old_price": None,
         "unit": product.unit,
         "icon": product.icon,
         "badge": product.badge.value if product.badge and hasattr(product.badge, "value") else str(product.badge) if product.badge else None,
@@ -803,7 +815,7 @@ def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[d
 
     normalized: dict = {}
     editable = {
-        "category_id", "brand_id", "name", "slug", "sku", "description", "price", "old_price", "unit",
+        "category_id", "brand_id", "name", "slug", "sku", "description", "price", "unit",
         "weight_kg", "icon", "badge", "is_active", "is_featured", "meta_title", "meta_description",
     }
     for key in editable:
@@ -829,9 +841,9 @@ def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[d
                 if parsed <= 0:
                     raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле має бути більше за 0"})
                 normalized[key] = parsed
-        elif key in {"price", "old_price", "weight_kg"}:
+        elif key in {"price", "weight_kg"}:
             if value in (None, ""):
-                if key in {"old_price", "weight_kg"}:
+                if key == "weight_kg":
                     normalized[key] = None
                 continue
             try:
@@ -840,7 +852,7 @@ def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[d
                 raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле має бути числом"})
             if key == "price" and parsed <= 0:
                 raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Ціна має бути більшою за 0"})
-            if key in {"old_price", "weight_kg"} and parsed < 0:
+            if key == "weight_kg" and parsed < 0:
                 raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле не може бути від'ємним"})
             normalized[key] = parsed
         elif key in {"is_active", "is_featured"}:
@@ -1983,8 +1995,17 @@ def get_products(
         # For now, sort by featured as proxy for popularity
         order = Product.is_featured.desc()
     elif sort_by == "discount":
-        # Sort by discount percentage (old_price - price) / old_price
-        order = func.coalesce((Product.old_price - Product.price) / Product.old_price, 0).desc() if sort_order == "desc" else func.coalesce((Product.old_price - Product.price) / Product.old_price, 0).asc()
+        discount_rank = (
+            select(func.max(ProductDiscount.discount_value))
+            .where(
+                ProductDiscount.product_id == Product.id,
+                ProductDiscount.is_active == True,
+                or_(ProductDiscount.start_date.is_(None), ProductDiscount.start_date <= datetime.utcnow()),
+                or_(ProductDiscount.end_date.is_(None), ProductDiscount.end_date >= datetime.utcnow()),
+            )
+            .scalar_subquery()
+        )
+        order = func.coalesce(discount_rank, 0).desc() if sort_order == "desc" else func.coalesce(discount_rank, 0).asc()
     else:
         order = Product.name.asc() if sort_order == "asc" else Product.name.desc()
 
@@ -2055,7 +2076,7 @@ def get_products(
                 "name": p.name,
                 "slug": p.slug,
                 "price": p.price,
-                "old_price": p.old_price,
+                "old_price": get_presentational_old_price(pricing),
                 "effective_price": pricing["effective_price"],
                 "active_discount": pricing["active_discount"],
                 "customer_group_name": pricing["group_name"],
@@ -2345,7 +2366,7 @@ def search_suggestions(q: str, db: DbSession):
                 "name": product.name,
                 "sku": product.sku,
                 "price": product.price,
-                "old_price": product.old_price,
+                "old_price": None,
                 "slug": product.slug,
                 "description": product.description,
                 "quantity": stock_map.get(product.id, 0),
@@ -2399,6 +2420,7 @@ def get_product(
     payload.update({
         "quantity": stock_quantity,
         "in_stock": stock_quantity > 0,
+        "old_price": get_presentational_old_price(pricing),
         "active_discount": pricing["active_discount"],
         "effective_price": pricing["effective_price"],
         "customer_group_name": pricing["group_name"],
@@ -3868,7 +3890,7 @@ def get_cart(db: DbSession, current_user: Annotated[User, Depends(get_current_ac
                     "id": ci.product.id,
                     "name": ci.product.name,
                     "price": ci.product.price,
-                    "old_price": ci.product.old_price,
+                    "old_price": None,
                     "sku": ci.product.sku,
                     "slug": ci.product.slug,
                     "description": ci.product.description,
@@ -3944,7 +3966,7 @@ def get_wishlist(db: DbSession, current_user: Annotated[User, Depends(get_curren
                 "id": w.product.id,
                 "name": w.product.name,
                 "price": w.product.price,
-                "old_price": w.product.old_price,
+                "old_price": None,
                 "sku": w.product.sku,
                 "slug": w.product.slug,
                 "badge": w.product.badge.value if w.product.badge and hasattr(w.product.badge, 'value') else str(w.product.badge) if w.product.badge else None
