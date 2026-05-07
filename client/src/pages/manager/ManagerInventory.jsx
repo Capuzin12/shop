@@ -20,6 +20,7 @@ export default function ManagerInventory({ onUpdate }) {
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [saveError, setSaveError] = useState('');
 
   const fetchInventory = useCallback(async ({ showLoading = true } = {}) => {
     if (showLoading) setIsLoading(true);
@@ -81,6 +82,37 @@ export default function ManagerInventory({ onUpdate }) {
     ok: inventory.length - lowStockCount,
   };
 
+  const validateInventoryEdit = (item, draft) => {
+    const quantity = Number(draft?.quantity);
+    const thresholdValue = Number(draft?.min_quantity_alert);
+
+    if (!Number.isInteger(quantity) || quantity < 0) return 'Кількість має бути цілим невідʼємним числом';
+    if (!Number.isInteger(thresholdValue) || thresholdValue < 0) return 'Поріг сповіщення має бути цілим невідʼємним числом';
+    if (Number.isInteger(item?.max_quantity) && item.max_quantity >= 0 && quantity > item.max_quantity) {
+      return 'Кількість не може перевищувати максимальний запас';
+    }
+    return '';
+  };
+
+  const saveInventoryItem = async (item) => {
+    const validationError = validateInventoryEdit(item, editingItem);
+    if (validationError) {
+      setSaveError(validationError);
+      return;
+    }
+
+    setSaveError('');
+    await api.put(`/api/inventory/${item.id}`, {
+      quantity: Number(editingItem.quantity),
+      min_quantity: item.min_quantity,
+      min_quantity_alert: Number(editingItem.min_quantity_alert),
+    });
+    setEditingItem(null);
+    refreshNotifications();
+    await fetchInventory({ showLoading: false });
+    onUpdate?.();
+  };
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
@@ -104,6 +136,11 @@ export default function ManagerInventory({ onUpdate }) {
           </>
         )}
       >
+        {saveError ? (
+          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            {saveError}
+          </div>
+        ) : null}
         <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex w-full gap-2 md:w-auto">
             <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Пошук: товар, SKU або локація" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm md:w-72 dark:border-white/10 dark:bg-slate-950/60" />
@@ -139,11 +176,11 @@ export default function ManagerInventory({ onUpdate }) {
                 <td className="px-4 py-4">
                   {editingItem?.id === item.id ? (
                     <div className="flex gap-3">
-                      <button onClick={async () => { await api.put(`/api/inventory/${item.id}`, { quantity: editingItem.quantity, min_quantity: item.min_quantity, min_quantity_alert: editingItem.min_quantity_alert }); setEditingItem(null); refreshNotifications(); await fetchInventory({ showLoading: false }); onUpdate?.(); }} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
-                      <button onClick={() => setEditingItem(null)} className="text-sm font-semibold text-slate-500 dark:text-slate-400" type="button">Скасувати</button>
+                      <button onClick={() => saveInventoryItem(item)} className="text-sm font-semibold text-emerald-600 dark:text-emerald-300" type="button">Зберегти</button>
+                      <button onClick={() => { setEditingItem(null); setSaveError(''); }} className="text-sm font-semibold text-slate-500 dark:text-slate-400" type="button">Скасувати</button>
                     </div>
                   ) : (
-                    <button onClick={() => setEditingItem({ id: item.id, quantity: item.quantity, min_quantity_alert: threshold(item) })} className="text-sm font-semibold text-blue-600 dark:text-blue-300" type="button">Редагувати</button>
+                    <button onClick={() => { setEditingItem({ id: item.id, quantity: item.quantity, min_quantity_alert: threshold(item) }); setSaveError(''); }} className="text-sm font-semibold text-blue-600 dark:text-blue-300" type="button">Редагувати</button>
                   )}
                 </td>
               </tr>

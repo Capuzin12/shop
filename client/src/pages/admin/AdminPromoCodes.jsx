@@ -69,12 +69,21 @@ export default function AdminPromoCodes() {
     const minOrderAmount = Number(formData.min_order_amount || 0);
     const usedCount = Number(formData.used_count || 0);
     const maxUses = formData.max_uses === '' ? null : Number(formData.max_uses);
+    const validFrom = formData.valid_from ? new Date(formData.valid_from) : null;
+    const validUntil = formData.valid_until ? new Date(formData.valid_until) : null;
 
     if (!code) nextErrors.code = 'Вкажіть код промокоду';
     if (!Number.isFinite(discountValue) || discountValue < 0) nextErrors.discount_value = 'Вкажіть коректне значення знижки';
     if (!Number.isFinite(minOrderAmount) || minOrderAmount < 0) nextErrors.min_order_amount = 'Мінімальна сума не може бути відʼємною';
     if (!Number.isFinite(usedCount) || usedCount < 0) nextErrors.used_count = 'Кількість використань не може бути відʼємною';
     if (maxUses !== null && (!Number.isFinite(maxUses) || maxUses < 0)) nextErrors.max_uses = 'Ліміт використань має бути коректним числом';
+
+    if (code && !/^[A-Za-z0-9_-]+$/.test(code)) nextErrors.code = 'Код промокоду може містити лише літери, цифри, дефіс або підкреслення';
+    if (formData.discount_type === 'percent' && Number.isFinite(discountValue) && discountValue > 100) nextErrors.discount_value = 'Відсоткова знижка не може бути більшою за 100%';
+    if (maxUses !== null && Number.isFinite(maxUses) && maxUses < usedCount) nextErrors.max_uses = 'Максимум використань не може бути меншим за вже використані';
+    if (validFrom && Number.isNaN(validFrom.getTime())) nextErrors.valid_from = 'Дата початку некоректна';
+    if (validUntil && Number.isNaN(validUntil.getTime())) nextErrors.valid_until = 'Дата завершення некоректна';
+    if (validFrom && validUntil && !Number.isNaN(validFrom.getTime()) && !Number.isNaN(validUntil.getTime()) && validUntil <= validFrom) nextErrors.valid_until = 'Дата завершення має бути пізнішою за дату початку';
 
     if (Object.keys(nextErrors).length) {
       setFieldErrors(nextErrors);
@@ -117,6 +126,11 @@ export default function AdminPromoCodes() {
       >
         <form noValidate onSubmit={submit} className="grid gap-4 md:grid-cols-2">
           {formError ? <p className="form-error-banner md:col-span-2">{formError}</p> : null}
+          {Object.keys(fieldErrors).length ? (
+            <div className="md:col-span-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+              {Object.values(fieldErrors).join(' ')}
+            </div>
+          ) : null}
           <div>
             <input value={formData.code} onChange={(e) => updateField('code', e.target.value)} placeholder="Код промокоду *" className={`form-input ${fieldErrors.code ? 'form-input-error' : ''}`} />
             {fieldErrors.code ? <p className="form-error-text">{fieldErrors.code}</p> : null}

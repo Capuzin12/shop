@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
 import { ROLE_LABELS } from '../../utils/roles';
 import { useAssignCustomerGroup, useCustomerGroups } from '../../hooks/useCustomerGroups';
+import { isValidEmail, isValidPhone, normalizePhoneInput } from '../../utils/validation';
 
 export default function AdminUsers() {
   const { user, refreshUser } = useAuth();
@@ -68,11 +69,14 @@ export default function AdminUsers() {
     const email = String(formData.email || '').trim();
     const firstName = String(formData.first_name || '').trim();
     const lastName = String(formData.last_name || '').trim();
-    const phone = String(formData.phone || '').trim();
+    const phone = normalizePhoneInput(formData.phone || '');
     if (!email) nextErrors.email = 'Вкажіть електронну пошту';
     if (!firstName) nextErrors.first_name = 'Вкажіть імʼя';
     if (!lastName) nextErrors.last_name = 'Вкажіть прізвище';
     if (!formData.role) nextErrors.role = 'Вкажіть роль';
+    if (email && !isValidEmail(email)) nextErrors.email = 'Вкажіть коректну електронну пошту';
+    if (phone && !isValidPhone(phone)) nextErrors.phone = 'Вкажіть телефон у коректному форматі';
+    if (formData.password.trim() && formData.password.trim().length < 12) nextErrors.password = 'Новий пароль має містити щонайменше 12 символів';
     if (Object.keys(nextErrors).length) {
       setFieldErrors(nextErrors);
       setFormError('Перевірте обовʼязкові поля користувача.');
@@ -106,6 +110,11 @@ export default function AdminUsers() {
         {!editingUser ? <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">Натисніть «Повна форма» у потрібному рядку, щоб відкрити повне редагування користувача.</p> : null}
       <form noValidate onSubmit={submit} className="grid gap-4 md:grid-cols-2">
         {formError ? <p className="form-error-banner md:col-span-2">{formError}</p> : null}
+        {Object.keys(fieldErrors).length ? (
+          <div className="md:col-span-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            {Object.values(fieldErrors).join(' ')}
+          </div>
+        ) : null}
         <div>
           <input value={formData.email} onChange={(e) => updateField('email', e.target.value)} placeholder="Електронна пошта *" className={`form-input ${fieldErrors.email ? 'form-input-error' : ''}`} />
           {fieldErrors.email ? <p className="form-error-text">{fieldErrors.email}</p> : null}

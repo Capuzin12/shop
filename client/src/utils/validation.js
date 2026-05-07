@@ -84,3 +84,37 @@ export function normalizePhoneInput(value) {
   return cleaned;
 }
 
+export const SLUG_REGEX = /^[a-z0-9-]+$/;
+export const SKU_REGEX = /^[A-Za-z0-9._/-]{3,100}$/;
+
+export function isValidEmail(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
+export function isValidPhone(value) {
+  const normalized = normalizePhoneInput(value).replace(/[^\d+]/g, '');
+  if (!normalized) return false;
+  return /^\+?\d{10,15}$/.test(normalized);
+}
+
+export function isValidSlug(value) {
+  return SLUG_REGEX.test(String(value || '').trim());
+}
+
+export function isValidSku(value) {
+  return SKU_REGEX.test(String(value || '').trim());
+}
+
+export function isValidUrl(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+  try {
+    const parsed = new URL(normalized);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+

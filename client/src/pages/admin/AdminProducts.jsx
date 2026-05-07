@@ -6,6 +6,7 @@ import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../c
 import ProductPricingTable from '../../components/ProductPricingTable';
 import ProductDiscountsManager from '../../components/ProductDiscountsManager';
 import PriceHistoryLog from '../../components/PriceHistoryLog';
+import { isValidSlug, isValidSku, isValidUrl } from '../../utils/validation';
 
 const DEFAULT_FORM = {
   name: '',
@@ -124,6 +125,43 @@ export default function AdminProducts() {
       .filter((item) => item.key && item.value);
   };
 
+  const validateImages = (raw) => {
+    const lines = String(raw || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      if (!isValidUrl(line)) {
+        return 'Кожне зображення має бути коректним http/https URL';
+      }
+    }
+
+    return '';
+  };
+
+  const validateAttributes = (raw) => {
+    const lines = String(raw || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      const [key = '', value = '', unit = '', sortOrder = ''] = line.split('|').map((part) => part.trim());
+      if (!key || !value) {
+        return 'Кожен атрибут має містити ключ і значення';
+      }
+      if (sortOrder !== '' && !Number.isInteger(Number(sortOrder))) {
+        return 'Порядок атрибутів має бути цілим числом';
+      }
+      if (unit && unit.length > 30) {
+        return 'Одиниця атрибуту занадто довга';
+      }
+    }
+
+    return '';
+  };
+
   const buildPayload = () => {
     return {
       name: String(formData.name || '').trim(),
@@ -200,12 +238,32 @@ export default function AdminProducts() {
     const sku = payload.sku;
     const price = payload.price;
     const categoryId = payload.category_id;
+    const brandId = payload.brand_id;
+    const weight = payload.weight_kg;
+    const unit = String(formData.unit || '').trim();
+    const oldPrice = formData.old_price === '' ? null : Number(formData.old_price);
+    const imagesError = validateImages(formData.images_text);
+    const attributesError = validateAttributes(formData.attributes_text);
 
     if (!name) nextErrors.name = 'Вкажіть назву товару';
     if (!slug) nextErrors.slug = 'Вкажіть slug';
     if (!sku) nextErrors.sku = 'Вкажіть SKU';
     if (!Number.isFinite(price) || price <= 0) nextErrors.price = 'Ціна має бути більшою за 0';
     if (!Number.isInteger(categoryId) || categoryId <= 0) nextErrors.category_id = 'Вкажіть коректний ID категорії';
+
+    if (slug && !isValidSlug(slug)) nextErrors.slug = 'Slug може містити лише малі латинські літери, цифри та дефіс';
+    if (sku && !isValidSku(sku)) nextErrors.sku = 'SKU має містити 3-100 символів: літери, цифри, крапку, дефіс, / або _';
+    if (brandId !== null && (!Number.isInteger(brandId) || brandId <= 0)) nextErrors.brand_id = 'Бренд має бути коректним ID';
+    if (oldPrice !== null && (!Number.isFinite(oldPrice) || oldPrice < 0)) nextErrors.old_price = 'Стара ціна не може бути відʼємною';
+    if (oldPrice !== null && Number.isFinite(oldPrice) && oldPrice > 0 && oldPrice <= price) nextErrors.old_price = 'Стара ціна має бути більшою за поточну';
+    if (weight !== null && (!Number.isFinite(weight) || weight < 0)) nextErrors.weight_kg = 'Вага має бути невідʼємним числом';
+    if (!unit) nextErrors.unit = 'Вкажіть одиницю виміру';
+    if (unit.length > 20) nextErrors.unit = 'Одиниця виміру занадто довга';
+    if (formData.icon && String(formData.icon).trim().length > 50) nextErrors.icon = 'Іконка або код іконки занадто довгі';
+    if (formData.meta_title && String(formData.meta_title).trim().length > 255) nextErrors.meta_title = 'SEO-заголовок має бути до 255 символів';
+    if (formData.meta_description && String(formData.meta_description).trim().length > 500) nextErrors.meta_description = 'SEO-опис має бути до 500 символів';
+    if (imagesError) nextErrors.images_text = imagesError;
+    if (attributesError) nextErrors.attributes_text = attributesError;
 
     if (Object.keys(nextErrors).length) {
       setFieldErrors(nextErrors);
@@ -245,6 +303,11 @@ export default function AdminProducts() {
       >
         <form noValidate onSubmit={handleSubmit} className="space-y-4">
           {formError ? <p className="form-error-banner">{formError}</p> : null}
+          {Object.keys(fieldErrors).length ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+              {Object.values(fieldErrors).join(' ')}
+            </div>
+          ) : null}
           
           {/* Обов'язкові поля в одному рядку */}
           <div className="grid gap-3 md:grid-cols-4">
@@ -283,7 +346,7 @@ export default function AdminProducts() {
             </div>
             <div>
               {brands.length > 0 ? (
-                <select value={formData.brand_id} onChange={(e) => updateField('brand_id', e.target.value)} className="form-input text-sm">
+                <select value={formData.brand_id} onChange={(e) => updateField('brand_id', e.target.value)} className={`form-input text-sm ${fieldErrors.brand_id ? 'form-input-error' : ''}`}>
                   <option value="">Без бренду</option>
                   {brands.map((brand) => (
                     <option key={brand.id} value={brand.id}>{brand.name}</option>

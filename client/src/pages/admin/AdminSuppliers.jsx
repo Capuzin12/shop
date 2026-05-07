@@ -3,6 +3,7 @@ import { Plus, RefreshCcw, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { DataTable, EmptyState, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
+import { isValidEmail, isValidPhone } from '../../utils/validation';
 
 const DEFAULT_FORM = {
   name: '',
@@ -55,7 +56,14 @@ export default function AdminSuppliers() {
     e.preventDefault();
     const nextErrors = {};
     const name = String(formData.name || '').trim();
+    const contactName = String(formData.contact_name || '').trim();
+    const phone = String(formData.phone || '').trim();
+    const email = String(formData.email || '').trim();
     if (!name) nextErrors.name = 'Вкажіть назву постачальника';
+
+    if (contactName && contactName.length < 2) nextErrors.contact_name = 'Контактна особа має містити щонайменше 2 символи';
+    if (phone && !isValidPhone(phone)) nextErrors.phone = 'Вкажіть телефон у коректному форматі';
+    if (email && !isValidEmail(email)) nextErrors.email = 'Вкажіть коректну електронну пошту';
 
     if (Object.keys(nextErrors).length) {
       setFieldErrors(nextErrors);
@@ -67,9 +75,9 @@ export default function AdminSuppliers() {
     try {
       const payload = {
         name,
-        contact_name: String(formData.contact_name || '').trim() || null,
-        phone: String(formData.phone || '').trim() || null,
-        email: String(formData.email || '').trim() || null,
+        contact_name: contactName || null,
+        phone: phone || null,
+        email: email || null,
         address: String(formData.address || '').trim() || null,
         payment_terms: String(formData.payment_terms || '').trim() || null,
         notes: String(formData.notes || '').trim() || null,
@@ -96,6 +104,11 @@ export default function AdminSuppliers() {
       >
         <form noValidate onSubmit={submit} className="grid gap-4 md:grid-cols-2">
           {formError ? <p className="form-error-banner md:col-span-2">{formError}</p> : null}
+          {Object.keys(fieldErrors).length ? (
+            <div className="md:col-span-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+              {Object.values(fieldErrors).join(' ')}
+            </div>
+          ) : null}
           <div>
             <input value={formData.name} onChange={(e) => updateField('name', e.target.value)} placeholder="Назва постачальника *" className={`form-input ${fieldErrors.name ? 'form-input-error' : ''}`} />
             {fieldErrors.name ? <p className="form-error-text">{fieldErrors.name}</p> : null}
