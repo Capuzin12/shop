@@ -30,7 +30,7 @@ export default function ManagerDashboard() {
     if (!user) return;
     try {
       const [ordersRes, productsRes, inventoryRes] = await Promise.all([
-        api.get('/api/orders'),
+        api.get('/api/staff/orders'),
         api.get('/api/products?limit=100'),
         api.get('/api/inventory'),
       ]);

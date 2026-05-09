@@ -63,7 +63,7 @@ export default function ManagerOrders({ onUpdate }) {
   const fetchOrders = async ({ showLoading = true } = {}) => {
     if (showLoading) setIsLoading(true);
     try {
-      const response = await api.get('/api/orders');
+      const response = await api.get('/api/staff/orders');
       const ordersData = response.data;
       const validOrders = Array.isArray(ordersData) 
         ? ordersData.filter(o => o && o.id)

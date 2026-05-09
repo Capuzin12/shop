@@ -21,6 +21,7 @@ from sqlalchemy import (
     ForeignKey,
     Enum as SAEnum,
     UniqueConstraint,
+    CheckConstraint,
 )
 from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -104,6 +105,7 @@ class SupplyStatus(str, enum.Enum):
 class DiscountType(str, enum.Enum):
     percentage = "PERCENTAGE"
     fixed      = "FIXED"
+    percent    = "PERCENTAGE"
 
 
 # ============================================================
@@ -213,6 +215,9 @@ class Brand(Base):
 
 class Product(Base):
     __tablename__ = "products"
+    __table_args__ = (
+        CheckConstraint("price >= 0", name="ck_products_price_non_negative"),
+    )
 
     id               : Mapped[int]                   = mapped_column(primary_key=True)
     category_id      : Mapped[int]                   = mapped_column(ForeignKey("categories.id"), nullable=False)
@@ -286,6 +291,8 @@ class ProductPrice(Base):
     __tablename__ = "product_prices"
     __table_args__ = (
         UniqueConstraint("product_id", "customer_group_id", "min_quantity", name="product_prices_unique_combo"),
+        CheckConstraint("price >= 0", name="ck_product_prices_price_non_negative"),
+        CheckConstraint("min_quantity >= 1", name="ck_product_prices_min_quantity_positive"),
     )
 
     id                : Mapped[int]      = mapped_column(primary_key=True)
@@ -333,6 +340,11 @@ class PriceHistory(Base):
 
 class Inventory(Base):
     __tablename__ = "inventory"
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="ck_inventory_quantity_non_negative"),
+        CheckConstraint("min_quantity >= 0", name="ck_inventory_min_quantity_non_negative"),
+        CheckConstraint("max_quantity >= 0", name="ck_inventory_max_quantity_non_negative"),
+    )
 
     id                 : Mapped[int]           = mapped_column(primary_key=True)
     product_id         : Mapped[int]           = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), unique=True)
@@ -476,7 +488,11 @@ class Order(Base):
 
 class OrderItem(Base):
     __tablename__ = "order_items"
-    __table_args__ = (UniqueConstraint("order_id", "product_id", name="unique_order_product"),)
+    __table_args__ = (
+        UniqueConstraint("order_id", "product_id", name="unique_order_product"),
+        CheckConstraint("quantity >= 1", name="ck_order_items_quantity_positive"),
+        CheckConstraint("unit_price >= 0", name="ck_order_items_unit_price_non_negative"),
+    )
 
     id           : Mapped[int]           = mapped_column(primary_key=True)
     order_id     : Mapped[int]           = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
@@ -589,6 +605,9 @@ class Cart(Base):
 
 class CartItem(Base):
     __tablename__ = "cart_items"
+    __table_args__ = (
+        CheckConstraint("quantity >= 1", name="ck_cart_items_quantity_positive"),
+    )
 
     id         : Mapped[int]      = mapped_column(Integer, primary_key=True, autoincrement=True)
     cart_id    : Mapped[int]      = mapped_column(Integer, ForeignKey("carts.id"), nullable=False)

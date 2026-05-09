@@ -20,7 +20,14 @@ from database import SessionLocal, DATABASE_URL
 from models import Category, Product, User, UserRole, Inventory, Brand, Supplier, SupplyOrder, SupplyOrderItem, PromoCode, DiscountType, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, ProductImage, ProductBadge, Review, OrderStatus, OrderMessage, AuditLog, ClientError, CustomerGroup, ProductPrice, ProductDiscount, PriceHistory
 from logging_config import configure_logging, get_logger, set_request_id, set_user_id, get_request_id, generate_request_id
 from config import settings, validate_settings
-from security import add_request_id_middleware, add_security_headers_middleware, add_timing_middleware, limiter
+from security import (
+    add_request_id_middleware,
+    add_security_headers_middleware,
+    add_timing_middleware,
+    custom_rate_limit_handler,
+    limiter,
+)
+from slowapi.errors import RateLimitExceeded
 from errors import log_error
 from reporting import build_admin_report_pdf, build_admin_report_xlsx, collect_admin_report_data
 
@@ -45,6 +52,7 @@ oauth2_optional_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False
 
 app = FastAPI(title="BuildShop API")
 app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 
 _schema_patched = False
 
@@ -224,37 +232,12 @@ def _to_iso_or_none(value):
 
 
 def _get_orders_fallback_rows(db: Session, current_user: User):
-    can_manage_all = can_manage_sales(current_user.role)
-    base_sql = """
-        SELECT
-            id,
-            user_id,
-            contact_name,
-            contact_phone,
-            contact_email,
-            delivery_city,
-            delivery_address,
-            status,
-            subtotal,
-            delivery_cost,
-            discount,
-            total,
-            delivery_method,
-            payment_method,
-            payment_status,
-            created_at,
-            updated_at
-        FROM orders
-    """
-    params: dict = {}
-    if can_manage_all:
-        sql = text(base_sql + " ORDER BY created_at DESC")
-    else:
-        sql = text(base_sql + " WHERE user_id = :user_id ORDER BY created_at DESC")
-        params["user_id"] = current_user.id
+    orders_query = select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
+    if not can_manage_sales(current_user.role):
+        orders_query = orders_query.where(Order.user_id == current_user.id)
 
-    rows = db.execute(sql, params).mappings().all()
-    order_ids = [int(row["id"]) for row in rows if row.get("id") is not None]
+    orders = db.scalars(orders_query).all()
+    order_ids = [int(order.id) for order in orders if order.id is not None]
     items_by_order: dict[int, list[dict]] = {}
 
     if order_ids:
@@ -275,26 +258,26 @@ def _get_orders_fallback_rows(db: Session, current_user: User):
 
     return [
         {
-            "id": row["id"],
-            "user_id": row.get("user_id"),
-            "contact_name": row.get("contact_name"),
-            "contact_phone": row.get("contact_phone"),
-            "contact_email": row.get("contact_email"),
-            "delivery_city": row.get("delivery_city"),
-            "delivery_address": row.get("delivery_address"),
-            "status": row.get("status"),
-            "subtotal": row.get("subtotal"),
-            "delivery_cost": row.get("delivery_cost"),
-            "discount": row.get("discount"),
-            "total": row.get("total"),
-            "delivery_method": row.get("delivery_method"),
-            "payment_method": row.get("payment_method"),
-            "payment_status": row.get("payment_status"),
-            "created_at": _to_iso_or_none(row.get("created_at")),
-            "updated_at": _to_iso_or_none(row.get("updated_at")),
-            "items": items_by_order.get(int(row["id"]), []),
+            "id": order.id,
+            "user_id": order.user_id,
+            "contact_name": order.contact_name,
+            "contact_phone": order.contact_phone,
+            "contact_email": order.contact_email,
+            "delivery_city": order.delivery_city,
+            "delivery_address": order.delivery_address,
+            "status": order.status.value if hasattr(order.status, "value") else order.status,
+            "subtotal": order.subtotal,
+            "delivery_cost": order.delivery_cost,
+            "discount": order.discount,
+            "total": order.total,
+            "delivery_method": order.delivery_method.value if hasattr(order.delivery_method, "value") else order.delivery_method,
+            "payment_method": order.payment_method.value if hasattr(order.payment_method, "value") else order.payment_method,
+            "payment_status": order.payment_status.value if hasattr(order.payment_status, "value") else order.payment_status,
+            "created_at": _to_iso_or_none(order.created_at),
+            "updated_at": _to_iso_or_none(order.updated_at),
+            "items": items_by_order.get(int(order.id), []),
         }
-        for row in rows
+        for order in orders
     ]
 
 
@@ -476,6 +459,76 @@ def get_presentational_old_price(pricing: dict) -> float | None:
         if float(effective_price) < float(base_for_display):
             return float(base_for_display)
     return None
+
+
+MAX_CART_ITEM_QUANTITY = 999
+
+
+def parse_positive_quantity(value, *, field: str = "quantity", allow_zero: bool = False, max_value: int = MAX_CART_ITEM_QUANTITY) -> int:
+    try:
+        quantity = int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_QUANTITY", "field": field, "message": f"Поле {field} має бути цілим числом"},
+        )
+
+    minimum = 0 if allow_zero else 1
+    if quantity < minimum:
+        comparator = "не може бути від'ємним" if allow_zero else "має бути більше 0"
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_QUANTITY", "field": field, "message": f"Поле {field} {comparator}"},
+        )
+    if quantity > max_value:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_QUANTITY", "field": field, "message": f"Поле {field} не може перевищувати {max_value}"},
+        )
+    return quantity
+
+
+def normalize_order_items_payload(items_raw: list[dict]) -> list[dict]:
+    if not isinstance(items_raw, list) or not items_raw:
+        raise HTTPException(status_code=400, detail={"code": "EMPTY_ITEMS", "message": "Замовлення має містити хоча б один товар"})
+
+    merged_items: dict[int, int] = {}
+    for idx, item in enumerate(items_raw):
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail={"code": "INVALID_ITEM", "index": idx, "message": "Некоректний формат позиції замовлення"})
+
+        try:
+            product_id = int(item.get("product_id", 0))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail={"code": "INVALID_ITEM", "index": idx, "message": "product_id має бути цілим числом"})
+
+        quantity = parse_positive_quantity(item.get("quantity"), field=f"items[{idx}].quantity")
+        if product_id <= 0:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_ITEM", "index": idx, "message": "Кожна позиція має містити коректний product_id"})
+
+        merged_items[product_id] = merged_items.get(product_id, 0) + quantity
+        if merged_items[product_id] > MAX_CART_ITEM_QUANTITY:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_ITEM_QUANTITY", "index": idx, "message": f"Кількість для товару #{product_id} не може перевищувати {MAX_CART_ITEM_QUANTITY}"},
+            )
+
+    return [{"product_id": product_id, "quantity": quantity} for product_id, quantity in merged_items.items()]
+
+
+def serialize_cart_product(db: Session, product: Product, customer_group_id: int | None, cart_quantity: int, stock_quantity: int) -> dict:
+    pricing = resolve_effective_product_price(db, product, customer_group_id, cart_quantity)
+    return {
+        "id": product.id,
+        "name": product.name,
+        "price": pricing["effective_price"],
+        "old_price": get_presentational_old_price(pricing),
+        "sku": product.sku,
+        "slug": product.slug,
+        "description": product.description,
+        "quantity": stock_quantity,
+        "in_stock": stock_quantity > 0,
+    }
 
 
 def serialize_category(category: Category):
@@ -1310,12 +1363,15 @@ async def get_current_user(
     try:
         payload = jwt.decode(raw_token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
+        token_role: str | None = payload.get("role")
         if email is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
     user = db.scalar(select(User).where(User.email == email))
     if user is None:
+        raise credentials_exception
+    if token_role and token_role != (user.role.value if hasattr(user.role, "value") else str(user.role)):
         raise credentials_exception
     return user
 
@@ -1486,7 +1542,8 @@ async def login_for_access_token(
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+        data={"sub": user.email, "role": user.role.value if hasattr(user.role, "value") else str(user.role)},
+        expires_delta=access_token_expires,
     )
     response.set_cookie(
         key=settings.auth_cookie_name,
@@ -2581,7 +2638,7 @@ def get_public_user_profile(user_id: int, db: DbSession):
 
 
 @app.post("/api/products")
-def create_product(product: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+def create_product(product: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
     normalized_product, images_data, attributes_data = _normalize_product_payload(product, require_basic=True)
     new_product = Product(**normalized_product)
     db.add(new_product)
@@ -2607,7 +2664,7 @@ def create_product(product: dict, db: DbSession, current_user: Annotated[User, D
 
 
 @app.put("/api/products/{product_id}")
-def update_product(product_id: int, product: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+def update_product(product_id: int, product: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
     db_product = db.scalar(
         select(Product)
         .where(Product.id == product_id)
@@ -2649,7 +2706,7 @@ def update_product(product_id: int, product: dict, db: DbSession, current_user: 
 
 
 @app.delete("/api/products/{product_id}")
-def delete_product(product_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_catalog_user)]):
+def delete_product(product_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
     db_product = db.get(Product, product_id)
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -2739,19 +2796,47 @@ def update_inventory(inventory_id: int, inventory_data: dict, db: DbSession, cur
 
 
 # Orders
-@app.get("/api/orders")
-def get_orders(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+def _get_serialized_orders_for_query(db: Session, query):
     try:
-        query = select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
-        if not can_manage_sales(current_user.role):
-            query = query.where(Order.user_id == current_user.id)
         orders = db.scalars(query).all()
         return [serialize_order_summary(order) for order in orders]
     except Exception as exc:
         logger.error(
             "Falling back to raw order serialization",
-            extra={"error": str(exc), "user_id": current_user.id},
+            extra={"error": str(exc)},
         )
+        raise exc
+
+
+@app.get("/api/orders")
+def get_orders(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    query = (
+        select(Order)
+        .where(Order.user_id == current_user.id)
+        .options(selectinload(Order.items))
+        .order_by(Order.created_at.desc())
+    )
+    try:
+        return _get_serialized_orders_for_query(db, query)
+    except Exception:
+        return _get_orders_fallback_rows(db, current_user)
+
+
+@app.get("/api/staff/orders")
+def get_staff_orders(db: DbSession, current_user: Annotated[User, Depends(get_current_sales_user)]):
+    query = select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
+    try:
+        return _get_serialized_orders_for_query(db, query)
+    except Exception:
+        return _get_orders_fallback_rows(db, current_user)
+
+
+@app.get("/api/admin/orders")
+def get_admin_orders(db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    query = select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
+    try:
+        return _get_serialized_orders_for_query(db, query)
+    except Exception:
         return _get_orders_fallback_rows(db, current_user)
 
 
@@ -2778,8 +2863,7 @@ def get_order(order_id: int, db: DbSession, current_user: Annotated[User, Depend
         return matched
 
 
-@app.post("/api/orders")
-def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+def create_order(order_data: dict, db: DbSession, current_user: User):
     if not isinstance(order_data, dict):
         raise HTTPException(status_code=400, detail={"code": "INVALID_ORDER_PAYLOAD", "message": "Некоректний формат замовлення"})
 
@@ -2807,9 +2891,7 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
             raise HTTPException(status_code=400, detail={"code": "INVALID_NUMERIC_FIELD", "field": name, "message": f"Поле {name} не може бути від'ємним"})
         return parsed
 
-    items_raw = order_data.get("items")
-    if not isinstance(items_raw, list) or not items_raw:
-        raise HTTPException(status_code=400, detail={"code": "EMPTY_ITEMS", "message": "Замовлення має містити хоча б один товар"})
+    items_data = normalize_order_items_payload(order_data.get("items"))
 
     contact_name = _clean_text(order_data.get("contact_name"), 200)
     if not contact_name:
@@ -2850,25 +2932,6 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
     comment = _clean_text(order_data.get("comment"), 1000)
     promo_code_text = str(order_data.get("promo_code") or "").strip()
 
-    merged_items: dict[int, int] = {}
-    for idx, item in enumerate(items_raw):
-        if not isinstance(item, dict):
-            raise HTTPException(status_code=400, detail={"code": "INVALID_ITEM", "index": idx, "message": "Некоректний формат позиції замовлення"})
-        try:
-            product_id = int(item.get("product_id", 0))
-            quantity = int(item.get("quantity", 0))
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail={"code": "INVALID_ITEM", "index": idx, "message": "Товар або кількість мають некоректний формат"})
-
-        if product_id <= 0 or quantity <= 0:
-            raise HTTPException(status_code=400, detail={"code": "INVALID_ITEM", "index": idx, "message": "Кожна позиція має містити коректні product_id та quantity"})
-        if quantity > 999:
-            raise HTTPException(status_code=400, detail={"code": "INVALID_ITEM_QUANTITY", "index": idx, "message": "Кількість в одній позиції не може перевищувати 999"})
-
-        merged_items[product_id] = merged_items.get(product_id, 0) + quantity
-
-    items_data = [{"product_id": product_id, "quantity": qty} for product_id, qty in merged_items.items()]
-
     filtered_data = {
         "contact_name": contact_name,
         "contact_phone": contact_phone,
@@ -2891,20 +2954,27 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
         subtotal = 0.0
         inventory_changes: list[tuple[int, int, int, int]] = []
         # (product_id, qty, quantity_before, quantity_after)
+        product_ids = [item["product_id"] for item in items_data]
+        products = db.scalars(
+            select(Product)
+            .where(Product.id.in_(product_ids))
+            .options(selectinload(Product.inventory))
+        ).all()
+        products_by_id = {product.id: product for product in products}
 
         for item in items_data:
             product_id = item.get("product_id")
-            quantity = int(item.get("quantity", 0))
-            if not product_id or quantity <= 0:
+            quantity = parse_positive_quantity(item.get("quantity"), field="quantity")
+            if not product_id:
                 raise HTTPException(status_code=400, detail={"code": "INVALID_ITEM", "message": "Кожна позиція має містити коректні product_id та quantity"})
 
-            product = db.get(Product, product_id)
+            product = products_by_id.get(product_id)
             if not product:
                 raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "product_id": product_id, "message": f"Товар #{product_id} не знайдено"})
             if not product.is_active:
                 raise HTTPException(status_code=400, detail={"code": "PRODUCT_INACTIVE", "product_id": product_id, "message": f"Товар '{product.name}' недоступний для замовлення"})
 
-            inventory = db.scalar(select(Inventory).where(Inventory.product_id == product_id))
+            inventory = product.inventory
             available_quantity = inventory.quantity if inventory and inventory.quantity else 0
             if available_quantity < quantity:
                 raise HTTPException(
@@ -2919,7 +2989,9 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
                     }
                 )
 
-            unit_price = float(product.price)
+            unit_price = float(
+                resolve_effective_product_price(db, product, current_user.customer_group_id, quantity)["effective_price"]
+            )
             subtotal += unit_price * quantity
             db.add(
                 OrderItem(
@@ -3059,6 +3131,12 @@ def create_order(order_data: dict, db: DbSession, current_user: Annotated[User, 
             extra={"error": str(e), "request_id": get_request_id(), "user_id": current_user.id},
         )
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/api/orders")
+@limiter.limit("10/minute")
+def create_order_endpoint(request: Request, order_data: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    return create_order(order_data, db, current_user)
 
 
 @app.put("/api/orders/{order_id}")
@@ -3886,17 +3964,7 @@ def get_cart(db: DbSession, current_user: Annotated[User, Depends(get_current_ac
                 "cart_id": ci.cart_id,
                 "product_id": ci.product_id,
                 "quantity": ci.quantity,
-                "product": {
-                    "id": ci.product.id,
-                    "name": ci.product.name,
-                    "price": ci.product.price,
-                    "old_price": None,
-                    "sku": ci.product.sku,
-                    "slug": ci.product.slug,
-                    "description": ci.product.description,
-                    "quantity": stock_map.get(ci.product.id, 0),
-                    "in_stock": stock_map.get(ci.product.id, 0) > 0,
-                } if ci.product else None,
+                "product": serialize_cart_product(db, ci.product, current_user.customer_group_id, ci.quantity, stock_map.get(ci.product.id, 0)) if ci.product else None,
                 "added_at": ci.added_at.isoformat() if ci.added_at else None
             }
             for ci in cart.items
@@ -3905,24 +3973,38 @@ def get_cart(db: DbSession, current_user: Annotated[User, Depends(get_current_ac
         "updated_at": cart.updated_at.isoformat() if cart.updated_at else None
     }
 
-
 @app.post("/api/cart/items")
-def add_to_cart(item: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+@limiter.limit("20/minute")
+def add_to_cart(request: Request, item: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    try:
+        product_id = int((item or {}).get("product_id") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_ID", "field": "product_id", "message": "product_id має бути додатним цілим числом"})
+    quantity = parse_positive_quantity((item or {}).get("quantity"), field="quantity")
+    if product_id <= 0:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_ID", "field": "product_id", "message": "product_id має бути додатним цілим числом"})
+
+    product = db.get(Product, product_id)
+    if not product or not product.is_active:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
+
     cart = db.scalar(select(Cart).where(Cart.user_id == current_user.id))
     if not cart:
         cart = Cart(user_id=current_user.id)
         db.add(cart)
         db.commit()
         db.refresh(cart)
-    
-    existing_item = db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == item["product_id"]))
+
+    existing_item = db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == product_id))
     if existing_item:
-        existing_item.quantity += item["quantity"]
+        existing_item.quantity = parse_positive_quantity(existing_item.quantity + quantity, field="quantity")
+        cart_item = existing_item
     else:
-        cart_item = CartItem(cart_id=cart.id, **item)
+        cart_item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity)
         db.add(cart_item)
     db.commit()
-    return {"message": "Item added to cart"}
+    db.refresh(cart_item)
+    return {"message": "Item added to cart", "id": cart_item.id, "product_id": cart_item.product_id, "quantity": cart_item.quantity}
 
 
 @app.put("/api/cart/items/{item_id}")
@@ -3930,7 +4012,7 @@ def update_cart_item(item_id: int, item_data: dict, db: DbSession, current_user:
     cart_item = db.get(CartItem, item_id)
     if not cart_item or cart_item.cart.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Cart item not found")
-    quantity = int(item_data.get("quantity", 0))
+    quantity = parse_positive_quantity(item_data.get("quantity", 0), field="quantity", allow_zero=True)
     if quantity <= 0:
         db.delete(cart_item)
     else:
