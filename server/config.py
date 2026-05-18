@@ -121,14 +121,19 @@ class Settings(BaseSettings):
         return v
     
     def get_cors_origins(self) -> List[str]:
-        """Parse and normalize CORS origins from env (trim, drop trailing slash, dedupe)."""
+        """Parse and normalize CORS origins from env (trim, add protocol if needed, drop trailing slash, dedupe)."""
         normalized: list[str] = []
         for origin in self.cors_origins.split(','):
             value = origin.strip()
             if not value:
                 continue
-            if value != "*":
-                value = value.rstrip('/')
+            if value == "*":
+                normalized.append(value)
+                continue
+            # Add https:// protocol if missing (e.g., "example.vercel.app" → "https://example.vercel.app")
+            if not value.startswith('http://') and not value.startswith('https://'):
+                value = f'https://{value}'
+            value = value.rstrip('/')
             if value and value not in normalized:
                 normalized.append(value)
         return normalized

@@ -105,22 +105,37 @@ def ensure_runtime_schema(db: Session):
 
     _schema_patched = True
 
+# Configure CORS with both static origins list and dynamic regex
 _cors_mw_kwargs = {
-    "allow_origins": CORS_ORIGINS,
     "allow_credentials": True,
-    "allow_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicitly list methods
-    "allow_headers": ["Content-Type", "Authorization", "X-Request-ID"],  # Whitelist headers
+    "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization", "X-Request-ID"],
     "expose_headers": ["X-Request-ID", "X-Response-Time", "Content-Disposition"],
     "max_age": 3600,  # Preflight cache time (1 hour)
 }
-if settings.cors_origin_regex:
-    _cors_mw_kwargs["allow_origin_regex"] = settings.cors_origin_regex
-else:
-    _cors_mw_kwargs["allow_origin_regex"] = r"^https://.*\.vercel\.app$"
+
+# Add static origins if provided
+if CORS_ORIGINS:
+    _cors_mw_kwargs["allow_origins"] = CORS_ORIGINS
+
+# Add regex pattern for dynamic Vercel/preview deployments
+cors_regex = settings.cors_origin_regex or r'^https://.*\.vercel\.app$'
+if cors_regex:
+    _cors_mw_kwargs["allow_origin_regex"] = cors_regex
+
+logger.info(
+    'CORS configured',
+    extra={
+        'allow_origins': _cors_mw_kwargs.get('allow_origins', []),
+        'allow_origin_regex': _cors_mw_kwargs.get('allow_origin_regex', 'none'),
+        'environment': settings.environment,
+    }
+)
 
 # Add gzip compression for responses > 1KB (helps with large JSON)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+# Add CORS middleware
 app.add_middleware(CORSMiddleware, **_cors_mw_kwargs)
 
 # Add custom middleware in reverse order (last added = first executed)
