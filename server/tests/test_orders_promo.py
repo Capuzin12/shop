@@ -25,7 +25,7 @@ def db_session():
 def seed_customer(db_session):
     user = User(
         email="customer@example.com",
-        password_hash="hashed",
+        password_hash="hashed",  # nosec B106 - Test fixture with dummy hash
         first_name="Test",
         last_name="Customer",
         phone="+380501112233",

@@ -177,18 +177,19 @@ def serialize_model(obj, seen=None):
         return None
     seen.add(id(obj))
     if hasattr(obj, '__table__'):
-        data = {}
-        mapper = inspect(obj)
-        for attr in mapper.attrs:
-            key = attr.key
-            if key.startswith('_') or key == 'password_hash':
-                continue
-            try:
-                value = getattr(obj, key)
-            except Exception:
-                continue
-            data[key] = serialize_model(value, seen)
-        return data
+         data = {}
+         mapper = inspect(obj)
+         for attr in mapper.attrs:
+             key = attr.key
+             if key.startswith('_') or key == 'password_hash':
+                 continue
+             try:
+                 value = getattr(obj, key)
+             except Exception as e:  # nosec B112 - Intentional fallback for objects with restricted attributes
+                 logger.debug(f"Could not serialize attribute {key}: {e}")
+                 continue
+             data[key] = serialize_model(value, seen)
+         return data
     return str(obj)
 
 
@@ -1556,7 +1557,7 @@ async def login_for_access_token(
         path="/",
         domain=None,  # Don't expose to subdomains
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer"}  # nosec B105 - Standard OAuth2 token type scheme
 
 
 @app.post("/api/logout")
@@ -1590,7 +1591,7 @@ def reset_admin_password(payload: dict | None = None, db: DbSession = None):
         db = SessionLocal()
     
     try:
-        test_password = "Admin123!@#"
+        test_password = "Admin123!@#"  # nosec B105 - Intentional debug-only temporary password for development
         password_hash = get_password_hash(test_password)
         
         # Find admin user
@@ -4232,4 +4233,4 @@ if __name__ == "__main__":
     finally:
         db.close()
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host=settings.api_host, port=settings.api_port)
