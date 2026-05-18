@@ -47,13 +47,6 @@ class UserRole(str, enum.Enum):
     manager           = "manager"
     admin             = "admin"
 
-class ProductBadge(str, enum.Enum):
-    new  = "new"
-    sale = "sale"
-    hit  = "hit"
-    akcia = "АКЦІЯ"     # укр. акція
-    khit = "ХІТ"        # укр. хіт
-
 class OrderStatus(str, enum.Enum):
     new        = "new"
     processing = "processing"
@@ -225,7 +218,7 @@ class Product(Base):
     unit             : Mapped[str]                    = mapped_column(String(20), default="шт")
     weight_kg        : Mapped[Optional[float]]        = mapped_column(Float)
     icon             : Mapped[Optional[str]]          = mapped_column(String(50))
-    badge            : Mapped[Optional[ProductBadge]] = mapped_column(_py_enum(ProductBadge), nullable=True)
+    badge            : Mapped[Optional[str]]          = mapped_column(String(50), nullable=True)  # Дозволяє будь-які значення: new, sale, hit, ХІТ, АКЦІЯ, ТОП
     is_active        : Mapped[bool]                   = mapped_column(Boolean, default=True)
     is_featured      : Mapped[bool]                   = mapped_column(Boolean, default=False)
     meta_title       : Mapped[Optional[str]]          = mapped_column(String(255))

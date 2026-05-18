@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from database import SessionLocal, DATABASE_URL
-from models import Category, Product, User, UserRole, Inventory, Brand, Supplier, SupplyOrder, SupplyOrderItem, PromoCode, DiscountType, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, ProductImage, ProductBadge, Review, OrderStatus, OrderMessage, AuditLog, ClientError, CustomerGroup, ProductPrice, ProductDiscount, PriceHistory
+from models import Category, Product, User, UserRole, Inventory, Brand, Supplier, SupplyOrder, SupplyOrderItem, PromoCode, DiscountType, Order, OrderItem, Cart, CartItem, Notification, NotificationType, Wishlist, DeliveryMethod, PaymentMethod, InventoryMovement, MovementType, ProductAttribute, ProductImage, Review, OrderStatus, OrderMessage, AuditLog, ClientError, CustomerGroup, ProductPrice, ProductDiscount, PriceHistory
 from logging_config import configure_logging, get_logger, set_request_id, set_user_id, get_request_id, generate_request_id
 from config import settings, validate_settings
 from security import (
@@ -930,10 +930,7 @@ def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[d
             if value in (None, ""):
                 normalized[key] = None
             else:
-                try:
-                    normalized[key] = ProductBadge(str(value))
-                except ValueError:
-                    raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Некоректний badge"})
+                normalized[key] = str(value)  # Дозволяє будь-які значення: new, sale, hit, ХІТ, АКЦІЯ, ТОП
         else:
             cleaned = str(value or "").strip()
             if key in {"name", "slug", "sku"} and cleaned == "":
