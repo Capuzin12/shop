@@ -51,6 +51,7 @@ class ProductBadge(str, enum.Enum):
     new  = "new"
     sale = "sale"
     hit  = "hit"
+    akcia = "АКЦІЯ"  # укр. акція
 
 class OrderStatus(str, enum.Enum):
     new        = "new"
