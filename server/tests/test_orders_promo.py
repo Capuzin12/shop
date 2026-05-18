@@ -86,12 +86,12 @@ def test_validate_promo_code_success(db_session):
 
     result = validate_promo_code({"code": "save10", "order_amount": 250}, db_session, user)
 
-    assert result["valid"] is True
-    assert result["discount"] == 25.0
-    assert result["promo"]["id"] == promo.id
+    assert result["valid"] is True  # nosec B101
+    assert result["discount"] == 25.0  # nosec B101
+    assert result["promo"]["id"] == promo.id  # nosec B101
 
     promo_after = db_session.get(PromoCode, promo.id)
-    assert promo_after.used_count == 0
+    assert promo_after.used_count == 0  # nosec B101
 
 
 def test_create_order_applies_promo_discount_and_increments_usage(db_session):
@@ -113,16 +113,16 @@ def test_create_order_applies_promo_discount_and_increments_usage(db_session):
 
     result = create_order(payload, db_session, user)
 
-    assert result["subtotal"] == pytest.approx(240.0)
-    assert result["discount"] == pytest.approx(24.0)
-    assert result["total"] == pytest.approx(216.0)
+    assert result["subtotal"] == pytest.approx(240.0)  # nosec B101
+    assert result["discount"] == pytest.approx(24.0)  # nosec B101
+    assert result["total"] == pytest.approx(216.0)  # nosec B101
 
     order = db_session.scalar(select(Order).where(Order.id == result["id"]))
-    assert order is not None
-    assert order.promo_code_id == promo.id
+    assert order is not None  # nosec B101
+    assert order.promo_code_id == promo.id  # nosec B101
 
     promo_after = db_session.get(PromoCode, promo.id)
-    assert promo_after.used_count == 1
+    assert promo_after.used_count == 1  # nosec B101
 
 
 def test_create_order_rejects_invalid_promo_and_does_not_increment_usage(db_session):
@@ -145,12 +145,12 @@ def test_create_order_rejects_invalid_promo_and_does_not_increment_usage(db_sess
     with pytest.raises(HTTPException) as exc:
         create_order(payload, db_session, user)
 
-    assert exc.value.status_code == 400
-    assert exc.value.detail["code"] == "PROMO_INVALID"
+    assert exc.value.status_code == 400  # nosec B101
+    assert exc.value.detail["code"] == "PROMO_INVALID"  # nosec B101
 
     promo_after = db_session.get(PromoCode, promo.id)
-    assert promo_after.used_count == 0
+    assert promo_after.used_count == 0  # nosec B101
 
     orders = db_session.scalars(select(Order)).all()
-    assert len(orders) == 0
+    assert len(orders) == 0  # nosec B101
 
