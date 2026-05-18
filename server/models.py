@@ -1,13 +1,5 @@
 """
 БудМарт — SQLAlchemy моделі для FastAPI
-Файл: server/models.py
-
-ЗМІНИ vs попередня версія:
-  - Видалено Product.old_price (колонка відсутня в новій схемі БД)
-  - Видалено Product.discount_percent property (залежав від old_price)
-  - DiscountType: значення змінено з percent/fixed → PERCENTAGE/FIXED
-    (щоб відповідати CHECK constraint у promo_codes та product_discounts)
-  - PromoCode.discount_type тепер використовує оновлений DiscountType
 """
 
 from datetime import datetime

@@ -1,0 +1,739 @@
+-- ============================================================
+-- BudMart Supabase seed
+-- Реалістичний seed для e-commerce будматеріалів (Україна)
+-- ============================================================
+
+-- 1) alembic_version
+INSERT INTO public.alembic_version (version_num)
+VALUES ('initial_seed')
+ON CONFLICT (version_num) DO NOTHING;
+
+-- 2) customer_groups не вставляємо (вже створені міграцією):
+-- 1 = Роздріб, 2 = Гуртовик, 3 = Виконроб
+
+-- 3) users
+INSERT INTO public.users (
+  id, email, password_hash, first_name, last_name, phone, role, customer_group_id, is_active, created_at, updated_at
+) VALUES
+  (1, 'admin@budmart.ua', '$2b$12$TESTHASHPLACEHOLDERFORTESTINGONLY123456789012', 'Олександр', 'Ковальчук', '+380671112233', 'admin', NULL, true, '2026-05-10 09:00:00', '2026-05-10 09:00:00'),
+  (2, 'manager@budmart.ua', '$2b$12$TESTHASHPLACEHOLDERFORTESTINGONLY123456789012', 'Ірина', 'Мельник', '+380501234567', 'manager', NULL, true, '2026-05-10 09:10:00', '2026-05-10 09:10:00'),
+  (3, 'warehouse@budmart.ua', '$2b$12$TESTHASHPLACEHOLDERFORTESTINGONLY123456789012', 'Віталій', 'Шевчук', '+380631998877', 'warehouse', NULL, true, '2026-05-10 09:20:00', '2026-05-10 09:20:00'),
+  (4, 'andriy.bondar@gmail.com', '$2b$12$TESTHASHPLACEHOLDERFORTESTINGONLY123456789012', 'Андрій', 'Бондар', '+380679001122', 'customer', 1, true, '2026-05-10 10:00:00', '2026-05-10 10:00:00'),
+  (5, 'oleh.ternovyi@gmail.com', '$2b$12$TESTHASHPLACEHOLDERFORTESTINGONLY123456789012', 'Олег', 'Терновий', '+380931234999', 'customer', 2, true, '2026-05-10 10:05:00', '2026-05-10 10:05:00'),
+  (6, 'serhiy.prokopenko@gmail.com', '$2b$12$TESTHASHPLACEHOLDERFORTESTINGONLY123456789012', 'Сергій', 'Прокопенко', '+380661112244', 'customer', 3, true, '2026-05-10 10:15:00', '2026-05-10 10:15:00');
+
+-- 4) addresses (2-3 адреси на кожного customer)
+INSERT INTO public.addresses (
+  id, user_id, label, city, street, building, apartment, postal_code, is_default, created_at
+) VALUES
+  (1, 4, 'Дім', 'Київ', 'вул. Драгоманова', '12', '45', '02068', true,  '2026-05-10 10:20:00'),
+  (2, 4, 'Будова', 'Київ', 'вул. Сортувальна', '7Б', NULL, '02121', false, '2026-05-10 10:21:00'),
+  (3, 4, 'Батьки', 'Черкаси', 'вул. Смілянська', '88', '11', '18000', false, '2026-05-10 10:22:00'),
+
+  (4, 5, 'Офіс', 'Львів', 'вул. Городоцька', '174', '3', '79040', true,  '2026-05-10 10:25:00'),
+  (5, 5, 'Склад', 'Львів', 'вул. Зелена', '149', NULL, '79035', false, '2026-05-10 10:26:00'),
+  (6, 5, 'Об''єкт', 'Івано-Франківськ', 'вул. Незалежності', '56', NULL, '76018', false, '2026-05-10 10:27:00'),
+
+  (7, 6, 'Дім', 'Дніпро', 'просп. Науки', '33', '72', '49000', true,  '2026-05-10 10:30:00'),
+  (8, 6, 'Об''єкт 1', 'Запоріжжя', 'вул. Перемоги', '101', NULL, '69035', false, '2026-05-10 10:31:00'),
+  (9, 6, 'Об''єкт 2', 'Одеса', 'вул. Балківська', '55', '9', '65005', false, '2026-05-10 10:32:00');
+
+-- 5) brands
+INSERT INTO public.brands (
+  id, name, slug, description, country, logo_url, website_url, is_active, created_at
+) VALUES
+  (1, 'Knauf', 'knauf', 'Німецький виробник гіпсових сумішей, гіпсокартону та систем сухого будівництва.', 'Німеччина', 'https://cdn.budmart.ua/brands/knauf.png', 'https://www.knauf.com', true, '2026-05-10 11:00:00'),
+  (2, 'Ceresit', 'ceresit', 'Лінійка професійних клейових сумішей, гідроізоляції та фасадних рішень.', 'Німеччина', 'https://cdn.budmart.ua/brands/ceresit.png', 'https://www.ceresit.com', true, '2026-05-10 11:01:00'),
+  (3, 'Baumit', 'baumit', 'Будівельні суміші для оздоблення фасадів та внутрішніх робіт.', 'Австрія', 'https://cdn.budmart.ua/brands/baumit.png', 'https://www.baumit.com', true, '2026-05-10 11:02:00'),
+  (4, 'Mapei', 'mapei', 'Італійський бренд стяжок, клеїв та систем для підлог.', 'Італія', 'https://cdn.budmart.ua/brands/mapei.png', 'https://www.mapei.com', true, '2026-05-10 11:03:00'),
+  (5, 'Weber', 'weber', 'Суміші для кладки, штукатурення, вирівнювання та теплоізоляції.', 'Франція', 'https://cdn.budmart.ua/brands/weber.png', 'https://www.weber.com', true, '2026-05-10 11:04:00'),
+  (6, 'Sika', 'sika', 'Професійна хімія для гідроізоляції, ремонту та захисту конструкцій.', 'Швейцарія', 'https://cdn.budmart.ua/brands/sika.png', 'https://www.sika.com', true, '2026-05-10 11:05:00'),
+  (7, 'Henkel (Момент)', 'henkel-moment', 'Клейові матеріали, герметики та допоміжна хімія для монтажу.', 'Німеччина', 'https://cdn.budmart.ua/brands/henkel-moment.png', 'https://www.moment.ua', true, '2026-05-10 11:06:00'),
+  (8, 'Ізобуд', 'izobud', 'Український постачальник тепло- та гідроізоляційних матеріалів.', 'Україна', 'https://cdn.budmart.ua/brands/izobud.png', 'https://www.izobud.ua', true, '2026-05-10 11:07:00'),
+  (9, 'Технопласт', 'tekhnoplast', 'Матеріали для утеплення, покрівлі та бітумні системи.', 'Україна', 'https://cdn.budmart.ua/brands/tekhnoplast.png', 'https://www.tekhnoplast.ua', true, '2026-05-10 11:08:00'),
+  (10, 'Vetonit', 'vetonit', 'Шпаклівки та сухі суміші для фінішного оздоблення поверхонь.', 'Фінляндія', 'https://cdn.budmart.ua/brands/vetonit.png', 'https://www.weber-vetonit.com', true, '2026-05-10 11:09:00');
+
+-- 6) categories (2-рівнева ієрархія)
+INSERT INTO public.categories (
+  id, parent_id, name, slug, description, icon, image_url, sort_order, is_active, created_at
+) VALUES
+  (1, NULL, 'Сухі суміші', 'sukhi-sumishi', 'Суміші для штукатурення, шпаклювання, кладки та стяжок.', '🧱', 'https://cdn.budmart.ua/categories/sukhi-sumishi.jpg', 10, true, '2026-05-10 11:20:00'),
+  (2, NULL, 'Утеплення', 'uteplennia', 'Матеріали для теплоізоляції фасадів, стін, перекриттів і покрівлі.', '🧊', 'https://cdn.budmart.ua/categories/uteplennia.jpg', 20, true, '2026-05-10 11:21:00'),
+  (3, NULL, 'Гідроізоляція', 'hidroizoliatsiia', 'Рішення для захисту конструкцій від вологи та протікання.', '💧', 'https://cdn.budmart.ua/categories/hidroizoliatsiia.jpg', 30, true, '2026-05-10 11:22:00'),
+  (4, NULL, 'Кріплення та інструменти', 'kriplennia-instrumenty', 'Дюбелі, саморізи, анкери та базовий ручний інструмент.', '🔩', 'https://cdn.budmart.ua/categories/kriplennia-instrumenty.jpg', 40, true, '2026-05-10 11:23:00'),
+  (5, NULL, 'Оздоблення', 'ozdoblennia', 'Матеріали для внутрішнього оздоблення та підготовки поверхонь.', '🎨', 'https://cdn.budmart.ua/categories/ozdoblennia.jpg', 50, true, '2026-05-10 11:24:00'),
+  (6, NULL, 'Покрівля', 'pokrivlia', 'Покрівельні матеріали для приватного та комерційного будівництва.', '🏠', 'https://cdn.budmart.ua/categories/pokrivlia.jpg', 60, true, '2026-05-10 11:25:00'),
+
+  (7, 1, 'Штукатурки', 'shtukaturky', 'Гіпсові та цементні штукатурки для вирівнювання стін.', '🪣', 'https://cdn.budmart.ua/categories/shtukaturky.jpg', 11, true, '2026-05-10 11:30:00'),
+  (8, 1, 'Клеї для плитки', 'klei-dlia-plytky', 'Клейові суміші для керамічної плитки та керамограніту.', '🧩', 'https://cdn.budmart.ua/categories/klei-dlia-plytky.jpg', 12, true, '2026-05-10 11:31:00'),
+  (9, 1, 'Шпаклівки', 'shpaklivky', 'Стартові та фінішні шпаклівки для стін і стель.', '🧽', 'https://cdn.budmart.ua/categories/shpaklivky.jpg', 13, true, '2026-05-10 11:32:00'),
+  (10, 1, 'Стяжки', 'stiazhky', 'Суміші для вирівнювання та заливки підлог.', '📐', 'https://cdn.budmart.ua/categories/stiazhky.jpg', 14, true, '2026-05-10 11:33:00'),
+
+  (11, 2, 'Мінвата', 'minvata', 'Мінераловатні плити та рулони для тепло- і шумоізоляції.', '🧶', 'https://cdn.budmart.ua/categories/minvata.jpg', 21, true, '2026-05-10 11:34:00'),
+  (12, 2, 'Пінопласт', 'pinoplast', 'Фасадний пінопласт для систем мокрого утеплення.', '⬜', 'https://cdn.budmart.ua/categories/pinoplast.jpg', 22, true, '2026-05-10 11:35:00'),
+  (13, 2, 'Екструдований пінополістирол', 'xps', 'XPS плити для утеплення фундаментів, підлог і цоколів.', '🟦', 'https://cdn.budmart.ua/categories/xps.jpg', 23, true, '2026-05-10 11:36:00'),
+
+  (14, 3, 'Обмазувальна гідроізоляція', 'obmazuvalna-hidroizoliatsiia', 'Цементно-полімерні матеріали для ванних, підвалів і резервуарів.', '🛡️', 'https://cdn.budmart.ua/categories/obmazuvalna-hidroizoliatsiia.jpg', 31, true, '2026-05-10 11:37:00'),
+  (15, 3, 'Рулонна гідроізоляція', 'rulonna-hidroizoliatsiia', 'Мембрани та бітумні рулонні матеріали для покрівлі й фундаментів.', '📦', 'https://cdn.budmart.ua/categories/rulonna-hidroizoliatsiia.jpg', 32, true, '2026-05-10 11:38:00'),
+
+  (16, 4, 'Дюбелі та анкери', 'diubeli-ankery', 'Кріплення для монтажу утеплювача, профілів і конструкцій.', '📌', 'https://cdn.budmart.ua/categories/diubeli-ankery.jpg', 41, true, '2026-05-10 11:39:00'),
+  (17, 4, 'Саморізи та шурупи', 'samorizy-shurupy', 'Саморізи по дереву, металу та універсальні шурупи.', '🪛', 'https://cdn.budmart.ua/categories/samorizy-shurupy.jpg', 42, true, '2026-05-10 11:40:00'),
+  (18, 4, 'Ручний інструмент', 'ruchnyi-instrument', 'Кельми, шпателі, рівні та інший базовий інструмент.', '🧰', 'https://cdn.budmart.ua/categories/ruchnyi-instrument.jpg', 43, true, '2026-05-10 11:41:00'),
+
+  (19, 5, 'Гіпсокартон та профілі', 'hipsokarton-profili', 'Листові матеріали та профільні системи для перегородок.', '📏', 'https://cdn.budmart.ua/categories/hipsokarton-profili.jpg', 51, true, '2026-05-10 11:42:00'),
+  (20, 5, 'Фарби та ґрунтівки', 'farby-gruntivky', 'Ґрунти, фасадні та інтер''єрні фарби.', '🖌️', 'https://cdn.budmart.ua/categories/farby-gruntivky.jpg', 52, true, '2026-05-10 11:43:00'),
+
+  (21, 6, 'Металочерепиця', 'metalocherepytsia', 'Листова металочерепиця для скатних дахів.', '🛖', 'https://cdn.budmart.ua/categories/metalocherepytsia.jpg', 61, true, '2026-05-10 11:44:00'),
+  (22, 6, 'Бітумна покрівля', 'bitumna-pokrivlia', 'Гнучка черепиця та комплектуючі для приватних будинків.', '🧱', 'https://cdn.budmart.ua/categories/bitumna-pokrivlia.jpg', 62, true, '2026-05-10 11:45:00');
+
+-- 7) promo_codes
+INSERT INTO public.promo_codes (
+  id, code, description, discount_type, discount_value, min_order_amount, max_uses, used_count, valid_from, valid_until, is_active, created_at
+) VALUES
+  (1, 'WELCOME10', 'Знижка 10% на перше замовлення від 1000 грн.', 'PERCENTAGE', 10, 1000, NULL, 12, '2026-01-01 00:00:00', '2026-12-31 23:59:59', true,  '2026-05-10 12:00:00'),
+  (2, 'SAVE200',   'Мінус 200 грн на замовлення від 1500 грн.', 'FIXED',      200, 1500, NULL, 8,  '2026-02-01 00:00:00', '2026-12-31 23:59:59', true,  '2026-05-10 12:01:00'),
+  (3, 'SPRING2025','Весняна акція минулого сезону.',             'PERCENTAGE', 15, 1200, 500, 500, '2025-03-01 00:00:00', '2025-05-31 23:59:59', false, '2026-05-10 12:02:00'),
+  (4, 'BULK500',   'Фіксована знижка 500 грн для великих закупівель.', 'FIXED', 500, 3000, 50, 17, '2026-03-01 00:00:00', '2026-09-30 23:59:59', true, '2026-05-10 12:03:00');
+
+-- 8) products (31 шт)
+INSERT INTO public.products (
+  id, category_id, brand_id, name, slug, sku, description, price, unit, weight_kg,
+  icon, badge, is_active, is_featured, meta_title, meta_description, created_at, updated_at
+) VALUES
+  (1, 7, 1, 'Штукатурка гіпсова Knauf Rotband 30кг', 'shtukaturka-knauf-rotband-30', 'KNF-SHP-30',
+   'Гіпсова штукатурка для ручного нанесення на стіни та стелі у сухих приміщеннях. Забезпечує гладку поверхню та зручна в роботі завдяки пластичній консистенції.',
+   329.00, 'мішок', 30.0, '🧱', 'ХІТ', true, true, 'Knauf Rotband 30кг купити', 'Гіпсова штукатурка Knauf Rotband 30 кг для внутрішніх робіт.', '2026-05-10 12:30:00', '2026-05-10 12:30:00'),
+
+  (2, 8, 2, 'Клей для плитки Ceresit CM 11 25кг', 'klei-ceresit-cm11-25', 'CER-CM11-25',
+   'Цементний клей для керамічної плитки у приміщеннях та зовні. Має надійне зчеплення з мінеральними основами та стійкий до вологи.',
+   289.00, 'мішок', 25.0, '🧩', 'ТОП', true, true, 'Ceresit CM 11 25кг', 'Клей для плитки Ceresit CM 11, мішок 25 кг.', '2026-05-10 12:31:00', '2026-05-10 12:31:00'),
+
+  (3, 7, 3, 'Штукатурка цементна Baumit MPI 25 25кг', 'shtukaturka-baumit-mpi25', 'BAU-MPI25-25',
+   'Універсальна цементна штукатурка для машинного та ручного нанесення. Підходить для фасадів і вологих приміщень.',
+   315.00, 'мішок', 25.0, '🪣', NULL, true, false, 'Baumit MPI 25', 'Цементна штукатурка Baumit MPI 25.', '2026-05-10 12:32:00', '2026-05-10 12:32:00'),
+
+  (4, 9, 10, 'Шпаклівка фінішна Vetonit LR+ 20кг', 'shpaklivka-vetonit-lrplus-20', 'VET-LRP-20',
+   'Фінішна полімерна шпаклівка для внутрішніх робіт у сухих приміщеннях. Добре шліфується та забезпечує білу гладку поверхню під фарбування.',
+   458.00, 'мішок', 20.0, '🧽', NULL, true, false, 'Vetonit LR+ 20кг', 'Фінішна шпаклівка Vetonit LR+ 20 кг.', '2026-05-10 12:33:00', '2026-05-10 12:33:00'),
+
+  (5, 9, 2, 'Шпаклівка стартова Ceresit CT 29 25кг', 'shpaklivka-ceresit-ct29-25', 'CER-CT29-25',
+   'Стартова шпаклівка для вирівнювання мінеральних основ перед фінішним оздобленням. Суміш пластична, з високою адгезією та стійкістю до тріщин.',
+   339.00, 'мішок', 25.0, '🧱', NULL, true, false, 'Ceresit CT 29', 'Стартова шпаклівка Ceresit CT 29, 25 кг.', '2026-05-10 12:34:00', '2026-05-10 12:34:00'),
+
+  (6, 10, 4, 'Стяжка самовирівнювальна Mapei Ultraplan 25кг', 'stiazhka-mapei-ultraplan-25', 'MAP-ULT-25',
+   'Швидкотвердіюча самовирівнювальна суміш для підготовки основи під покриття. Підходить для внутрішніх робіт та систем теплої підлоги.',
+   620.00, 'мішок', 25.0, '📐', NULL, true, false, 'Mapei Ultraplan 25кг', 'Самовирівнювальна стяжка Mapei Ultraplan.', '2026-05-10 12:35:00', '2026-05-10 12:35:00'),
+
+  (7, 10, 2, 'Стяжка Ceresit CN 69 25кг', 'stiazhka-ceresit-cn69-25', 'CER-CN69-25',
+   'Суміш для вирівнювання підлог перед укладанням плитки, ламінату чи ПВХ-покриттів. Добре розтікається та утворює міцну поверхню.',
+   495.00, 'мішок', 25.0, '📏', NULL, true, false, 'Ceresit CN 69', 'Стяжка Ceresit CN 69 для внутрішніх робіт.', '2026-05-10 12:36:00', '2026-05-10 12:36:00'),
+
+  (8, 11, 1, 'Мінеральна вата Knauf Insulation 50мм', 'minvata-knauf-insulation-50', 'KNF-MIN-50',
+   'Плити мінеральної вати для утеплення фасадів, перегородок і перекриттів. Забезпечують тепловий та акустичний захист конструкцій.',
+   419.00, 'пак', 10.0, '🧊', 'ПОПУЛЯРНЕ', true, true, 'Knauf Insulation 50мм', 'Мінеральна вата Knauf Insulation 50 мм.', '2026-05-10 12:37:00', '2026-05-10 12:37:00'),
+
+  (9, 11, 8, 'Мінеральна плита Ізобуд Фасад 100мм', 'minplita-izobud-fasad-100', 'IZB-FAS-100',
+   'Базальтова плита під фасадну систему утеплення з підвищеною щільністю. Стійка до деформацій та має добру паропроникність.',
+   535.00, 'пак', 14.0, '🧶', NULL, true, false, 'Ізобуд Фасад 100мм', 'Мінеральна фасадна плита Ізобуд 100 мм.', '2026-05-10 12:38:00', '2026-05-10 12:38:00'),
+
+  (10, 12, 8, 'Пінопласт ПСБ-С-25 1000x500x50мм', 'pinoplast-psb-s25-50', 'IZB-PSB25-50',
+   'Фасадний пінопласт для утеплення стін у системах мокрого фасаду. Легкий матеріал із стабільною геометрією плит.',
+   198.00, 'пак', 6.0, '⬜', NULL, true, false, 'Пінопласт ПСБ-С-25 50мм', 'Пінопласт для фасадного утеплення 50 мм.', '2026-05-10 12:39:00', '2026-05-10 12:39:00'),
+
+  (11, 13, 9, 'Піноплекс Технопласт XPS 50мм', 'pinoplex-tekhnoplast-xps-50', 'THP-XPS-50',
+   'Екструдований пінополістирол для цоколю, фундаменту та підлоги по ґрунту. Має низьке водопоглинання і високу міцність на стиск.',
+   312.00, 'пак', 8.0, '🟦', NULL, true, false, 'XPS 50мм Технопласт', 'Піноплекс XPS 50 мм для утеплення фундаменту.', '2026-05-10 12:40:00', '2026-05-10 12:40:00'),
+
+  (12, 13, 9, 'Плита XPS Carbon Технопласт 30мм', 'xps-carbon-tekhnoplast-30', 'THP-XPSC-30',
+   'Теплоізоляційні XPS плити для підлог, балконів і плоских покрівель. Зручні у монтажі та зберігають параметри в умовах вологості.',
+   278.00, 'пак', 7.0, '🧊', NULL, true, false, 'XPS Carbon 30мм', 'Екструдований пінополістирол XPS Carbon 30 мм.', '2026-05-10 12:41:00', '2026-05-10 12:41:00'),
+
+  (13, 14, 2, 'Гідроізоляція Ceresit CR 65 25кг', 'hidroizoliatsiia-ceresit-cr65-25', 'CER-CR65-25',
+   'Цементна гідроізоляційна суміш для резервуарів, підвалів і санвузлів. Утворює водонепроникний шар на мінеральних основах.',
+   1249.00, 'мішок', 25.0, '💧', 'АКЦІЯ', true, true, 'Ceresit CR 65 25кг', 'Гідроізоляція Ceresit CR 65 для вологих зон.', '2026-05-10 12:42:00', '2026-05-10 12:42:00'),
+
+  (14, 14, 6, 'Гідроізоляція SikaTop Seal-107 25кг', 'hidroizoliatsiia-sikatop-seal107-25', 'SIK-SEAL107-25',
+   'Двокомпонентна еластична гідроізоляція для бетону та цементних основ. Підходить для терас, басейнів та підземних частин будівлі.',
+   1890.00, 'мішок', 25.0, '🛡️', NULL, true, false, 'SikaTop Seal-107', 'Еластична гідроізоляція SikaTop Seal-107.', '2026-05-10 12:43:00', '2026-05-10 12:43:00'),
+
+  (15, 15, 8, 'Мембрана Ізобуд Hydrobarrier 75м²', 'membrana-izobud-hydrobarrier-75', 'IZB-HBR-75',
+   'Підпокрівельна дифузійна мембрана для захисту утеплювача від вологи та вітру. Забезпечує вихід пари з конструкції та подовжує строк служби даху.',
+   1560.00, 'рул', 12.0, '📦', NULL, true, false, 'Hydrobarrier 75м²', 'Підпокрівельна мембрана Ізобуд 75 м².', '2026-05-10 12:44:00', '2026-05-10 12:44:00'),
+
+  (16, 14, 9, 'Мастика бітумна Технопласт 18кг', 'mastyka-bitumna-tekhnoplast-18', 'THP-BIT-18',
+   'Бітумна мастика для гідроізоляції фундаментів, цоколю та покрівлі. Має високу адгезію до бетону, металу та рулонних матеріалів.',
+   980.00, 'мішок', 18.0, '🪣', NULL, true, false, 'Бітумна мастика 18кг', 'Бітумна мастика для зовнішніх робіт.', '2026-05-10 12:45:00', '2026-05-10 12:45:00'),
+
+  (17, 16, NULL, 'Дюбель-цвях 6x40мм (упаковка 100шт)', 'diubel-tsviakh-6x40-100', 'FIX-DN-640-100',
+   'Універсальне кріплення для швидкого монтажу профілів і легких конструкцій до бетону та цегли. У комплекті дюбель і ударний шуруп.',
+   215.00, 'пак', 1.1, '📌', NULL, true, false, 'Дюбель-цвях 6x40, 100шт', 'Дюбель-цвях для монтажних робіт.', '2026-05-10 12:46:00', '2026-05-10 12:46:00'),
+
+  (18, 16, NULL, 'Анкер клиновий 10x100мм (упаковка 25шт)', 'anker-klynovyi-10x100-25', 'FIX-AK-10100-25',
+   'Клиновий анкер для надійного кріплення важких конструкцій у бетоні. Використовується для монтажу обладнання, консолей і рам.',
+   265.00, 'пак', 1.8, '🔩', NULL, true, false, 'Анкер 10x100, 25шт', 'Клиновий анкер для бетону.', '2026-05-10 12:47:00', '2026-05-10 12:47:00'),
+
+  (19, 16, NULL, 'Дюбель для утеплювача 10x160мм (50шт)', 'diubel-utepliuvach-10x160-50', 'FIX-UT-10160-50',
+   'Тарілчастий дюбель для фіксації мінеральної вати та пінополістиролу на фасаді. Забезпечує стабільне притискання плити по всій площі.',
+   345.00, 'пак', 1.5, '📍', NULL, true, false, 'Дюбель для утеплювача 10x160', 'Тарілчастий дюбель для фасадного утеплення.', '2026-05-10 12:48:00', '2026-05-10 12:48:00'),
+
+  (20, 17, NULL, 'Саморіз по дереву 4.2x75мм (упаковка 200шт)', 'samoriz-po-derevu-4-2x75-200', 'SCR-WD-4275-200',
+   'Фосфатовані саморізи для монтажу дерев''яних конструкцій та листових матеріалів. Загострений наконечник забезпечує швидке входження в основу.',
+   239.00, 'пак', 1.4, '🪛', NULL, true, false, 'Саморіз 4.2x75, 200шт', 'Саморізи по дереву у великій упаковці.', '2026-05-10 12:49:00', '2026-05-10 12:49:00'),
+
+  (21, 17, NULL, 'Саморіз по металу 3.5x25мм (упаковка 500шт)', 'samoriz-po-metalu-3-5x25-500', 'SCR-MT-3525-500',
+   'Саморізи для кріплення гіпсокартону до металевого профілю. Антикорозійне покриття дозволяє використовувати у стандартних умовах вологості.',
+   289.00, 'пак', 1.6, '🔧', NULL, true, false, 'Саморіз 3.5x25, 500шт', 'Саморізи по металу для ГКЛ систем.', '2026-05-10 12:50:00', '2026-05-10 12:50:00'),
+
+  (22, 17, NULL, 'Шуруп універсальний 5x60мм (упаковка 200шт)', 'shurup-universalnyi-5x60-200', 'SCR-UN-5060-200',
+   'Універсальні шурупи для дерева, ДСП та комбінованих монтажних робіт. Підходять для складання каркасів, меблів і допоміжних конструкцій.',
+   315.00, 'пак', 1.7, '🔩', NULL, true, false, 'Шуруп 5x60, 200шт', 'Універсальний шуруп для будівельних робіт.', '2026-05-10 12:51:00', '2026-05-10 12:51:00'),
+
+  (23, 18, NULL, 'Кельма нержавіюча 280мм', 'kelma-nerzhaviucha-280', 'TLS-KEL-280',
+   'Професійна кельма для нанесення розчинів і шпаклівок. Полотно з нержавіючої сталі стійке до корозії та деформацій.',
+   185.00, 'шт', 0.4, '🧰', NULL, true, false, 'Кельма 280мм', 'Нержавіюча кельма для штукатурних робіт.', '2026-05-10 12:52:00', '2026-05-10 12:52:00'),
+
+  (24, 18, NULL, 'Рівень будівельний 1000мм', 'riven-budivelnyi-1000', 'TLS-RIV-1000',
+   'Алюмінієвий рівень з трьома колбами для точного виставлення конструкцій. Посилений профіль витримує щоденне використання на об''єкті.',
+   420.00, 'шт', 0.8, '📏', NULL, true, false, 'Рівень 1000мм', 'Будівельний рівень для монтажних робіт.', '2026-05-10 12:53:00', '2026-05-10 12:53:00'),
+
+  (25, 19, 1, 'Профіль CD 60x27 3м', 'profil-cd-60x27-3m', 'KNF-CD-6027-3',
+   'Несучий оцинкований профіль для підвісних стель і перегородок із ГКЛ. Має стабільну геометрію та сумісний зі стандартною фурнітурою.',
+   129.00, 'шт', 1.9, '📐', NULL, true, false, 'Профіль CD 3м', 'Профіль CD для систем гіпсокартону.', '2026-05-10 12:54:00', '2026-05-10 12:54:00'),
+
+  (26, 19, 1, 'Профіль UD 28x27 3м', 'profil-ud-28x27-3m', 'KNF-UD-2827-3',
+   'Направляючий профіль для формування каркаса у системах сухого будівництва. Використовується у парі з профілем CD.',
+   89.00, 'шт', 1.2, '📏', NULL, true, false, 'Профіль UD 3м', 'Направляючий профіль UD для монтажу ГКЛ.', '2026-05-10 12:55:00', '2026-05-10 12:55:00'),
+
+  (27, 19, 1, 'Гіпсокартон Knauf 12.5мм 1200x2500', 'hipsokarton-knauf-12-5-1200x2500', 'KNF-GKL-12-2500',
+   'Стіновий гіпсокартон для внутрішніх перегородок, облицювання стін і стель. Лист має рівну поверхню та підходить під подальше шпаклювання.',
+   445.00, 'шт', 27.0, '🧱', 'ХІТ', true, true, 'Гіпсокартон Knauf 12.5мм', 'Лист гіпсокартону Knauf 1200x2500.', '2026-05-10 12:56:00', '2026-05-10 12:56:00'),
+
+  (28, 20, 2, 'Ґрунтівка Ceresit CT 17 10л', 'gruntivka-ceresit-ct17-10', 'CER-CT17-10',
+   'Глибокопроникна ґрунтівка для зміцнення та знепилення основ перед оздобленням. Зменшує водопоглинання та покращує адгезію матеріалів.',
+   780.00, 'л', 10.0, '🖌️', 'ТОП', true, true, 'Ceresit CT 17 10л', 'Ґрунтівка Ceresit CT 17 для підготовки поверхонь.', '2026-05-10 12:57:00', '2026-05-10 12:57:00'),
+
+  (29, 20, 3, 'Фарба фасадна Baumit Granopor 14л', 'farba-fasadna-baumit-granopor-14', 'BAU-GRN-14',
+   'Силіконова фасадна фарба з високою атмосферостійкістю та стійкістю до вигорання. Формує еластичне покриття з тривалим терміном служби.',
+   2140.00, 'л', 19.0, '🎨', NULL, true, false, 'Baumit Granopor 14л', 'Фасадна фарба Baumit для зовнішніх робіт.', '2026-05-10 12:58:00', '2026-05-10 12:58:00'),
+
+  (30, 21, NULL, 'Металочерепиця Monterrey 0.5мм', 'metalocherepytsia-monterrey-0-5', 'ROF-MON-05',
+   'Металочерепиця для скатних дахів житлових та комерційних будівель. Покриття стійке до корозії та ультрафіолету, колір стабільний упродовж років.',
+   369.00, 'м²', 4.5, '🏠', 'ПОПУЛЯРНЕ', true, true, 'Металочерепиця Monterrey 0.5мм', 'Листова металочерепиця Monterrey для покрівлі.', '2026-05-10 12:59:00', '2026-05-10 12:59:00'),
+
+  (31, 22, NULL, 'Бітумна черепиця IKO Cambridge 3м²', 'bitumna-cherepytsia-iko-cambridge-3', 'ROF-IKO-3',
+   'Гнучка бітумна черепиця для складних скатних дахів із надійною герметичністю вузлів. Посипка з базальтового грануляту захищає покриття від сонця.',
+   1320.00, 'пак', 25.0, '🧱', NULL, true, false, 'IKO Cambridge 3м²', 'Бітумна черепиця IKO для приватного будинку.', '2026-05-10 13:00:00', '2026-05-10 13:00:00');
+
+-- Створюємо історію зміни цін через тригер (без ручного INSERT у price_history)
+BEGIN;
+SET LOCAL app.current_user_id = '2';
+UPDATE public.products SET price = 334.00, updated_at = now() WHERE id = 1;
+UPDATE public.products SET price = 284.00, updated_at = now() WHERE id = 2;
+UPDATE public.products SET price = 425.00, updated_at = now() WHERE id = 8;
+COMMIT;
+
+-- 9) product_prices (3 тарифи на кожен товар)
+INSERT INTO public.product_prices (
+  id, product_id, customer_group_id, price, min_quantity, updated_at
+)
+SELECT
+  ROW_NUMBER() OVER (ORDER BY p.id, cg.id) AS id,
+  p.id,
+  cg.id,
+  CASE
+    WHEN cg.id = 1 THEN p.price
+    WHEN cg.id = 2 THEN ROUND((p.price * 0.88)::NUMERIC, 2)::DOUBLE PRECISION
+    WHEN cg.id = 3 THEN ROUND((p.price * 0.92)::NUMERIC, 2)::DOUBLE PRECISION
+  END AS price,
+  CASE
+    WHEN cg.id = 1 THEN 1
+    WHEN cg.id = 2 THEN 10
+    WHEN cg.id = 3 THEN 5
+  END AS min_quantity,
+  now()
+FROM public.products p
+CROSS JOIN (VALUES (1), (2), (3)) AS cg(id)
+ORDER BY p.id, cg.id;
+
+-- 10) product_discounts (щонайменше 6 активних)
+INSERT INTO public.product_discounts (
+  id, product_id, discount_type, discount_value, start_date, end_date, is_active
+) VALUES
+  (1, 13, 'PERCENTAGE', 15, '2026-05-01 00:00:00', '2026-06-30 23:59:59', true),
+  (2, 28, 'FIXED_PRICE', 699, NULL, NULL, true),
+  (3, 30, 'PERCENTAGE', 10, '2026-04-15 00:00:00', '2026-07-15 23:59:59', true),
+  (4, 8,  'PERCENTAGE', 12, NULL, NULL, true),
+  (5, 2,  'FIXED_PRICE', 249, '2026-05-10 00:00:00', '2026-05-31 23:59:59', true),
+  (6, 31, 'PERCENTAGE', 8, '2026-05-01 00:00:00', '2026-08-31 23:59:59', true),
+  (7, 6,  'PERCENTAGE', 5, '2026-01-01 00:00:00', '2026-03-31 23:59:59', false);
+
+-- 11) product_attributes (3 атрибути на кожен товар)
+WITH attrs AS (
+  -- sort_order = 1
+  SELECT
+    p.id AS product_id,
+    CASE
+      WHEN p.category_id BETWEEN 7 AND 10 THEN 'Фасування'
+      WHEN p.category_id BETWEEN 11 AND 13 THEN 'Товщина'
+      WHEN p.category_id IN (14, 15) THEN 'Тип'
+      WHEN p.category_id IN (16, 17) THEN 'Діаметр'
+      WHEN p.category_id = 18 THEN 'Матеріал'
+      WHEN p.category_id IN (19, 20) THEN 'Формат'
+      WHEN p.category_id IN (21, 22) THEN 'Тип покриття'
+      ELSE 'Параметр'
+    END AS key,
+    CASE
+      WHEN p.category_id BETWEEN 7 AND 10 THEN CONCAT(COALESCE(p.weight_kg, 0)::TEXT, ' кг')
+      WHEN p.id = 8 THEN '50 мм'
+      WHEN p.id = 9 THEN '100 мм'
+      WHEN p.id = 10 THEN '50 мм'
+      WHEN p.id = 11 THEN '50 мм'
+      WHEN p.id = 12 THEN '30 мм'
+      WHEN p.category_id = 14 THEN 'Цементно-полімерна'
+      WHEN p.category_id = 15 THEN 'Дифузійна мембрана'
+      WHEN p.id = 17 THEN '6 мм'
+      WHEN p.id = 18 THEN '10 мм'
+      WHEN p.id = 19 THEN '10 мм'
+      WHEN p.id = 20 THEN '4.2 мм'
+      WHEN p.id = 21 THEN '3.5 мм'
+      WHEN p.id = 22 THEN '5 мм'
+      WHEN p.id = 23 THEN 'Нержавіюча сталь'
+      WHEN p.id = 24 THEN 'Алюміній'
+      WHEN p.id = 25 THEN '3 м'
+      WHEN p.id = 26 THEN '3 м'
+      WHEN p.id = 27 THEN '1200x2500 мм'
+      WHEN p.id = 28 THEN 'Каністра 10 л'
+      WHEN p.id = 29 THEN 'Відро 14 л'
+      WHEN p.id = 30 THEN '0.5 мм'
+      WHEN p.id = 31 THEN '3 м²/пак'
+      ELSE 'Стандарт'
+    END AS value,
+    NULL::VARCHAR AS unit,
+    1 AS sort_order
+  FROM public.products p
+
+  UNION ALL
+
+  -- sort_order = 2
+  SELECT
+    p.id,
+    CASE
+      WHEN p.category_id BETWEEN 7 AND 10 THEN 'Витрата'
+      WHEN p.category_id BETWEEN 11 AND 13 THEN 'Щільність'
+      WHEN p.category_id IN (14, 15) THEN 'Витрата'
+      WHEN p.category_id IN (16, 17) THEN 'Довжина'
+      WHEN p.category_id = 18 THEN 'Розмір'
+      WHEN p.category_id IN (19, 20) THEN 'Сфера застосування'
+      WHEN p.category_id IN (21, 22) THEN 'Гарантія'
+      ELSE 'Параметр 2'
+    END,
+    CASE
+      WHEN p.category_id BETWEEN 7 AND 10 THEN '1.4-1.8 кг/м² на 1 мм'
+      WHEN p.id = 8 THEN '35-45 кг/м³'
+      WHEN p.id = 9 THEN '130 кг/м³'
+      WHEN p.id IN (10, 11, 12) THEN '28-35 кг/м³'
+      WHEN p.category_id = 14 THEN '2.5-3.5 кг/м² у 2 шари'
+      WHEN p.category_id = 15 THEN '1 рулон = 75 м²'
+      WHEN p.id = 17 THEN '40 мм'
+      WHEN p.id = 18 THEN '100 мм'
+      WHEN p.id = 19 THEN '160 мм'
+      WHEN p.id = 20 THEN '75 мм'
+      WHEN p.id = 21 THEN '25 мм'
+      WHEN p.id = 22 THEN '60 мм'
+      WHEN p.id = 23 THEN '280 мм'
+      WHEN p.id = 24 THEN '1000 мм'
+      WHEN p.category_id = 19 THEN 'Монтаж ГКЛ систем'
+      WHEN p.id = 28 THEN 'Підготовка основ'
+      WHEN p.id = 29 THEN 'Фарбування фасадів'
+      WHEN p.id = 30 THEN '20 років'
+      WHEN p.id = 31 THEN '15 років'
+      ELSE 'Стандарт'
+    END,
+    NULL::VARCHAR,
+    2
+  FROM public.products p
+
+  UNION ALL
+
+  -- sort_order = 3
+  SELECT
+    p.id,
+    CASE
+      WHEN p.category_id BETWEEN 7 AND 10 THEN 'Час висихання'
+      WHEN p.category_id BETWEEN 11 AND 13 THEN 'Теплопровідність'
+      WHEN p.category_id IN (14, 15) THEN 'Температура застосування'
+      WHEN p.category_id IN (16, 17) THEN 'Покриття'
+      WHEN p.category_id = 18 THEN 'Клас точності'
+      WHEN p.category_id IN (19, 20) THEN 'Країна виробництва'
+      WHEN p.category_id IN (21, 22) THEN 'Стійкість до УФ'
+      ELSE 'Параметр 3'
+    END,
+    CASE
+      WHEN p.category_id BETWEEN 7 AND 10 THEN '24-48 годин'
+      WHEN p.category_id BETWEEN 11 AND 13 THEN '0.034-0.040 Вт/мК'
+      WHEN p.category_id IN (14, 15) THEN '+5..+30°C'
+      WHEN p.category_id IN (16, 17) THEN 'Оцинковане / фосфатоване'
+      WHEN p.category_id = 18 THEN '0.5 мм/м'
+      WHEN p.category_id IN (19, 20) THEN 'ЄС / Україна'
+      WHEN p.category_id IN (21, 22) THEN 'Так'
+      ELSE 'Н/Д'
+    END,
+    NULL::VARCHAR,
+    3
+  FROM public.products p
+)
+INSERT INTO public.product_attributes (id, product_id, key, value, unit, sort_order)
+SELECT
+  ROW_NUMBER() OVER (ORDER BY product_id, sort_order, key) AS id,
+  product_id,
+  key,
+  value,
+  unit,
+  sort_order
+FROM attrs
+ORDER BY product_id, sort_order;
+
+-- 12) product_images (2 фото на кожен товар)
+INSERT INTO public.product_images (
+  id, product_id, url, alt_text, is_main, sort_order
+)
+SELECT
+  ROW_NUMBER() OVER (ORDER BY p.id, gs.n) AS id,
+  p.id,
+  CONCAT('https://cdn.budmart.ua/products/', p.slug, '/', gs.n::TEXT, '.jpg') AS url,
+  CASE
+    WHEN gs.n = 1 THEN CONCAT(p.name, ' - головне фото')
+    ELSE CONCAT(p.name, ' - додаткове фото ', gs.n::TEXT)
+  END AS alt_text,
+  (gs.n = 1) AS is_main,
+  gs.n AS sort_order
+FROM public.products p
+CROSS JOIN generate_series(1, 2) AS gs(n)
+ORDER BY p.id, gs.n;
+
+-- 13) inventory (1 рядок на товар)
+INSERT INTO public.inventory (
+  id, product_id, quantity, min_quantity, max_quantity, min_quantity_alert, location, updated_at
+)
+SELECT
+  ROW_NUMBER() OVER (ORDER BY p.id) AS id,
+  p.id,
+  CASE
+    WHEN p.is_featured THEN 220 + (p.id * 7 % 180)
+    WHEN p.category_id IN (16, 17) THEN 180 + (p.id * 11 % 240)
+    WHEN p.category_id IN (21, 22) THEN 12 + (p.id * 3 % 25)
+    ELSE 35 + (p.id * 13 % 130)
+  END AS quantity,
+  CASE
+    WHEN p.category_id IN (21, 22) THEN 5
+    ELSE 10
+  END AS min_quantity,
+  CASE
+    WHEN p.category_id IN (21, 22) THEN 600
+    ELSE 1500
+  END AS max_quantity,
+  CASE
+    WHEN p.category_id IN (21, 22) THEN 10
+    ELSE 25
+  END AS min_quantity_alert,
+  CASE
+    WHEN p.id <= 10 THEN CONCAT('A1-', LPAD((p.id)::TEXT, 2, '0'))
+    WHEN p.id <= 20 THEN CONCAT('B2-', LPAD((p.id - 10)::TEXT, 2, '0'))
+    ELSE CONCAT('C3-', LPAD((p.id - 20)::TEXT, 2, '0'))
+  END AS location,
+  now()
+FROM public.products p
+ORDER BY p.id;
+
+-- 14) suppliers
+INSERT INTO public.suppliers (
+  id, name, contact_name, phone, email, address, payment_terms, notes, is_active, created_at
+) VALUES
+  (1, 'ТОВ "БудПостач Груп"', 'Микола Степаненко', '+380671234100', 'sales@budpostach.ua', 'м. Київ, вул. Колекторна, 44', 'Net 30', 'Постачання сухих сумішей і кріплення щотижня.', true, '2026-05-10 14:00:00'),
+  (2, 'ТОВ "Фасад Логістик"', 'Олена Грицай', '+380501234101', 'office@fasadlogistic.ua', 'м. Львів, вул. Шевченка, 321', 'Передоплата 50%', 'Спеціалізація на фасадних системах.', true, '2026-05-10 14:01:00'),
+  (3, 'ПП "ІнтерІзол"', 'Роман Крамар', '+380631234102', 'info@interizol.ua', 'м. Дніпро, вул. Будівельників, 8', 'Net 14', 'Ізоляційні матеріали та рулонна гідроізоляція.', true, '2026-05-10 14:02:00'),
+  (4, 'ТОВ "СкладПрофі"', 'Людмила Савчук', '+380931234103', 'supply@skladprofi.ua', 'м. Одеса, вул. Промислова, 17', 'Net 21', 'Профілі, гіпсокартон, інструмент.', true, '2026-05-10 14:03:00');
+
+-- 15) supply_orders
+INSERT INTO public.supply_orders (
+  id, supplier_id, invoice_number, status, total_amount, notes, ordered_at, expected_at, received_at, created_by, created_at
+) VALUES
+  (1, 1, 'INV-2026-0501', 'pending', 15420.00, 'Термінове поповнення популярних позицій.', '2026-05-11 09:00:00', '2026-05-20 18:00:00', NULL, 3, '2026-05-11 09:00:00'),
+  (2, 2, 'INV-2026-0502', 'ordered', 23280.00, 'Замовлення фасадної групи товарів.', '2026-05-11 10:30:00', '2026-05-18 18:00:00', NULL, 3, '2026-05-11 10:30:00'),
+  (3, 3, 'INV-2026-0503', 'received', 18760.00, 'Поставка утеплювачів і мембран отримана повністю.', '2026-05-08 11:20:00', '2026-05-13 18:00:00', '2026-05-13 13:10:00', 3, '2026-05-08 11:20:00'),
+  (4, 4, 'INV-2026-0504', 'received', 14390.00, 'Профіль і ГКЛ для проектних клієнтів.', '2026-05-07 15:40:00', '2026-05-12 18:00:00', '2026-05-12 10:00:00', 3, '2026-05-07 15:40:00');
+
+-- 16) supply_order_items
+INSERT INTO public.supply_order_items (
+  id, supply_order_id, product_id, quantity, unit_price
+) VALUES
+  (1, 1, 1, 40, 235.00),
+  (2, 1, 2, 50, 198.00),
+  (3, 1, 17, 30, 150.00),
+  (4, 1, 20, 25, 168.00),
+
+  (5, 2, 13, 20, 890.00),
+  (6, 2, 14, 10, 1360.00),
+  (7, 2, 28, 18, 560.00),
+  (8, 2, 29, 8, 1520.00),
+
+  (9, 3, 8, 60, 295.00),
+  (10, 3, 9, 32, 372.00),
+  (11, 3, 15, 12, 1090.00),
+  (12, 3, 16, 14, 680.00),
+
+  (13, 4, 25, 90, 84.00),
+  (14, 4, 26, 120, 58.00),
+  (15, 4, 27, 45, 312.00),
+  (16, 4, 24, 20, 285.00);
+
+-- 18) orders (6 шт з різними статусами)
+INSERT INTO public.orders (
+  id, user_id, address_id, contact_name, contact_phone, contact_email, delivery_city, delivery_address,
+  status, subtotal, delivery_cost, discount, total, delivery_method, tracking_number,
+  payment_method, payment_status, promo_code_id, comment, admin_note, created_at, updated_at
+) VALUES
+  (1, 4, 1, 'Андрій Бондар', '+380679001122', 'andriy.bondar@gmail.com', 'Київ', 'вул. Драгоманова, 12, кв. 45',
+   'new', 793.00, 120.00, 0.00, 913.00, 'nova_poshta', NULL,
+   'cash_on_delivery', 'pending', NULL, 'Доставка після 18:00.', 'Клієнт новий, перевірити дзвінком.', '2026-05-12 09:10:00', '2026-05-12 09:10:00'),
+
+  (2, 5, 4, 'Олег Терновий', '+380931234999', 'oleh.ternovyi@gmail.com', 'Львів', 'вул. Городоцька, 174, офіс 3',
+   'confirmed', 2785.00, 0.00, 200.00, 2585.00, 'self_pickup', NULL,
+   'bank_transfer', 'paid', 2, 'Самовивіз зі складу у п''ятницю.', 'Підтверджено оплату по рахунку.', '2026-05-12 10:20:00', '2026-05-12 11:00:00'),
+
+  (3, 6, 7, 'Сергій Прокопенко', '+380661112244', 'serhiy.prokopenko@gmail.com', 'Дніпро', 'просп. Науки, 33, кв. 72',
+   'processing', 2691.00, 180.00, 269.10, 2601.90, 'ukrposhta', 'UP123456789UA',
+   'card_online', 'paid', 1, 'Потрібен дзвінок перед відправкою.', 'Комплектація на складі.', '2026-05-13 08:50:00', '2026-05-13 12:00:00'),
+
+  (4, NULL, NULL, 'Гість: Володимир Іванченко', '+380671119944', 'guest.order@gmail.com', 'Одеса', 'вул. Балківська, 12',
+   'shipped', 17410.00, 450.00, 0.00, 17860.00, 'nova_poshta', 'NP59000111223344',
+   'card_online', 'paid', NULL, 'Оплата онлайн, без дзвінка.', 'Відправлено на вантажне відділення.', '2026-05-13 09:30:00', '2026-05-14 10:40:00'),
+
+  (5, 5, 5, 'Олег Терновий', '+380931234999', 'oleh.ternovyi@gmail.com', 'Львів', 'вул. Зелена, 149',
+   'delivered', 7197.00, 150.00, 500.00, 6847.00, 'nova_poshta', 'NP59000987654321',
+   'bank_transfer', 'paid', 4, 'Для об''єкта, прохання документи у друкованому вигляді.', 'Доставлено вчасно, отримано за довіреністю.', '2026-05-08 13:05:00', '2026-05-10 17:30:00'),
+
+  (6, 4, 2, 'Андрій Бондар', '+380679001122', 'andriy.bondar@gmail.com', 'Київ', 'вул. Сортувальна, 7Б',
+   'cancelled', 3060.00, 180.00, 0.00, 3240.00, 'ukrposhta', NULL,
+   'card_online', 'refunded', NULL, 'Скасувати, змінилися обсяги робіт.', 'Кошти повернуто клієнту.', '2026-05-09 14:20:00', '2026-05-09 16:45:00');
+
+-- 19) order_items (2-5 позицій на замовлення)
+INSERT INTO public.order_items (
+  id, order_id, product_id, product_name, product_sku, quantity, unit_price
+) VALUES
+  (1, 1, 2, 'Клей для плитки Ceresit CM 11 25кг', 'CER-CM11-25', 2, 289.00),
+  (2, 1, 17, 'Дюбель-цвях 6x40мм (упаковка 100шт)', 'FIX-DN-640-100', 1, 215.00),
+
+  (3, 2, 8, 'Мінеральна вата Knauf Insulation 50мм', 'KNF-MIN-50', 5, 419.00),
+  (4, 2, 19, 'Дюбель для утеплювача 10x160мм (50шт)', 'FIX-UT-10160-50', 2, 345.00),
+
+  (5, 3, 1, 'Штукатурка гіпсова Knauf Rotband 30кг', 'KNF-SHP-30', 6, 329.00),
+  (6, 3, 20, 'Саморіз по дереву 4.2x75мм (упаковка 200шт)', 'SCR-WD-4275-200', 3, 239.00),
+
+  (7, 4, 30, 'Металочерепиця Monterrey 0.5мм', 'ROF-MON-05', 40, 369.00),
+  (8, 4, 18, 'Анкер клиновий 10x100мм (упаковка 25шт)', 'FIX-AK-10100-25', 10, 265.00),
+
+  (9, 5, 13, 'Гідроізоляція Ceresit CR 65 25кг', 'CER-CR65-25', 3, 1249.00),
+  (10, 5, 14, 'Гідроізоляція SikaTop Seal-107 25кг', 'SIK-SEAL107-25', 1, 1890.00),
+  (11, 5, 28, 'Ґрунтівка Ceresit CT 17 10л', 'CER-CT17-10', 2, 780.00),
+
+  (12, 6, 31, 'Бітумна черепиця IKO Cambridge 3м²', 'ROF-IKO-3', 2, 1320.00),
+  (13, 6, 24, 'Рівень будівельний 1000мм', 'TLS-RIV-1000', 1, 420.00);
+
+-- 20) order_messages (2-4 на кожне замовлення)
+INSERT INTO public.order_messages (
+  id, order_id, sender_id, body, is_from_staff, created_at
+) VALUES
+  (1, 1, 4, 'Доброго дня, чи можна доставку після 18:00?', false, '2026-05-12 09:15:00'),
+  (2, 1, 2, 'Так, передали коментар у службу доставки.', true, '2026-05-12 09:20:00'),
+
+  (3, 2, 5, 'Потрібні видаткові документи на ФОП.', false, '2026-05-12 10:25:00'),
+  (4, 2, 2, 'Підготуємо повний комплект документів до самовивозу.', true, '2026-05-12 10:28:00'),
+  (5, 2, 5, 'Дякую, заберемо завтра о 10:00.', false, '2026-05-12 10:30:00'),
+
+  (6, 3, 6, 'Прошу відправити Укрпоштою, важливо отримати до кінця тижня.', false, '2026-05-13 09:00:00'),
+  (7, 3, 2, 'Замовлення в обробці, відправка сьогодні до 17:00.', true, '2026-05-13 09:10:00'),
+
+  (8, 4, 4, 'Підкажіть орієнтовну дату прибуття на відділення.', false, '2026-05-14 11:00:00'),
+  (9, 4, 2, 'Посилка вже в дорозі, очікувана доставка завтра після 12:00.', true, '2026-05-14 11:05:00'),
+
+  (10, 5, 5, 'Все отримали, якість відмінна.', false, '2026-05-10 18:10:00'),
+  (11, 5, 2, 'Дякуємо за відгук! Звертайтесь за гуртовими умовами.', true, '2026-05-10 18:20:00'),
+
+  (12, 6, 4, 'Скасуйте замовлення, будь ласка.', false, '2026-05-09 15:00:00'),
+  (13, 6, 2, 'Замовлення скасовано, кошти повернені на картку.', true, '2026-05-09 16:40:00');
+
+-- 17) inventory_movements (10+ рухів)
+INSERT INTO public.inventory_movements (
+  id, product_id, supply_order_id, order_id, type, quantity, quantity_before, quantity_after, note, created_by, created_at
+) VALUES
+  (1, 8, 3, NULL, 'IN', 60, 45, 105, 'Надходження по накладній INV-2026-0503.', 3, '2026-05-13 13:20:00'),
+  (2, 9, 3, NULL, 'IN', 32, 18, 50, 'Приймання мінвати фасадної.', 3, '2026-05-13 13:22:00'),
+  (3, 15, 3, NULL, 'IN', 12, 7, 19, 'Мембрана на центральний склад.', 3, '2026-05-13 13:24:00'),
+  (4, 25, 4, NULL, 'IN', 90, 40, 130, 'Профіль CD поповнення.', 3, '2026-05-12 10:10:00'),
+  (5, 27, 4, NULL, 'IN', 45, 15, 60, 'ГКЛ отримано без пошкоджень.', 3, '2026-05-12 10:12:00'),
+
+  (6, 2, NULL, 1, 'OUT', 2, 260, 258, 'Відвантаження по замовленню #1.', 3, '2026-05-12 12:00:00'),
+  (7, 8, NULL, 2, 'OUT', 5, 105, 100, 'Комплектація замовлення #2.', 3, '2026-05-12 12:15:00'),
+  (8, 30, NULL, 4, 'OUT', 40, 48, 8, 'Вантажна відправка металочерепиці.', 3, '2026-05-14 09:20:00'),
+  (9, 14, NULL, 5, 'OUT', 1, 26, 25, 'Видано зі стелажа B2-14.', 3, '2026-05-09 15:05:00'),
+
+  (10, 24, NULL, NULL, 'ADJUSTMENT', -1, 38, 37, 'Списання пошкодженого рівня після інвентаризації.', 3, '2026-05-11 18:40:00'),
+  (11, 17, NULL, NULL, 'ADJUSTMENT', 5, 122, 127, 'Коригування залишку після перерахунку.', 3, '2026-05-11 18:50:00');
+
+-- 21) carts (по одному на customer)
+INSERT INTO public.carts (id, user_id, created_at, updated_at) VALUES
+  (1, 4, '2026-05-12 08:00:00', '2026-05-12 08:05:00'),
+  (2, 5, '2026-05-12 08:10:00', '2026-05-12 08:12:00'),
+  (3, 6, '2026-05-12 08:20:00', '2026-05-12 08:25:00');
+
+INSERT INTO public.cart_items (id, cart_id, product_id, quantity, added_at) VALUES
+  (1, 1, 1, 2, '2026-05-12 08:01:00'),
+  (2, 1, 20, 1, '2026-05-12 08:02:00'),
+  (3, 1, 28, 1, '2026-05-12 08:03:00'),
+
+  (4, 2, 8, 6, '2026-05-12 08:11:00'),
+  (5, 2, 19, 4, '2026-05-12 08:11:30'),
+  (6, 2, 13, 2, '2026-05-12 08:12:00'),
+
+  (7, 3, 30, 25, '2026-05-12 08:21:00'),
+  (8, 3, 31, 3, '2026-05-12 08:22:00'),
+  (9, 3, 24, 1, '2026-05-12 08:23:00');
+
+-- 22) wishlists
+INSERT INTO public.wishlists (id, user_id, product_id, added_at) VALUES
+  (1, 4, 13, '2026-05-10 19:00:00'),
+  (2, 4, 27, '2026-05-10 19:05:00'),
+  (3, 4, 31, '2026-05-10 19:10:00'),
+
+  (4, 5, 8, '2026-05-10 19:20:00'),
+  (5, 5, 14, '2026-05-10 19:22:00'),
+  (6, 5, 30, '2026-05-10 19:25:00'),
+
+  (7, 6, 1, '2026-05-10 19:30:00'),
+  (8, 6, 2, '2026-05-10 19:31:00'),
+  (9, 6, 15, '2026-05-10 19:34:00');
+
+-- 23) reviews (10+)
+INSERT INTO public.reviews (
+  id, product_id, user_id, rating, comment, is_approved, admin_reply, created_at
+) VALUES
+  (1, 1, 4, 5, 'Дуже пластична штукатурка, легко тягнеться і добре шліфується. На стінах лягла рівно, без грудок.', true, 'Дякуємо за детальний відгук!', '2026-05-12 19:00:00'),
+  (2, 2, 4, 5, 'Клей тримає плитку надійно, працювати зручно. Для кухні та коридору підійшов ідеально.', true, NULL, '2026-05-12 19:05:00'),
+  (3, 8, 4, 4, 'Хороша мінвата, щільність відповідає заявленій. Трошки сиплеться при різанні, але в межах норми.', true, NULL, '2026-05-12 19:10:00'),
+  (4, 13, 5, 5, 'CR 65 використали в підвалі, волога перестала проступати. Матеріал якісний і витрата адекватна.', true, 'Раді, що гідроізоляція спрацювала як очікували.', '2026-05-11 18:00:00'),
+  (5, 14, 5, 4, 'SikaTop дорожча, але результат відчутний. На терасі після дощу вода не проходить.', true, NULL, '2026-05-11 18:10:00'),
+  (6, 19, 5, 5, 'Дюбелі міцні, капелюшок широкий і добре притискає утеплювач. На фасаді тримаються без проблем.', true, NULL, '2026-05-11 18:20:00'),
+  (7, 20, 6, 4, 'Саморізи гострі, закручуються легко навіть у тверде дерево. Упаковка ціла, без браку.', true, NULL, '2026-05-10 17:00:00'),
+  (8, 24, 6, 3, 'Рівень нормальний, але хотілося б чіткіші колби. Для побутових задач підійде.', false, NULL, '2026-05-10 17:05:00'),
+  (9, 28, 6, 5, 'Ґрунтівка якісна, добре зміцнює основу перед фарбуванням. Витрата співпала з описом.', true, NULL, '2026-05-10 17:10:00'),
+  (10, 29, 4, 4, 'Фарба перекриває добре, колір рівномірний. На фасаді виглядає охайно після двох шарів.', true, NULL, '2026-05-09 20:20:00'),
+  (11, 30, 5, 5, 'Металочерепиця рівна, геометрія точна, монтажники задоволені. Після дощу шум у межах очікуваного.', true, 'Дякуємо, що поділилися досвідом монтажу.', '2026-05-09 20:30:00'),
+  (12, 31, 6, 4, 'Черепиця виглядає гарно, колір насичений. Під час монтажу проблем не виникло.', false, NULL, '2026-05-09 20:40:00');
+
+-- 24) notifications (3-5 на кожного юзера)
+INSERT INTO public.notifications (
+  id, user_id, type, title, message, target_path, target_product_id, target_inventory_id, target_order_id, is_read, created_at
+) VALUES
+  (1, 1, 'new_review', 'Новий відгук', 'Залишено новий відгук на товар "Ceresit CM 11".', '/admin/reviews', 2, NULL, NULL, false, '2026-05-12 19:06:00'),
+  (2, 1, 'order_status', 'Оновлення замовлення', 'Замовлення #4 переведено у статус "shipped".', '/admin/orders/4', NULL, NULL, 4, false, '2026-05-14 10:41:00'),
+  (3, 1, 'promo', 'Запущено акцію', 'Акція на гідроізоляцію Ceresit CR 65 активна до кінця місяця.', '/admin/products/13', 13, NULL, NULL, true, '2026-05-10 13:30:00'),
+
+  (4, 2, 'order_status', 'Нове замовлення', 'Створено нове замовлення #1.', '/admin/orders/1', NULL, NULL, 1, false, '2026-05-12 09:11:00'),
+  (5, 2, 'order_status', 'Замовлення скасовано', 'Замовлення #6 скасоване клієнтом.', '/admin/orders/6', NULL, NULL, 6, true, '2026-05-09 16:46:00'),
+  (6, 2, 'promo', 'Промокод активний', 'Промокод WELCOME10 має підвищений попит цього тижня.', '/admin/promo-codes', NULL, NULL, NULL, false, '2026-05-13 09:30:00'),
+
+  (7, 3, 'low_stock', 'Низький залишок', 'Металочерепиця Monterrey: залишок менше рекомендованого.', '/admin/inventory', 30, 30, NULL, false, '2026-05-14 09:25:00'),
+  (8, 3, 'order_status', 'Підготовка відвантаження', 'Замовлення #3 в обробці, необхідна комплектація.', '/admin/orders/3', NULL, NULL, 3, true, '2026-05-13 09:12:00'),
+  (9, 3, 'low_stock', 'Списання товару', 'Виконано коригування залишку по товару "Рівень 1000мм".', '/admin/inventory', 24, 24, NULL, true, '2026-05-11 18:42:00'),
+
+  (10, 4, 'order_status', 'Замовлення прийнято', 'Ваше замовлення #1 прийнято в роботу.', '/profile/orders/1', NULL, NULL, 1, false, '2026-05-12 09:12:00'),
+  (11, 4, 'order_status', 'Повернення коштів', 'За замовленням #6 виконано повернення коштів.', '/profile/orders/6', NULL, NULL, 6, false, '2026-05-09 16:47:00'),
+  (12, 4, 'promo', 'Знижка для вас', 'Скористайтеся промокодом SAVE200 на наступне замовлення.', '/catalog', NULL, NULL, NULL, true, '2026-05-12 20:00:00'),
+
+  (13, 5, 'order_status', 'Замовлення підтверджено', 'Замовлення #2 підтверджено, доступний самовивіз.', '/profile/orders/2', NULL, NULL, 2, false, '2026-05-12 11:01:00'),
+  (14, 5, 'order_status', 'Замовлення доставлено', 'Замовлення #5 доставлено.', '/profile/orders/5', NULL, NULL, 5, false, '2026-05-10 17:31:00'),
+  (15, 5, 'promo', 'Гуртова пропозиція', 'Для вас активні гуртові ціни на утеплювачі від 10 пакувань.', '/catalog/uteplennia', NULL, NULL, NULL, true, '2026-05-11 10:00:00'),
+
+  (16, 6, 'order_status', 'Замовлення в обробці', 'Замовлення #3 передано на комплектацію.', '/profile/orders/3', NULL, NULL, 3, false, '2026-05-13 12:01:00'),
+  (17, 6, 'promo', 'Сезонна акція', 'На покрівельні матеріали діє знижка до 10%.', '/catalog/pokrivlia', NULL, NULL, NULL, true, '2026-05-14 08:30:00'),
+  (18, 6, 'new_review', 'Відгук на модерації', 'Ваш відгук на "Бітумна черепиця IKO" очікує перевірки.', '/profile/reviews', 31, NULL, NULL, false, '2026-05-09 20:45:00');
+
+-- 25) audit_logs
+INSERT INTO public.audit_logs (
+  id, user_id, action, resource_type, resource_id, changes_json, request_id, ip_address, details, created_at
+) VALUES
+  (1, 1, 'LOGIN',  'user',    1, NULL, '8a4f2f4f-6253-4fb2-a15f-4cae28155201', '192.168.1.10', 'Успішний вхід адміністратора.', '2026-05-10 09:00:30'),
+  (2, 2, 'LOGIN',  'user',    2, NULL, 'c55b93a0-fd5f-4a4d-ab3f-95a64b014a56', '192.168.1.11', 'Успішний вхід менеджера.', '2026-05-10 09:10:30'),
+  (3, 2, 'UPDATE', 'order',   2, '{"status":"confirmed"}', 'f20a5bb2-43e8-4f39-b611-7ad7a493f410', '95.217.23.44', 'Підтверджено замовлення #2.', '2026-05-12 11:00:00'),
+  (4, 3, 'UPDATE', 'product', 30, '{"quantity_after":8}', '3373b280-ea55-45b8-8b1d-b2e9ef2a4d14', '91.203.120.58', 'Списання під замовлення #4.', '2026-05-14 09:21:00'),
+  (5, 1, 'CREATE', 'product', 31, '{"name":"Бітумна черепиця IKO Cambridge 3м²"}', '22ef9cd9-68f8-45c7-a575-df4a2422df09', '178.214.25.119', 'Додано новий товар у каталог.', '2026-05-10 13:01:00'),
+  (6, 2, 'DELETE', 'order',   6, '{"status":"cancelled"}', '4fb66985-8a1e-490f-a8a9-7fd4ec8a5ff5', '95.216.10.73', 'Скасовано замовлення на запит клієнта.', '2026-05-09 16:46:00'),
+  (7, 2, 'LOGOUT', 'user',    2, NULL, '9e5fd915-0e44-48e7-a96d-c31ee5d07cba', '192.168.1.11', 'Вихід менеджера із системи.', '2026-05-12 19:10:00'),
+  (8, 1, 'UPDATE', 'product', 13, '{"discount":"15%"}', 'f95f1aa7-3e7f-4b3a-a18b-1dd2f9afdb0e', '31.43.82.200', 'Оновлено акційну пропозицію товару.', '2026-05-10 13:30:00');
+
+-- 26) client_errors
+INSERT INTO public.client_errors (
+  id, user_id, path, message, stack, component_stack, request_id, user_agent, ip_address, created_at
+) VALUES
+  (1, 4, '/catalog/shtukaturky', 'TypeError: Cannot read properties of undefined (reading "price")',
+   'TypeError: Cannot read properties of undefined (reading "price")\n    at ProductCard (index-DCR.js:1:4820)\n    at renderWithHooks (react-vendor.js:8:14512)',
+   'at ProductCard\n at CatalogPage\n at RouterProvider',
+   'a0a0f8ef-59d7-494d-84b1-0c6a8b455ad1',
+   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
+   '185.12.44.90', '2026-05-12 16:20:00'),
+
+  (2, 5, '/checkout', 'AxiosError: Network Error',
+   'AxiosError: Network Error\n    at XMLHttpRequest.handleError (http-C-6SGB6z.js:3:6091)\n    at async submitOrder (checkout.js:2:210)',
+   'at CheckoutPage\n at App',
+   'f5f229a1-a242-47cf-9f14-e6f4fc41d7d1',
+   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 Version/17.4 Safari/605.1.15',
+   '91.124.16.37', '2026-05-13 11:02:00'),
+
+  (3, NULL, '/product/28', 'ReferenceError: formatPrice is not defined',
+   'ReferenceError: formatPrice is not defined\n    at ProductDetail (product-detail.js:1:3321)\n    at renderWithHooks (react-vendor.js:8:14512)',
+   'at ProductDetail\n at Route',
+   '84b8f7d9-82f5-4323-a21f-1974c8e02bce',
+   'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 Chrome/123.0.0.0 Mobile Safari/537.36',
+   '46.211.45.109', '2026-05-13 18:45:00'),
+
+  (4, 6, '/admin/products/13/edit', 'Error: Request failed with status code 500',
+   'Error: Request failed with status code 500\n    at settle (axios.js:16:12)\n    at XMLHttpRequest.onloadend (axios.js:42:7)',
+   'at ProductEditForm\n at AdminProductsPage',
+   'c7ff2ebf-52d6-4e35-b2d0-13adf5a90cbd',
+   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+   '193.34.169.88', '2026-05-14 09:55:00');
+
+-- Синхронізація sequence після явних ID
+SELECT setval(pg_get_serial_sequence('public.customer_groups', 'id'), COALESCE((SELECT MAX(id) FROM public.customer_groups), 1), true);
+SELECT setval(pg_get_serial_sequence('public.users', 'id'), COALESCE((SELECT MAX(id) FROM public.users), 1), true);
+SELECT setval(pg_get_serial_sequence('public.addresses', 'id'), COALESCE((SELECT MAX(id) FROM public.addresses), 1), true);
+SELECT setval(pg_get_serial_sequence('public.brands', 'id'), COALESCE((SELECT MAX(id) FROM public.brands), 1), true);
+SELECT setval(pg_get_serial_sequence('public.categories', 'id'), COALESCE((SELECT MAX(id) FROM public.categories), 1), true);
+SELECT setval(pg_get_serial_sequence('public.promo_codes', 'id'), COALESCE((SELECT MAX(id) FROM public.promo_codes), 1), true);
+SELECT setval(pg_get_serial_sequence('public.products', 'id'), COALESCE((SELECT MAX(id) FROM public.products), 1), true);
+SELECT setval(pg_get_serial_sequence('public.product_prices', 'id'), COALESCE((SELECT MAX(id) FROM public.product_prices), 1), true);
+SELECT setval(pg_get_serial_sequence('public.product_discounts', 'id'), COALESCE((SELECT MAX(id) FROM public.product_discounts), 1), true);
+SELECT setval(pg_get_serial_sequence('public.price_history', 'id'), COALESCE((SELECT MAX(id) FROM public.price_history), 1), true);
+SELECT setval(pg_get_serial_sequence('public.product_attributes', 'id'), COALESCE((SELECT MAX(id) FROM public.product_attributes), 1), true);
+SELECT setval(pg_get_serial_sequence('public.product_images', 'id'), COALESCE((SELECT MAX(id) FROM public.product_images), 1), true);
+SELECT setval(pg_get_serial_sequence('public.inventory', 'id'), COALESCE((SELECT MAX(id) FROM public.inventory), 1), true);
+SELECT setval(pg_get_serial_sequence('public.suppliers', 'id'), COALESCE((SELECT MAX(id) FROM public.suppliers), 1), true);
+SELECT setval(pg_get_serial_sequence('public.supply_orders', 'id'), COALESCE((SELECT MAX(id) FROM public.supply_orders), 1), true);
+SELECT setval(pg_get_serial_sequence('public.supply_order_items', 'id'), COALESCE((SELECT MAX(id) FROM public.supply_order_items), 1), true);
+SELECT setval(pg_get_serial_sequence('public.orders', 'id'), COALESCE((SELECT MAX(id) FROM public.orders), 1), true);
+SELECT setval(pg_get_serial_sequence('public.order_items', 'id'), COALESCE((SELECT MAX(id) FROM public.order_items), 1), true);
+SELECT setval(pg_get_serial_sequence('public.order_messages', 'id'), COALESCE((SELECT MAX(id) FROM public.order_messages), 1), true);
+SELECT setval(pg_get_serial_sequence('public.carts', 'id'), COALESCE((SELECT MAX(id) FROM public.carts), 1), true);
+SELECT setval(pg_get_serial_sequence('public.cart_items', 'id'), COALESCE((SELECT MAX(id) FROM public.cart_items), 1), true);
+SELECT setval(pg_get_serial_sequence('public.wishlists', 'id'), COALESCE((SELECT MAX(id) FROM public.wishlists), 1), true);
+SELECT setval(pg_get_serial_sequence('public.reviews', 'id'), COALESCE((SELECT MAX(id) FROM public.reviews), 1), true);
+SELECT setval(pg_get_serial_sequence('public.notifications', 'id'), COALESCE((SELECT MAX(id) FROM public.notifications), 1), true);
+SELECT setval(pg_get_serial_sequence('public.audit_logs', 'id'), COALESCE((SELECT MAX(id) FROM public.audit_logs), 1), true);
+SELECT setval(pg_get_serial_sequence('public.client_errors', 'id'), COALESCE((SELECT MAX(id) FROM public.client_errors), 1), true);
+SELECT setval(pg_get_serial_sequence('public.inventory_movements', 'id'), COALESCE((SELECT MAX(id) FROM public.inventory_movements), 1), true);
+
+-- ============================================================
+-- Seed complete
+-- ============================================================
+
