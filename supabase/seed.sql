@@ -95,7 +95,7 @@ INSERT INTO public.promo_codes (
   (3, 'SPRING2025','Весняна акція минулого сезону.',             'PERCENTAGE', 15, 1200, 500, 500, '2025-03-01 00:00:00', '2025-05-31 23:59:59', false, '2026-05-10 12:02:00'),
   (4, 'BULK500',   'Фіксована знижка 500 грн для великих закупівель.', 'FIXED', 500, 3000, 50, 17, '2026-03-01 00:00:00', '2026-09-30 23:59:59', true, '2026-05-10 12:03:00');
 
--- 8) products (31 шт)
+-- 8) products (52 шт)
 INSERT INTO public.products (
   id, category_id, brand_id, name, slug, sku, description, price, unit, weight_kg,
   icon, badge, is_active, is_featured, meta_title, meta_description, created_at, updated_at
@@ -222,7 +222,91 @@ INSERT INTO public.products (
 
   (31, 22, NULL, 'Бітумна черепиця IKO Cambridge 3м²', 'bitumna-cherepytsia-iko-cambridge-3', 'ROF-IKO-3',
    'Гнучка бітумна черепиця для складних скатних дахів із надійною герметичністю вузлів. Посипка з базальтового грануляту захищає покриття від сонця.',
-   1320.00, 'пак', 25.0, '🧱', NULL, true, false, 'IKO Cambridge 3м²', 'Бітумна черепиця IKO для приватного будинку.', '2026-05-10 13:00:00', '2026-05-10 13:00:00');
+   1320.00, 'пак', 25.0, '🧱', NULL, true, false, 'IKO Cambridge 3м²', 'Бітумна черепиця IKO для приватного будинку.', '2026-05-10 13:00:00', '2026-05-10 13:00:00'),
+
+  (32, 10, NULL, 'Цемент ПЦ-500 25кг', 'tsement-pts-500-25', 'CEM-PC500-25',
+   'Портландцемент марки ПЦ-500 для бетонних, кладочних і ремонтних робіт. Забезпечує стабільну міцність і добре підходить для приватного будівництва.',
+   205.00, 'мішок', 25.0, '🧱', 'БАЗА', true, false, 'Цемент ПЦ-500 25кг', 'Портландцемент ПЦ-500 у мішку 25 кг.', '2026-05-10 13:01:00', '2026-05-10 13:01:00'),
+
+  (33, 10, NULL, 'Пісок річковий фасований 25кг', 'pisok-richkovyi-25', 'SND-RIV-25',
+   'Сухий просіяний пісок для розчинів, стяжок та благоустрою. Рівномірна фракція дозволяє отримати стабільну якість сумішей.',
+   98.00, 'мішок', 25.0, '🏖️', NULL, true, false, 'Пісок річковий 25кг', 'Річковий пісок фасований у мішки по 25 кг.', '2026-05-10 13:02:00', '2026-05-10 13:02:00'),
+
+  (34, 16, NULL, 'Сітка штукатурна скловолоконна 5x5мм 1x50м', 'sitka-shtukaturna-5x5-1x50', 'NET-GL-5X5-50',
+   'Армувальна склосітка для фасадних систем утеплення та штукатурних робіт. Підвищує тріщиностійкість шару і подовжує строк служби фасаду.',
+   720.00, 'рул', 3.2, '🕸️', NULL, true, false, 'Склосітка фасадна 5x5мм', 'Фасадна склосітка в рулоні 1x50 м.', '2026-05-10 13:03:00', '2026-05-10 13:03:00'),
+
+  (35, 19, NULL, 'Кутник перфорований ПВХ 3м', 'kutnyk-perforovanyi-pvh-3m', 'PRF-PVC-3M',
+   'Перфорований кутник для формування рівних і міцних зовнішніх кутів. Використовується при штукатуренні та шпаклюванні стін.',
+   42.00, 'шт', 0.2, '📐', NULL, true, false, 'Кутник ПВХ 3м', 'Перфорований ПВХ кутник для оздоблювальних робіт.', '2026-05-10 13:04:00', '2026-05-10 13:04:00'),
+
+  (36, 19, NULL, 'Стрічка серпянка 45мм 90м', 'strichka-serpianka-45-90', 'TPE-SRP-4590',
+   'Самоклейна армувальна стрічка для швів гіпсокартону і тріщин на стінах. Полегшує підготовку поверхні перед фінішною шпаклівкою.',
+   98.00, 'рул', 0.25, '🧵', NULL, true, false, 'Серпянка 45мм', 'Стрічка серпянка для армування стиків ГКЛ.', '2026-05-10 13:05:00', '2026-05-10 13:05:00'),
+
+  (37, 20, 7, 'Клей монтажний Момент Монтаж 400г', 'klei-moment-montazh-400', 'HNK-MM-400',
+   'Універсальний монтажний клей для внутрішніх робіт по дереву, МДФ і бетону. Має високу первинну фіксацію та зручний у побутовому монтажі.',
+   165.00, 'шт', 0.4, '🧴', NULL, true, false, 'Момент Монтаж 400г', 'Монтажний клей Момент Монтаж 400 г.', '2026-05-10 13:06:00', '2026-05-10 13:06:00'),
+
+  (38, 20, 6, 'Герметик силіконовий Sika Sanitary 280мл', 'hermetyk-sika-sanitary-280', 'SIK-SAN-280',
+   'Санітарний силіконовий герметик для ванних кімнат і кухонь. Стійкий до вологи, грибка та температурних деформацій.',
+   245.00, 'шт', 0.35, '🧪', NULL, true, false, 'Sika Sanitary 280мл', 'Санітарний силіконовий герметик Sika.', '2026-05-10 13:07:00', '2026-05-10 13:07:00'),
+
+  (39, 20, 3, 'Фарба інтер''єрна Baumit KlimaColor 10л', 'farba-interierna-baumit-klimacolor-10', 'BAU-KLC-10',
+   'Матова інтер''єрна фарба для стін і стель у житлових приміщеннях. Добре перекриває основу та має низький рівень запаху.',
+   1290.00, 'л', 13.5, '🎨', NULL, true, false, 'Baumit KlimaColor 10л', 'Інтер''єрна фарба Baumit KlimaColor.', '2026-05-10 13:08:00', '2026-05-10 13:08:00'),
+
+  (40, 20, 2, 'Ґрунт-концентрат Ceresit CT 17 Super 5л', 'grunt-ceresit-ct17-super-5', 'CER-CT17S-5',
+   'Концентрований ґрунт для складних і сильно вбираючих основ. Розводиться водою і економно витрачається на великій площі.',
+   540.00, 'л', 5.5, '🖌️', NULL, true, false, 'Ceresit CT 17 Super', 'Концентрований ґрунт Ceresit CT 17 Super.', '2026-05-10 13:09:00', '2026-05-10 13:09:00'),
+
+  (41, 11, 8, 'Мінеральна вата Ізобуд Лайт 50мм', 'minvata-izobud-lait-50', 'IZB-LIT-50',
+   'Легка мінеральна вата для утеплення перегородок, мансард і каркасних стін. Забезпечує добру шумоізоляцію та зручне укладання між стійками.',
+   365.00, 'пак', 9.0, '🧊', NULL, true, false, 'Ізобуд Лайт 50мм', 'Мінеральна вата Ізобуд Лайт 50 мм.', '2026-05-10 13:10:00', '2026-05-10 13:10:00'),
+
+  (42, 12, 8, 'Пінопласт ПСБ-С-35 1000x500x100мм', 'pinoplast-psb-s35-100', 'IZB-PSB35-100',
+   'Щільний фасадний пінопласт для утеплення стін і цоколю. Має вищу міцність на стиск у порівнянні з легшими марками.',
+   315.00, 'пак', 11.0, '⬜', NULL, true, false, 'Пінопласт ПСБ-С-35 100мм', 'Фасадний пінопласт ПСБ-С-35 товщиною 100 мм.', '2026-05-10 13:11:00', '2026-05-10 13:11:00'),
+
+  (43, 13, 9, 'ЕППС Технопласт XPS 100мм', 'epps-tekhnoplast-xps-100', 'THP-XPS-100',
+   'Плита XPS підвищеної товщини для фундаментів, підлог і плоских покрівель. Забезпечує стабільні теплоізоляційні властивості у вологому середовищі.',
+   555.00, 'пак', 13.0, '🟦', NULL, true, false, 'XPS 100мм', 'Екструдований пінополістирол XPS 100 мм.', '2026-05-10 13:12:00', '2026-05-10 13:12:00'),
+
+  (44, 15, 9, 'Руберойд Технопласт ХПП 10м²', 'ruberoid-tekhnoplast-hpp-10', 'THP-RUB-HPP10',
+   'Рулонний бітумний матеріал для нижнього шару покрівельного килима. Підходить для гідроізоляції фундаментів і господарських споруд.',
+   620.00, 'рул', 28.0, '📦', NULL, true, false, 'Руберойд ХПП 10м²', 'Рулонна гідроізоляція Технопласт ХПП.', '2026-05-10 13:13:00', '2026-05-10 13:13:00'),
+
+  (45, 15, 8, 'Мембрана супердифузійна 115г/м² 70м²', 'membrana-superdyfuziina-115-70', 'IZB-SD-115-70',
+   'Супердифузійна мембрана для скатних дахів і вентильованих фасадів. Ефективно виводить пар і захищає утеплювач від опадів.',
+   1890.00, 'рул', 10.5, '💧', NULL, true, false, 'Мембрана 115г/м²', 'Супердифузійна мембрана 70 м².', '2026-05-10 13:14:00', '2026-05-10 13:14:00'),
+
+  (46, 8, 2, 'Клей для пінополістиролу Ceresit CT 83 25кг', 'klei-ceresit-ct83-25', 'CER-CT83-25',
+   'Клейова суміш для приклеювання плит пінополістиролу у фасадних системах утеплення. Має високу адгезію до бетону, цегли та штукатурки.',
+   365.00, 'мішок', 25.0, '🧩', NULL, true, false, 'Ceresit CT 83 25кг', 'Клей для утеплювача Ceresit CT 83.', '2026-05-10 13:15:00', '2026-05-10 13:15:00'),
+
+  (47, 7, 3, 'Штукатурка декоративна Baumit SilikonTop 25кг', 'shtukaturka-baumit-silikontop-25', 'BAU-SLT-25',
+   'Готова декоративна штукатурка для фасадних систем із силіконовим зв''язуючим. Стійка до атмосферних впливів та забруднень.',
+   1790.00, 'мішок', 25.0, '🎨', NULL, true, false, 'Baumit SilikonTop 25кг', 'Декоративна фасадна штукатурка Baumit.', '2026-05-10 13:16:00', '2026-05-10 13:16:00'),
+
+  (48, 9, 1, 'Шпаклівка фінішна Knauf Multi-Finish 25кг', 'shpaklivka-knauf-multi-finish-25', 'KNF-MF-25',
+   'Універсальна фінішна шпаклівка для підготовки стін під фарбування та шпалери. Має дрібну фракцію, легко наноситься і шліфується.',
+   398.00, 'мішок', 25.0, '🧽', NULL, true, false, 'Knauf Multi-Finish 25кг', 'Фінішна шпаклівка Knauf Multi-Finish.', '2026-05-10 13:17:00', '2026-05-10 13:17:00'),
+
+  (49, 17, NULL, 'Саморіз покрівельний 4.8x35мм (250шт)', 'samoriz-pokrivelnyi-4-8x35-250', 'SCR-RF-4835-250',
+   'Саморізи з пресшайбою та ущільнювальною шайбою для монтажу металочерепиці. Забезпечують герметичне кріплення покрівельних листів.',
+   415.00, 'пак', 2.1, '🔩', NULL, true, false, 'Покрівельний саморіз 4.8x35', 'Саморізи для монтажу металочерепиці.', '2026-05-10 13:18:00', '2026-05-10 13:18:00'),
+
+  (50, 16, NULL, 'Анкер рамний 10x132мм (50шт)', 'anker-ramnyi-10x132-50', 'FIX-RA-10132-50',
+   'Рамний анкер для монтажу дверних і віконних рам, а також профілів. Підходить для бетонних і цегляних основ.',
+   540.00, 'пак', 2.4, '📌', NULL, true, false, 'Анкер рамний 10x132', 'Рамний анкер у пакуванні 50 штук.', '2026-05-10 13:19:00', '2026-05-10 13:19:00'),
+
+  (51, 18, NULL, 'Лопата штикова загартована', 'lopata-shtykova-zahartovana', 'TLS-LOP-SH',
+   'Штикова лопата із загартованим полотном для земляних і підготовчих робіт на будмайданчику. Має міцний держак і зручну рукоятку.',
+   395.00, 'шт', 1.9, '🛠️', NULL, true, false, 'Лопата штикова', 'Надійна штикова лопата для будівництва.', '2026-05-10 13:20:00', '2026-05-10 13:20:00'),
+
+  (52, 18, NULL, 'Молоток слюсарний 500г', 'molotok-sliusarnyi-500', 'TLS-MOL-500',
+   'Універсальний слюсарний молоток для монтажних і ремонтних робіт. Баланс ваги забезпечує точний удар і комфортне використання.',
+   265.00, 'шт', 0.65, '🔨', NULL, true, false, 'Молоток 500г', 'Слюсарний молоток масою 500 г.', '2026-05-10 13:21:00', '2026-05-10 13:21:00');
 
 -- Створюємо історію зміни цін через тригер (без ручного INSERT у price_history)
 BEGIN;
@@ -267,7 +351,7 @@ INSERT INTO public.product_discounts (
   (6, 31, 'PERCENTAGE', 8, '2026-05-01 00:00:00', '2026-08-31 23:59:59', true),
   (7, 6,  'PERCENTAGE', 5, '2026-01-01 00:00:00', '2026-03-31 23:59:59', false);
 
--- 11) product_attributes (3 атрибути на кожен товар)
+-- 11) product_attributes (5 атрибутів на кожен товар)
 WITH attrs AS (
   -- sort_order = 1
   SELECT
@@ -380,6 +464,66 @@ WITH attrs AS (
     END,
     NULL::VARCHAR,
     3
+  FROM public.products p
+
+  UNION ALL
+
+  -- sort_order = 4
+  SELECT
+    p.id,
+    CASE
+      WHEN p.category_id BETWEEN 7 AND 10 THEN 'Міцність на стиск'
+      WHEN p.category_id BETWEEN 11 AND 13 THEN 'Група горючості'
+      WHEN p.category_id IN (14, 15) THEN 'Водонепроникність'
+      WHEN p.category_id IN (16, 17) THEN 'Матеріал'
+      WHEN p.category_id = 18 THEN 'Тип ручки'
+      WHEN p.category_id IN (19, 20) THEN 'Колір'
+      WHEN p.category_id IN (21, 22) THEN 'Товщина металу/основи'
+      ELSE 'Параметр 4'
+    END,
+    CASE
+      WHEN p.category_id BETWEEN 7 AND 10 THEN '5-20 МПа'
+      WHEN p.category_id = 11 THEN 'НГ'
+      WHEN p.category_id IN (12, 13) THEN 'Г3'
+      WHEN p.category_id IN (14, 15) THEN 'W6-W10'
+      WHEN p.category_id IN (16, 17) THEN 'Оцинкована сталь'
+      WHEN p.category_id = 18 THEN 'Ергономічна'
+      WHEN p.category_id IN (19, 20) THEN 'Білий / сірий / графіт'
+      WHEN p.category_id IN (21, 22) THEN '0.45-0.50 мм'
+      ELSE 'Стандарт'
+    END,
+    NULL::VARCHAR,
+    4
+  FROM public.products p
+
+  UNION ALL
+
+  -- sort_order = 5
+  SELECT
+    p.id,
+    CASE
+      WHEN p.category_id BETWEEN 7 AND 10 THEN 'Сфера застосування'
+      WHEN p.category_id BETWEEN 11 AND 13 THEN 'Розмір плити'
+      WHEN p.category_id IN (14, 15) THEN 'Час між шарами'
+      WHEN p.category_id IN (16, 17) THEN 'Тип головки/шліца'
+      WHEN p.category_id = 18 THEN 'Гарантія'
+      WHEN p.category_id IN (19, 20) THEN 'Рекомендована основа'
+      WHEN p.category_id IN (21, 22) THEN 'Мін. кут нахилу даху'
+      ELSE 'Параметр 5'
+    END,
+    CASE
+      WHEN p.category_id BETWEEN 7 AND 10 THEN 'Внутрішні та зовнішні роботи'
+      WHEN p.category_id = 11 THEN '1000x600 мм'
+      WHEN p.category_id IN (12, 13) THEN '1200x600 мм'
+      WHEN p.category_id IN (14, 15) THEN '3-6 годин'
+      WHEN p.category_id IN (16, 17) THEN 'Хрестовий / шестигранний'
+      WHEN p.category_id = 18 THEN '12 місяців'
+      WHEN p.category_id IN (19, 20) THEN 'Бетон, цегла, ГКЛ, штукатурка'
+      WHEN p.category_id IN (21, 22) THEN 'від 12°'
+      ELSE 'Стандарт'
+    END,
+    NULL::VARCHAR,
+    5
   FROM public.products p
 )
 INSERT INTO public.product_attributes (id, product_id, key, value, unit, sort_order)
@@ -732,6 +876,42 @@ SELECT setval(pg_get_serial_sequence('public.notifications', 'id'), COALESCE((SE
 SELECT setval(pg_get_serial_sequence('public.audit_logs', 'id'), COALESCE((SELECT MAX(id) FROM public.audit_logs), 1), true);
 SELECT setval(pg_get_serial_sequence('public.client_errors', 'id'), COALESCE((SELECT MAX(id) FROM public.client_errors), 1), true);
 SELECT setval(pg_get_serial_sequence('public.inventory_movements', 'id'), COALESCE((SELECT MAX(id) FROM public.inventory_movements), 1), true);
+
+-- Перевірочний блок (контрольні counts/aggregates)
+SELECT 'products_total' AS metric, COUNT(*)::BIGINT AS value FROM public.products
+UNION ALL
+SELECT 'product_prices_total', COUNT(*)::BIGINT FROM public.product_prices
+UNION ALL
+SELECT 'product_attributes_total', COUNT(*)::BIGINT FROM public.product_attributes
+UNION ALL
+SELECT 'product_images_total', COUNT(*)::BIGINT FROM public.product_images
+UNION ALL
+SELECT 'inventory_total', COUNT(*)::BIGINT FROM public.inventory
+UNION ALL
+SELECT 'orders_total', COUNT(*)::BIGINT FROM public.orders
+UNION ALL
+SELECT 'order_items_total', COUNT(*)::BIGINT FROM public.order_items
+UNION ALL
+SELECT 'discounts_active_now', COUNT(*)::BIGINT
+FROM public.product_discounts d
+WHERE d.is_active = true
+  AND (d.start_date IS NULL OR d.start_date <= now())
+  AND (d.end_date IS NULL OR d.end_date >= now())
+UNION ALL
+SELECT 'price_history_rows', COUNT(*)::BIGINT FROM public.price_history;
+
+SELECT
+  p.id,
+  p.name,
+  p.price AS retail_price,
+  MAX(CASE WHEN pp.customer_group_id = 1 THEN pp.price END) AS rozdrib_price,
+  MAX(CASE WHEN pp.customer_group_id = 2 THEN pp.price END) AS hurtovyk_price,
+  MAX(CASE WHEN pp.customer_group_id = 3 THEN pp.price END) AS vykonrob_price
+FROM public.products p
+LEFT JOIN public.product_prices pp ON pp.product_id = p.id
+GROUP BY p.id, p.name, p.price
+ORDER BY p.id
+LIMIT 12;
 
 -- ============================================================
 -- Seed complete
