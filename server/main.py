@@ -4281,8 +4281,8 @@ def generate_tracking_number() -> str:
     """
     now = datetime.now()
     date_str = now.strftime("%Y%m%d")
-    # Генеруємо випадковий хеш на основі timestamp
-    random_part = hashlib.md5(f"{uuid.uuid4()}{time.time()}".encode()).hexdigest()[:8].upper()
+    # Генеруємо випадковий хеш на основі timestamp (usedforsecurity=False для non-security цілей)
+    random_part = hashlib.md5(f"{uuid.uuid4()}{time.time()}".encode(), usedforsecurity=False).hexdigest()[:8].upper()
     return f"NP{date_str}-{random_part}"
 
 
