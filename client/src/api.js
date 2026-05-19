@@ -2,8 +2,30 @@ import axios from 'axios';
 
 const AUTH_TOKEN_KEY = 'auth_token';
 
+const getApiBaseUrl = () => {
+  // Priority 1: Explicit environment variable (for production deployments)
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+
+  // Priority 2: For local development, use relative URL which Vite proxy will handle
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return '/';
+  }
+
+  // Priority 3: For production without explicit URL, try common backend patterns
+  if (typeof window !== 'undefined' && window.location) {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    // Attempt to use /api relative path (must be configured via reverse proxy or API gateway)
+    return '/api';
+  }
+
+  return '/';
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/',
+  baseURL: getApiBaseUrl(),
   timeout: 15000,
   withCredentials: true,
 });

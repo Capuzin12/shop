@@ -137,16 +137,18 @@ logger.info(
     }
 )
 
-# Add gzip compression for responses > 1KB (helps with large JSON)
-app.add_middleware(GZipMiddleware, minimum_size=1024)
-
-# Add CORS middleware
+# Add middleware in reverse order of desired execution (first added = last executed)
+# CORS must be added first to run last and properly handle preflight requests
 app.add_middleware(CORSMiddleware, **_cors_mw_kwargs)
 
-# Add custom middleware in reverse order (last added = first executed)
-app.middleware('http')(add_timing_middleware)
-app.middleware('http')(add_security_headers_middleware)
+# Add gzip compression
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# Add custom middleware (these use the decorator route which runs before app.add_middleware)
+# They should be added to run earlier in the chain
 app.middleware('http')(add_request_id_middleware)
+app.middleware('http')(add_security_headers_middleware)
+app.middleware('http')(add_timing_middleware)
 
 
 
