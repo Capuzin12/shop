@@ -1,6 +1,6 @@
 import api from '../../api';
 import { RefreshCcw, Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { EmptyState, FilterButton, LoadingState, Panel, StatusBadge } from '../../components/BackofficeUI';
@@ -53,12 +53,12 @@ export default function ManagerOrders({ onUpdate }) {
     return next.find((item) => item !== 'cancelled') || next[0] || null;
   };
 
-  const clearOrderQueryParam = () => {
+  const clearOrderQueryParam = useCallback(() => {
     if (!searchParams.get('order_id')) return;
     const next = new URLSearchParams(searchParams);
     next.delete('order_id');
     setSearchParams(next, { replace: true });
-  };
+  }, [searchParams, setSearchParams]);
 
   const fetchOrders = async ({ showLoading = true } = {}) => {
     if (showLoading) setIsLoading(true);
@@ -95,7 +95,7 @@ export default function ManagerOrders({ onUpdate }) {
       loadMessages(matched.id);
       clearOrderQueryParam();
     }
-  }, [orders, searchParams, selectedOrder]);
+  }, [orders, searchParams, selectedOrder, clearOrderQueryParam]);
 
   const loadMessages = async (orderId) => {
     setLoadingMessages((prev) => ({ ...prev, [orderId]: true }));

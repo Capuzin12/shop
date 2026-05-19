@@ -15,8 +15,7 @@ const getApiBaseUrl = () => {
 
   // Priority 3: For production without explicit URL, try common backend patterns
   if (typeof window !== 'undefined' && window.location) {
-    const protocol = window.location.protocol;
-    const hostname = window.location.hostname;
+    // NOTE: protocol and hostname are available but we use a relative /api path instead
     // Attempt to use /api relative path (must be configured via reverse proxy or API gateway)
     return '/api';
   }

@@ -20,12 +20,13 @@ const getStockCopy = (product) => {
   return { label: 'Немає на складі', tone: 'rose' };
 };
 
+const CARD_VIEW_OPTIONS = {
+  compact: { label: 'Компактно', minWidth: 240, cardPadding: 'p-4', previewPadding: 'p-5', titleClass: 'text-xl', detailsMinHeight: 'min-h-[96px]' },
+  comfortable: { label: 'Комфортно', minWidth: 280, cardPadding: 'p-5', previewPadding: 'p-6', titleClass: 'text-2xl', detailsMinHeight: 'min-h-[120px]' },
+  spacious: { label: 'Великий вигляд', minWidth: 340, cardPadding: 'p-6', previewPadding: 'p-7', titleClass: 'text-3xl', detailsMinHeight: 'min-h-[136px]' },
+};
+
 export default function Catalog() {
-  const CARD_VIEW_OPTIONS = {
-    compact: { label: 'Компактно', minWidth: 240, cardPadding: 'p-4', previewPadding: 'p-5', titleClass: 'text-xl', detailsMinHeight: 'min-h-[96px]' },
-    comfortable: { label: 'Комфортно', minWidth: 280, cardPadding: 'p-5', previewPadding: 'p-6', titleClass: 'text-2xl', detailsMinHeight: 'min-h-[120px]' },
-    spacious: { label: 'Великий вигляд', minWidth: 340, cardPadding: 'p-6', previewPadding: 'p-7', titleClass: 'text-3xl', detailsMinHeight: 'min-h-[136px]' },
-  };
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);

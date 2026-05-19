@@ -1,5 +1,5 @@
 import { ShieldCheck, ShoppingBag, Warehouse } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import OrderChatWindow from '../components/OrderChatWindow';
@@ -52,12 +52,12 @@ export default function Profile() {
     return normalizePhoneInput(value);
   };
 
-  const clearOrderQueryParam = () => {
+  const clearOrderQueryParam = useCallback(() => {
     if (!searchParams.get('order_id')) return;
     const next = new URLSearchParams(searchParams);
     next.delete('order_id');
     setSearchParams(next, { replace: true });
-  };
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!isPublicView) return;
@@ -120,7 +120,7 @@ export default function Profile() {
       loadOrderMessages(matched.id);
       clearOrderQueryParam();
     }
-  }, [isPublicView, orders, searchParams, openedOrderId]);
+  }, [isPublicView, orders, searchParams, openedOrderId, clearOrderQueryParam]);
 
   useEffect(() => {
     if (isPublicView) return;
