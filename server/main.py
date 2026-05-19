@@ -3789,7 +3789,7 @@ def remove_supply_order_item(order_id: int, item_id: int, db: DbSession, current
     db.delete(item)
     db.commit()
 
-     return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.get("/api/admin/customer-groups")
