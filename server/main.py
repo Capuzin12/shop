@@ -120,11 +120,15 @@ _cors_mw_kwargs = {
 # Add static origins if provided
 if CORS_ORIGINS:
     _cors_mw_kwargs["allow_origins"] = CORS_ORIGINS
+else:
+    # If no static origins configured, use empty list (will rely on regex)
+    _cors_mw_kwargs["allow_origins"] = []
 
 # Add regex pattern for dynamic Vercel/preview deployments
 cors_regex = settings.cors_origin_regex or r'^https://.*\.vercel\.app$'
 if cors_regex:
     _cors_mw_kwargs["allow_origin_regex"] = cors_regex
+    logger.info('CORS regex pattern set for dynamic origins', extra={'pattern': cors_regex})
 
 logger.info(
     'CORS configured',

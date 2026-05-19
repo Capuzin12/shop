@@ -29,8 +29,13 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool = Field(default=True, env='AUTH_COOKIE_SECURE')  # HTTPS only
     
     # CORS
-    cors_origins: str = Field(default='http://localhost:5173', env='CORS_ORIGINS')
-    # Опційно: regex для Origin (напр. усі Vercel preview), якщо не хочете перелічувати кожен URL у CORS_ORIGINS
+    # Default includes localhost for dev, plus common deployment URLs
+    # For production: set via CORS_ORIGINS env var (comma-separated)
+    cors_origins: str = Field(
+        default='http://localhost:5173,https://shop-eight-lac.vercel.app,https://buildshop.vercel.app',
+        env='CORS_ORIGINS'
+    )
+    # Optional: regex for dynamic origins (e.g., all Vercel preview URLs)
     cors_origin_regex: Optional[str] = Field(default=r'^https://.*\.vercel\.app$', env='CORS_ORIGIN_REGEX')
     
      # API Server
