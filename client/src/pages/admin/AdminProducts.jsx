@@ -162,8 +162,9 @@ export default function AdminProducts() {
     return '';
   };
 
-  const buildPayload = () => {
-    return {
+   const buildPayload = () => {
+     // NOTE: slug is auto-generated on server if empty (from product name with transliteration)
+     return {
       name: String(formData.name || '').trim(),
       slug: String(formData.slug || '').trim(),
       sku: String(formData.sku || '').trim(),
@@ -245,9 +246,9 @@ export default function AdminProducts() {
     const imagesError = validateImages(formData.images_text);
     const attributesError = validateAttributes(formData.attributes_text);
 
-    if (!name) nextErrors.name = 'Вкажіть назву товару';
-    if (!slug) nextErrors.slug = 'Вкажіть slug';
-    if (!sku) nextErrors.sku = 'Вкажіть SKU';
+     if (!name) nextErrors.name = 'Вкажіть назву товару';
+     // NOTE: Slug може бути порожним - будет автозаповнено на сервері на основі name
+     if (!sku) nextErrors.sku = 'Вкажіть SKU';
     if (!Number.isFinite(price) || price <= 0) nextErrors.price = 'Ціна має бути більшою за 0';
     if (!Number.isInteger(categoryId) || categoryId <= 0) nextErrors.category_id = 'Вкажіть коректний ID категорії';
 
@@ -316,7 +317,7 @@ export default function AdminProducts() {
               {fieldErrors.name ? <p className="form-error-text text-xs">{fieldErrors.name}</p> : null}
             </div>
             <div>
-              <input value={formData.slug} onChange={(e) => updateField('slug', e.target.value)} placeholder="Слаг *" className={`form-input text-sm ${fieldErrors.slug ? 'form-input-error' : ''}`} required />
+              <input value={formData.slug} onChange={(e) => updateField('slug', e.target.value)} placeholder="Слаг (авто)" className={`form-input text-sm ${fieldErrors.slug ? 'form-input-error' : ''}`} />
               {fieldErrors.slug ? <p className="form-error-text text-xs">{fieldErrors.slug}</p> : null}
             </div>
             <div>

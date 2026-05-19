@@ -3,6 +3,9 @@ from difflib import SequenceMatcher
 import re
 from typing import Annotated
 import unicodedata
+import uuid
+import hashlib
+import time
 
 import models  # noqa: F401 — реєстрація ORM-моделей
 from fastapi import Depends, FastAPI, HTTPException, Response, status, Request
@@ -2540,7 +2543,7 @@ def get_product_reviews(product_id: int, db: DbSession, current_user: Annotated[
 
     avg_rating = round(sum(r.rating for r in visible_reviews) / len(visible_reviews), 1) if visible_reviews else None
     can_review = False
-    review_requirement = "Щоб залишити відгук, замовлення з цим товаром має бути доставлене або забране."
+    review_requirement = "Щоб залишити відгук, замовлення з цим товаром має бути доставлено або забрано."
     if current_user:
         can_review = can_user_review_product(db, current_user.id, product_id)
     return {
@@ -2653,6 +2656,19 @@ def get_public_user_profile(user_id: int, db: DbSession):
 @app.post("/api/products")
 def create_product(product: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
     normalized_product, images_data, attributes_data = _normalize_product_payload(product, require_basic=True)
+    
+    # Автогенерування slug якщо його немає
+    if not normalized_product.get("slug"):
+        normalized_product["slug"] = generate_slug_from_name(normalized_product.get("name", ""))
+    
+    # Перевіряємо унікальність slug
+    existing_product = db.scalar(select(Product).where(Product.slug == normalized_product["slug"]))
+    if existing_product:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "SLUG_EXISTS", "message": f"Товар з таким slug вже існує: {normalized_product['slug']}"}
+        )
+    
     new_product = Product(**normalized_product)
     db.add(new_product)
     db.flush()
@@ -2687,6 +2703,24 @@ def update_product(product_id: int, product: dict, db: DbSession, current_user: 
         raise HTTPException(status_code=404, detail="Product not found")
 
     normalized_product, images_data, attributes_data = _normalize_product_payload(product, require_basic=False)
+    
+    # Обробка slug: автогенерування або перевірка унікальності
+    if "name" in normalized_product and not normalized_product.get("slug"):
+        # Якщо змінилася назва і slug не вказан - автогенеруємо
+        normalized_product["slug"] = generate_slug_from_name(normalized_product["name"])
+    
+    if "slug" in normalized_product and normalized_product["slug"] != db_product.slug:
+        # Перевіряємо унікальність нового slug
+        existing = db.scalar(select(Product).where(
+            Product.slug == normalized_product["slug"],
+            Product.id != product_id
+        ))
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "SLUG_EXISTS", "message": f"Товар з таким slug вже існує: {normalized_product['slug']}"}
+            )
+    
     old_price_value = float(db_product.price)
     new_price_value = float(normalized_product.get("price", old_price_value))
     if new_price_value != old_price_value:
@@ -3200,6 +3234,11 @@ def update_order(request: Request, order_id: int, order_data: dict, db: DbSessio
                     changes[key] = {'from': old_value, 'to': value}
                 setattr(db_order, key, value)
 
+        # Автогенерування tracking_number при переході на "shipped"
+        if old_status != new_status and new_status == OrderStatus.shipped:
+            if not db_order.tracking_number:
+                db_order.tracking_number = generate_tracking_number()
+        
         if old_status != new_status and new_status == OrderStatus.cancelled:
             restock_order_items(db, db_order, note_prefix="Скасування замовлення")
             
@@ -3492,6 +3531,18 @@ def update_user(user_id: int, user_data: dict, db: DbSession, current_user: Anno
     db_user = db.get(User, user_id)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Перевірка унікальності email перед оновленням
+    if "email" in user_data:
+        new_email = str(user_data.get("email", "")).strip()
+        if new_email and new_email != db_user.email:
+            existing_user = db.scalar(select(User).where(User.email == new_email))
+            if existing_user:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"code": "EMAIL_DUPLICATE", "message": "Цей email вже використовується іншим користувачем"}
+                )
+
     allowed_fields = {"email", "first_name", "last_name", "phone", "role", "is_active", "password"}
     for key, value in user_data.items():
         if key not in allowed_fields:
@@ -3511,6 +3562,234 @@ def update_user(user_id: int, user_data: dict, db: DbSession, current_user: Anno
     db.commit()
     db.refresh(db_user)
     return serialize_user_summary(db_user)
+
+
+# ============================================================
+# SUPPLY ORDERS (Admin Warehouse Management)
+# ============================================================
+
+@app.get("/api/warehouse/supply-orders")
+def get_supply_orders(db: DbSession, current_user: Annotated[User, Depends(get_current_warehouse_user)]):
+    """Get all supply orders."""
+    orders = db.scalars(
+        select(SupplyOrder)
+        .options(selectinload(SupplyOrder.items), selectinload(SupplyOrder.supplier))
+        .order_by(SupplyOrder.created_at.desc())
+    ).all()
+
+    result = []
+    for order in orders:
+        result.append({
+            "id": order.id,
+            "supplier_id": order.supplier_id,
+            "supplier_name": order.supplier.name if order.supplier else None,
+            "invoice_number": order.invoice_number,
+            "status": order.status.value if hasattr(order.status, "value") else str(order.status),
+            "total_amount": order.total_amount,
+            "notes": order.notes,
+            "ordered_at": order.ordered_at.isoformat() if order.ordered_at else None,
+            "expected_at": order.expected_at.isoformat() if order.expected_at else None,
+            "received_at": order.received_at.isoformat() if order.received_at else None,
+            "created_by": order.created_by,
+            "created_at": order.created_at.isoformat() if order.created_at else None,
+            "items_count": len(order.items) if order.items else 0,
+        })
+
+    return result
+
+
+@app.get("/api/warehouse/supply-orders/{order_id}")
+def get_supply_order(order_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_warehouse_user)]):
+    """Get single supply order with items."""
+    order = db.scalar(
+        select(SupplyOrder)
+        .where(SupplyOrder.id == order_id)
+        .options(selectinload(SupplyOrder.items), selectinload(SupplyOrder.supplier))
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLY_ORDER_NOT_FOUND", "message": "Поставку не знайдено"})
+
+    return {
+        "id": order.id,
+        "supplier_id": order.supplier_id,
+        "supplier_name": order.supplier.name if order.supplier else None,
+        "invoice_number": order.invoice_number,
+        "status": order.status.value if hasattr(order.status, "value") else str(order.status),
+        "total_amount": order.total_amount,
+        "notes": order.notes,
+        "ordered_at": order.ordered_at.isoformat() if order.ordered_at else None,
+        "expected_at": order.expected_at.isoformat() if order.expected_at else None,
+        "received_at": order.received_at.isoformat() if order.received_at else None,
+        "created_by": order.created_by,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
+        "items": [
+            {
+                "id": item.id,
+                "product_id": item.product_id,
+                "product_name": item.product.name if item.product else "Unknown",
+                "product_sku": item.product.sku if item.product else None,
+                "quantity": item.quantity,
+                "unit_price": item.unit_price,
+                "total_price": item.total_price,
+            }
+            for item in (order.items or [])
+        ],
+    }
+
+
+@app.post("/api/warehouse/supply-orders", status_code=status.HTTP_201_CREATED)
+def create_supply_order(payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_warehouse_user)]):
+    """Create a new supply order with auto-generated invoice_number."""
+    supplier_id = int((payload or {}).get("supplier_id", 0))
+    if supplier_id <= 0:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_SUPPLIER_ID", "message": "Вкажіть постачальника"})
+
+    supplier = db.get(Supplier, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "Постачальника не знайдено"})
+
+    # Автогенерування invoice_number
+    invoice_number = generate_invoice_number(supplier_id)
+
+    # Перевіряємо унікальність invoice_number
+    existing = db.scalar(select(SupplyOrder).where(SupplyOrder.invoice_number == invoice_number))
+    if existing:
+        # Якщо вже існує, генеруємо ще один
+        invoice_number = generate_invoice_number(supplier_id)
+
+    order = SupplyOrder(
+        supplier_id=supplier_id,
+        invoice_number=invoice_number,
+        status="draft" if hasattr("draft", "value") else "draft",
+        total_amount=0,
+        notes=str((payload or {}).get("notes") or "").strip() or None,
+        created_by=current_user.id,
+    )
+
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    return {
+        "id": order.id,
+        "supplier_id": order.supplier_id,
+        "supplier_name": supplier.name,
+        "invoice_number": order.invoice_number,
+        "status": order.status,
+        "total_amount": order.total_amount,
+        "notes": order.notes,
+        "created_by": order.created_by,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
+    }
+
+
+@app.put("/api/warehouse/supply-orders/{order_id}", status_code=status.HTTP_200_OK)
+def update_supply_order(order_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_warehouse_user)]):
+    """Update supply order (status, dates, notes)."""
+    order = db.get(SupplyOrder, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLY_ORDER_NOT_FOUND", "message": "Поставку не знайдено"})
+
+    if "status" in (payload or {}):
+        order.status = str((payload or {}).get("status"))
+
+    if "ordered_at" in (payload or {}):
+        order.ordered_at = _parse_optional_datetime((payload or {}).get("ordered_at"))
+
+    if "expected_at" in (payload or {}):
+        order.expected_at = _parse_optional_datetime((payload or {}).get("expected_at"))
+
+    if "received_at" in (payload or {}):
+        order.received_at = _parse_optional_datetime((payload or {}).get("received_at"))
+
+    if "notes" in (payload or {}):
+        order.notes = str((payload or {}).get("notes") or "").strip() or None
+
+    db.commit()
+    db.refresh(order)
+
+    return {
+        "id": order.id,
+        "supplier_id": order.supplier_id,
+        "invoice_number": order.invoice_number,
+        "status": order.status,
+        "total_amount": order.total_amount,
+        "notes": order.notes,
+        "ordered_at": order.ordered_at.isoformat() if order.ordered_at else None,
+        "expected_at": order.expected_at.isoformat() if order.expected_at else None,
+        "received_at": order.received_at.isoformat() if order.received_at else None,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
+    }
+
+
+@app.post("/api/warehouse/supply-orders/{order_id}/items", status_code=status.HTTP_201_CREATED)
+def add_supply_order_item(order_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_warehouse_user)]):
+    """Add item to supply order."""
+    order = db.get(SupplyOrder, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLY_ORDER_NOT_FOUND", "message": "Поставку не знайдено"})
+
+    product_id = int((payload or {}).get("product_id", 0))
+    if product_id <= 0:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_ID", "message": "Вкажіть товар"})
+
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
+
+    try:
+        quantity = int((payload or {}).get("quantity", 1))
+        unit_price = float((payload or {}).get("unit_price", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_QUANTITY_OR_PRICE", "message": "Кількість та ціна мають бути числами"})
+
+    if quantity <= 0 or unit_price < 0:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_VALUES", "message": "Перевірте кількість та ціну"})
+
+    item = SupplyOrderItem(
+        supply_order_id=order.id,
+        product_id=product_id,
+        quantity=quantity,
+        unit_price=unit_price,
+    )
+
+    db.add(item)
+
+    # Оновлюємо total_amount
+    order.total_amount = float(order.total_amount or 0) + (quantity * unit_price)
+    db.add(order)
+    db.commit()
+    db.refresh(item)
+
+    return {
+        "id": item.id,
+        "supply_order_id": item.supply_order_id,
+        "product_id": item.product_id,
+        "product_name": product.name,
+        "quantity": item.quantity,
+        "unit_price": item.unit_price,
+        "total_price": item.total_price,
+    }
+
+
+@app.delete("/api/warehouse/supply-orders/{order_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_supply_order_item(order_id: int, item_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_warehouse_user)]):
+    """Remove item from supply order."""
+    order = db.get(SupplyOrder, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLY_ORDER_NOT_FOUND", "message": "Поставку не знайдено"})
+
+    item = db.get(SupplyOrderItem, item_id)
+    if not item or item.supply_order_id != order_id:
+        raise HTTPException(status_code=404, detail={"code": "ITEM_NOT_FOUND", "message": "Позицію не знайдено"})
+
+    # Зменшуємо total_amount
+    order.total_amount = float(order.total_amount or 0) - item.total_price
+    db.add(order)
+    db.delete(item)
+    db.commit()
+
+     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.get("/api/admin/customer-groups")
@@ -3848,6 +4127,7 @@ def get_product_price_history(
         select(
             PriceHistory.id,
             PriceHistory.product_id,
+            Product.name.label("product_name"),
             PriceHistory.old_price,
             PriceHistory.new_price,
             PriceHistory.changed_by,
@@ -3856,6 +4136,7 @@ def get_product_price_history(
             User.last_name,
         )
         .select_from(PriceHistory)
+        .outerjoin(Product, Product.id == PriceHistory.product_id)
         .outerjoin(User, User.id == PriceHistory.changed_by)
         .where(PriceHistory.product_id == product_id)
         .order_by(PriceHistory.changed_at.desc())
@@ -3951,298 +4232,224 @@ def get_global_price_history(
     }
 
 
-# Cart
-@app.get("/api/cart")
-def get_cart(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    cart = db.scalar(select(Cart).where(Cart.user_id == current_user.id))
-    if not cart:
-        cart = Cart(user_id=current_user.id)
-        db.add(cart)
-        db.commit()
-        db.refresh(cart)
+# ============================================================
+# HELPER FUNCTIONS FOR AUTO-GENERATING FIELDS
+# ============================================================
 
-    cart_product_ids = [ci.product_id for ci in (cart.items or [])]
-    stock_map = {
-        product_id: quantity
-        for product_id, quantity in db.execute(
-            select(Inventory.product_id, Inventory.quantity).where(Inventory.product_id.in_(cart_product_ids))
-        ).all()
+def generate_slug_from_name(name: str) -> str:
+    """
+    Генеруємо slug з name: 'Штукатурка гіпсова' -> 'shtukaturka-gipsova'
+    Процес: транслітерація -> lowercase -> пробіли/символи як дефіс -> дефіс на початку/кінці
+    """
+    if not name:
+        return f"product-{int(time.time())}"
+    
+    # Транслітерація українських символів на латиницу
+    transliterate_map = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'h', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
+        'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+        'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
+        'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e',
+        'ю': 'yu', 'я': 'ya', 'є': 'ye', 'і': 'i', 'ї': 'yi', 'ґ': 'g'
     }
-    return {
-        "id": cart.id,
-        "user_id": cart.user_id,
-        "items": [
-            {
-                "id": ci.id,
-                "cart_id": ci.cart_id,
-                "product_id": ci.product_id,
-                "quantity": ci.quantity,
-                "product": serialize_cart_product(db, ci.product, current_user.customer_group_id, ci.quantity, stock_map.get(ci.product.id, 0)) if ci.product else None,
-                "added_at": ci.added_at.isoformat() if ci.added_at else None
-            }
-            for ci in cart.items
-        ] if cart.items else [],
-        "created_at": cart.created_at.isoformat() if cart.created_at else None,
-        "updated_at": cart.updated_at.isoformat() if cart.updated_at else None
-    }
-
-@app.post("/api/cart/items")
-@limiter.limit("20/minute")
-def add_to_cart(request: Request, item: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    try:
-        product_id = int((item or {}).get("product_id") or 0)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_ID", "field": "product_id", "message": "product_id має бути додатним цілим числом"})
-    quantity = parse_positive_quantity((item or {}).get("quantity"), field="quantity")
-    if product_id <= 0:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_ID", "field": "product_id", "message": "product_id має бути додатним цілим числом"})
-
-    product = db.get(Product, product_id)
-    if not product or not product.is_active:
-        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
-
-    cart = db.scalar(select(Cart).where(Cart.user_id == current_user.id))
-    if not cart:
-        cart = Cart(user_id=current_user.id)
-        db.add(cart)
-        db.commit()
-        db.refresh(cart)
-
-    existing_item = db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == product_id))
-    if existing_item:
-        existing_item.quantity = parse_positive_quantity(existing_item.quantity + quantity, field="quantity")
-        cart_item = existing_item
-    else:
-        cart_item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity)
-        db.add(cart_item)
-    db.commit()
-    db.refresh(cart_item)
-    return {"message": "Item added to cart", "id": cart_item.id, "product_id": cart_item.product_id, "quantity": cart_item.quantity}
+    
+    # Замінюємо українські символи на латиницю
+    slug = name.lower()
+    for cyrillic, latin in transliterate_map.items():
+        slug = slug.replace(cyrillic, latin)
+    
+    # Замінюємо пробіли і спеціальні символи на дефіс
+    slug = re.sub(r'[^\w\-]', '-', slug)
+    
+    # Прибираємо кратні дефіси
+    slug = re.sub(r'-+', '-', slug)
+    
+    # Прибираємо дефіси на початку і кінці
+    slug = slug.strip('-')
+    
+    # Якщо slug пустий - генеруємо з timestamp
+    if not slug:
+        slug = f"product-{int(time.time())}"
+    
+    return slug
 
 
-@app.put("/api/cart/items/{item_id}")
-def update_cart_item(item_id: int, item_data: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    cart_item = db.get(CartItem, item_id)
-    if not cart_item or cart_item.cart.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Cart item not found")
-    quantity = parse_positive_quantity(item_data.get("quantity", 0), field="quantity", allow_zero=True)
-    if quantity <= 0:
-        db.delete(cart_item)
-    else:
-        cart_item.quantity = quantity
-    db.commit()
-    return {"message": "Cart updated"}
+def generate_tracking_number() -> str:
+    """
+    Генеруємо tracking number для замовлення: NP + дата + випадковий хеш
+    Приклад: NP20260518-A3F7B2C9
+    """
+    now = datetime.now()
+    date_str = now.strftime("%Y%m%d")
+    # Генеруємо випадковий хеш на основі timestamp
+    random_part = hashlib.md5(f"{uuid.uuid4()}{time.time()}".encode()).hexdigest()[:8].upper()
+    return f"NP{date_str}-{random_part}"
 
 
-@app.delete("/api/cart/items/{item_id}")
-def remove_cart_item(item_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    cart_item = db.get(CartItem, item_id)
-    if not cart_item or cart_item.cart.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Cart item not found")
-    db.delete(cart_item)
-    db.commit()
-    return {"message": "Item removed from cart"}
+def generate_invoice_number(supplier_id: int) -> str:
+    """
+    Генеруємо invoice number для поставки: INV-РРРР-ММДД-NNNN
+    Приклад: INV-2026-0518-0001
+    """
+    now = datetime.now()
+    year_month = now.strftime("%Y-%m%d")
+    # Використовуємо поточний timestamp для унікальності
+    seq = int(time.time()) % 9999
+    return f"INV-{year_month}-{seq:04d}"
 
 
-# Wishlist
-@app.get("/api/wishlist")
-def get_wishlist(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    wishlist_items = db.scalars(
-        select(Wishlist)
-        .where(Wishlist.user_id == current_user.id)
-        .options(selectinload(Wishlist.product))
+# ============================================================
+# END OF HELPER FUNCTIONS
+# ============================================================
+
+@app.get("/api/orders/{order_id}/messages")
+def get_order_messages(order_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)], limit: int = 100, offset: int = 0):
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if not can_manage_sales(current_user.role) and order.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    messages = db.scalars(
+        select(OrderMessage)
+        .where(OrderMessage.order_id == order_id)
+        .options(selectinload(OrderMessage.sender))
+        .order_by(OrderMessage.created_at.desc())
+        .offset(max(offset, 0))
+        .limit(min(max(limit, 1), 200))
     ).all()
-    return [
-        {
-            "id": w.id,
-            "user_id": w.user_id,
-            "product_id": w.product_id,
-            "product": {
-                "id": w.product.id,
-                "name": w.product.name,
-                "price": w.product.price,
-                "old_price": None,
-                "sku": w.product.sku,
-                "slug": w.product.slug,
-                "badge": w.product.badge.value if w.product.badge and hasattr(w.product.badge, 'value') else str(w.product.badge) if w.product.badge else None
-            } if w.product else None,
-            "added_at": w.added_at.isoformat() if w.added_at else None
-        }
-        for w in wishlist_items
-    ]
+    return {
+        "order_id": order_id,
+        "messages": [serialize_order_message(message) for message in reversed(messages)],
+        "limit": min(max(limit, 1), 200),
+        "offset": max(offset, 0),
+    }
 
 
-@app.post("/api/wishlist")
-def add_to_wishlist(item_data: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    product_id = item_data.get("product_id")
-    if not product_id:
-        raise HTTPException(status_code=400, detail="product_id is required")
-    # Check if product exists
-    product = db.get(Product, product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    # Check if already in wishlist
-    existing = db.scalar(
-        select(Wishlist)
-        .where(Wishlist.user_id == current_user.id, Wishlist.product_id == product_id)
-    )
-    if existing:
-        raise HTTPException(status_code=400, detail="Product already in wishlist")
-    
-    wishlist_item = Wishlist(user_id=current_user.id, product_id=product_id)
-    db.add(wishlist_item)
-    db.commit()
-    return {"message": "Product added to wishlist"}
-
-
-@app.delete("/api/wishlist/{product_id}")
-def remove_from_wishlist(product_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    wishlist_item = db.scalar(
-        select(Wishlist)
-        .where(Wishlist.user_id == current_user.id, Wishlist.product_id == product_id)
-    )
-    if not wishlist_item:
-        raise HTTPException(status_code=404, detail="Product not in wishlist")
-    
-    db.delete(wishlist_item)
-    db.commit()
-    return {"message": "Product removed from wishlist"}
-
-
-# Notifications
-@app.get("/api/notifications")
-def get_notifications(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)], limit: int = 100, offset: int = 0):
-    safe_limit = min(max(limit, 1), 200)
-    safe_offset = max(offset, 0)
-    try:
-        notifications = db.scalars(
-            select(Notification)
-            .where(Notification.user_id == current_user.id)
-            .order_by(Notification.created_at.desc())
-            .offset(safe_offset)
-            .limit(safe_limit)
-        ).all()
-        total = db.scalar(select(func.count()).select_from(Notification).where(Notification.user_id == current_user.id)) or 0
-        return {
-            "items": [
-                {
-                    "id": n.id,
-                    "user_id": n.user_id,
-                    "type": n.type.value if hasattr(n.type, 'value') else str(n.type),
-                    "title": n.title,
-                    "message": n.message,
-                    "target_path": resolve_notification_target_path(n, current_user),
-                    "target_product_id": n.target_product_id,
-                    "target_inventory_id": n.target_inventory_id,
-                    "target_order_id": n.target_order_id,
-                    "is_read": n.is_read,
-                    "created_at": n.created_at.isoformat() if n.created_at else None
-                }
-                for n in notifications
-            ],
-            "total": total,
-            "limit": safe_limit,
-            "offset": safe_offset,
-        }
-    except Exception as exc:
-        logger.error(
-            "Fallback serialization for notifications",
-            extra={"error": str(exc), "user_id": current_user.id},
-        )
-        return _get_notifications_fallback_rows(db, current_user, safe_limit, safe_offset)
-
-
-@app.put("/api/notifications/{notification_id}/read")
-def mark_notification_read(notification_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
-    notification = db.get(Notification, notification_id)
-    if not notification or notification.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Notification not found")
-    notification.is_read = True
-    db.commit()
-    return {"message": "Notification marked as read"}
-
-
-def check_low_stock_notifications(db: Session):
-    """Перевірка та створення повідомлень про низький запас для адміністраторів"""
-    inventory_items = db.scalars(select(Inventory).options(selectinload(Inventory.product))).all()
-    staff_users = db.scalars(select(User).where(User.role == UserRole.admin)).all()
-    
-    if not staff_users:
-        return 0
-    
-    for staff_user in staff_users:
-        db.execute(delete(Notification).where(
-            Notification.type == NotificationType.low_stock,
-            Notification.user_id == staff_user.id,
-            Notification.is_read == False
-        ))
-    
-    low_count = create_low_stock_notifications(db, inventory_items, recipient_roles=[UserRole.admin])
-    
-    db.commit()
-    return low_count
-
-
-@app.get("/api/notifications/check-low-stock")
-def check_low_stock(db: DbSession, current_user: Annotated[User, Depends(get_current_warehouse_user)]):
-    """Примусова перевірка низького запасу"""
-    count = check_low_stock_notifications(db)
-    return {"message": f"Перевірку выполнено. Знайдено {count} товарів з низьким запасом", "count": count}
-
-
-# ============================================================
-# AUDIT LOGS (Admin Only)
-# ============================================================
-
-@app.get("/api/audit-logs")
-def get_audit_logs(
-    db: DbSession,
-    current_user: Annotated[User, Depends(get_current_admin_user)],
-    resource_type: str | None = None,
-    resource_id: int | None = None,
-    user_id: int | None = None,
-    action: str | None = None,
-    limit: int = 100,
-):
-    """Get audit logs (admin only)."""
-    from audit_log import get_audit_logs as get_audit_logs_helper
-    
+@app.post("/api/orders/{order_id}/messages")
+@limiter.limit("30/minute")
+def create_order_message(request: Request, order_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
     set_user_id(current_user.id)
     
-    logs = get_audit_logs_helper(
-        db,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        user_id=user_id,
-        action=action,
-        limit=limit
-    )
-    
-    return [
-        {
-            "id": log.id,
-            "user_id": log.user_id,
-            "user_email": log.user.email if log.user else None,
-            "action": log.action,
-            "resource_type": log.resource_type,
-            "resource_id": log.resource_id,
-            "changes": log.changes_json,
-            "request_id": log.request_id,
-            "ip_address": log.ip_address,
-            "details": log.details,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
-        }
-        for log in logs
-    ]
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if not can_manage_sales(current_user.role) and order.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
 
-
-if __name__ == "__main__":
-    from database import SessionLocal
-    db = SessionLocal()
     try:
-        check_low_stock_notifications(db)
-    finally:
-        db.close()
-    import uvicorn
-    uvicorn.run(app, host=settings.api_host, port=settings.api_port)
+        body = str((payload or {}).get("body") or "").strip()
+        if len(body) < 2:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_MESSAGE", "message": "Повідомлення має містити щонайменше 2 символи"})
+        body = body[:1200]
+
+        is_from_staff = can_manage_sales(current_user.role)
+        message = OrderMessage(
+            order_id=order.id,
+            sender_id=current_user.id,
+            body=body,
+            is_from_staff=is_from_staff,
+        )
+        db.add(message)
+        db.flush()
+
+        recipient_ids: list[int] = []
+        if is_from_staff:
+            if order.user_id:
+                recipient_ids = [order.user_id]
+        else:
+            recipient_ids = [
+                user.id for user in db.scalars(
+                    select(User).where(
+                        User.role.in_([UserRole.admin, UserRole.sales_processor, UserRole.manager]),
+                        User.is_active == True,
+                    )
+                ).all()
+            ]
+
+        for recipient_id in recipient_ids:
+            if recipient_id == current_user.id:
+                continue
+            db.add(Notification(
+                user_id=recipient_id,
+                type=NotificationType.system,
+                title=f"Нове повідомлення по замовленню #{order.id}",
+                message=body[:180],
+                target_path="/profile" if not is_from_staff else "/manager?tab=orders",
+                target_order_id=order.id,
+            ))
+
+        db.commit()
+        message = db.scalar(select(OrderMessage).where(OrderMessage.id == message.id).options(selectinload(OrderMessage.sender)))
+        logger.info(f'Order message created', extra={'order_id': order_id, 'user_id': current_user.id, 'is_staff': is_from_staff})
+        return serialize_order_message(message)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f'Error creating order message', extra={'order_id': order_id, 'error': str(e)})
+        raise
+
+
+# Users (admin only)
+@app.get("/api/users")
+def get_users(db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
+    users = db.scalars(select(User).options(selectinload(User.customer_group))).all()
+    return [serialize_user_summary(user) for user in users]
+
+
+@app.get("/api/me")
+def get_current_user_info(current_user: Annotated[User, Depends(get_current_active_user)]):
+    """Get current user info (optimized - no related objects)."""
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+        "phone": current_user.phone,
+        "role": current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+        "customer_group_id": current_user.customer_group_id,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+    }
+
+
+@app.patch("/api/me")
+def update_current_user_info(user_data: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    allowed_fields = {"phone", "first_name", "last_name"}
+    payload = {key: value for key, value in (user_data or {}).items() if key in allowed_fields}
+
+    def _clean_text(value, max_len: int = 100) -> str:
+        return str(value or "").strip()[:max_len]
+
+    if "first_name" in payload:
+        first_name = _clean_text(payload.get("first_name"), 100)
+        if not first_name:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_FIRST_NAME", "field": "first_name", "message": "Ім'я не може бути порожнім"})
+        current_user.first_name = first_name
+
+    if "last_name" in payload:
+        last_name = _clean_text(payload.get("last_name"), 100)
+        if not last_name:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_LAST_NAME", "field": "last_name", "message": "Прізвище не може бути порожнім"})
+        current_user.last_name = last_name
+
+    if "phone" in payload:
+        raw_phone = str(payload.get("phone") or "").strip()
+        if raw_phone == "":
+            current_user.phone = None
+        else:
+            normalized = re.sub(r"[^\d+]", "", raw_phone)
+            if normalized.startswith("00"):
+                normalized = f"+{normalized[2:]}"
+            if not normalized.startswith("+") and normalized.startswith("0") and len(normalized) == 10:
+                normalized = f"+38{normalized}"
+            if not re.match(r"^\+?\d{10,15}$", normalized):
+                raise HTTPException(status_code=400, detail={"code": "INVALID_PHONE", "field": "phone", "message": "Номер телефону має бути у форматі +380XXXXXXXXX"})
+            current_user.phone = normalized
+
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return serialize_user_summary(current_user)
