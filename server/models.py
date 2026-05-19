@@ -616,7 +616,8 @@ class NotificationType(str, enum.Enum):
     order_status   = "order_status"
     supply_arrival = "supply_arrival"
     system         = "system"
-
+    promo          = "promo"
+    new_review     = "new_review"
 
 class Notification(Base):
     __tablename__ = "notifications"

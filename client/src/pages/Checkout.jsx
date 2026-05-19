@@ -339,8 +339,13 @@ export default function Checkout() {
     }
   };
 
+  useEffect(() => {
+    if (cart.length === 0) {
+      navigate('/cart');
+    }
+  }, [cart.length, navigate]);
+
   if (cart.length === 0) {
-    navigate('/cart');
     return null;
   }
 

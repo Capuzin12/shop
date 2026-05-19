@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # 1. Наша база даних PostgreSQL
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: buildshop_user
+      POSTGRES_PASSWORD: buildshop_password
+      POSTGRES_DB: buildshop_db
+    ports:
+      # Прокидаємо порт бази на ваш ПК, щоб можна було підключитись через DBeaver / pgAdmin
+      - "5432:5432"
+    volumes:
+      # Зберігаємо дані бази на диску вашого ПК, щоб вони не зникали після вимкнення Docker
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Перевіряємо, чи база повністю запустилася, перш ніж стартувати бекенд
+      test: ["CMD-SHELL", "pg_isready -U buildshop_user -d buildshop_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Наш бекенд на FastAPI
+  api:
+    build:
+      context: ./server
+    ports:
+      - "8001:8001"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      # Змінюємо підключення на наш локальний контейнер 'db'
+      # Зверніть увагу, хост тепер називається 'db' (як назва сервісу вище)
+      - DATABASE_URL=postgresql+psycopg://buildshop_user:buildshop_password@db:5432/buildshop_db
+      - SECRET_KEY=super_secret_dev_key_min_32_chars_long
+      - CORS_ORIGINS=http://localhost
+    volumes:
+      - ./server:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 3. Наш фронтенд на React
+  web:
+    build:
+      context: ./client
+      args:
+        - VITE_API_BASE_URL=http://localhost:8001
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
