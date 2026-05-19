@@ -110,27 +110,23 @@ def ensure_runtime_schema(db: Session):
 
     _schema_patched = True
 
-# Configure CORS with both static origins list and dynamic regex
+_cors_allow_origins = [
+    "https://shop-eight-lac.vercel.app",
+    "http://localhost:5173",
+]
+for origin in CORS_ORIGINS:
+    if origin not in _cors_allow_origins:
+        _cors_allow_origins.append(origin)
+
+# Configure CORS before registering routes.
 _cors_mw_kwargs = {
+    "allow_origins": _cors_allow_origins,
     "allow_credentials": True,
-    "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    "allow_headers": ["Content-Type", "Authorization", "X-Request-ID"],
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
     "expose_headers": ["X-Request-ID", "X-Response-Time", "Content-Disposition"],
-    "max_age": 3600,  # Preflight cache time (1 hour)
+    "max_age": 3600,
 }
-
-# Add static origins if provided
-if CORS_ORIGINS:
-    _cors_mw_kwargs["allow_origins"] = CORS_ORIGINS
-else:
-    # If no static origins configured, use empty list (will rely on regex)
-    _cors_mw_kwargs["allow_origins"] = []
-
-# Add regex pattern for dynamic Vercel/preview deployments
-cors_regex = settings.cors_origin_regex or r'^https://.*\.vercel\.app$'
-if cors_regex:
-    _cors_mw_kwargs["allow_origin_regex"] = cors_regex
-    logger.info('CORS regex pattern set for dynamic origins', extra={'pattern': cors_regex})
 
 logger.info(
     'CORS configured',
@@ -1948,6 +1944,9 @@ def get_products(
     page: int = 1,
     limit: int = 12
  ):
+    safe_page = max(int(page or 1), 1)
+    safe_limit = min(max(int(limit or 12), 1), 50)
+
     query = select(Product)
     if active_only:
         query = query.where(Product.is_active == True)
@@ -2088,8 +2087,8 @@ def get_products(
     else:
         order = Product.name.asc() if sort_order == "asc" else Product.name.desc()
 
-    offset = (page - 1) * limit
-    query = query.order_by(order).offset(offset).limit(limit)
+    offset = (safe_page - 1) * safe_limit
+    query = query.order_by(order).offset(offset).limit(safe_limit)
     products = db.scalars(query).all()
 
     if search and total == 0:
@@ -2111,13 +2110,13 @@ def get_products(
         candidates = db.scalars(fuzzy_query.limit(500)).all()
         fuzzy_ranked = rank_fuzzy_products(search, candidates)
         total = len(fuzzy_ranked)
-        total_pages = (total + limit - 1) // limit if total > 0 else 0
-        products = [item[0] for item in fuzzy_ranked[offset: offset + limit]]
+        total_pages = (total + safe_limit - 1) // safe_limit if total > 0 else 0
+        products = [item[0] for item in fuzzy_ranked[offset: offset + safe_limit]]
         search_mode = "fuzzy"
         if fuzzy_ranked:
             search_hint = fuzzy_ranked[0][0].name
 
-    total_pages = (total + limit - 1) // limit if total > 0 else 0
+    total_pages = (total + safe_limit - 1) // safe_limit if total > 0 else 0
 
     # Simple serialization for API response
     # Для оптимізації: отримуємо всі залишки інвентаря одним запитом
@@ -2322,8 +2321,8 @@ def get_products(
     return {
         "products": products_data,
         "total": total,
-        "page": page,
-        "limit": limit,
+        "page": safe_page,
+        "limit": safe_limit,
         "total_pages": total_pages,
         "facets": facets,
         "search_mode": search_mode,
@@ -4408,8 +4407,8 @@ def get_product_price_history(
 def get_global_price_history(
     db: DbSession,
     current_user: Annotated[User, Depends(get_current_admin_user)],
-    product_id: int | None = None,
-    changed_by: int | None = None,
+    product_id: str | None = None,
+    changed_by: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     page: int = 1,
@@ -4437,11 +4436,14 @@ def get_global_price_history(
     )
 
     count_query = select(func.count()).select_from(PriceHistory)
+    parsed_product_id = _parse_optional_int_field(product_id, "product_id")
+    parsed_changed_by = _parse_optional_int_field(changed_by, "changed_by")
+
     filters = []
-    if product_id:
-        filters.append(PriceHistory.product_id == product_id)
-    if changed_by:
-        filters.append(PriceHistory.changed_by == changed_by)
+    if parsed_product_id:
+        filters.append(PriceHistory.product_id == parsed_product_id)
+    if parsed_changed_by:
+        filters.append(PriceHistory.changed_by == parsed_changed_by)
     parsed_date_from = _parse_optional_datetime(date_from) if date_from else None
     parsed_date_to = _parse_optional_datetime(date_to) if date_to else None
     if parsed_date_from:
