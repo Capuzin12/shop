@@ -58,6 +58,7 @@ class OrderStatus(str, enum.Enum):
 
 class PaymentMethod(str, enum.Enum):
     card          = "card"
+    card_online   = "card_online"
     cash          = "cash"
     bank_transfer = "bank_transfer"
 

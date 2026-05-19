@@ -48,6 +48,8 @@ SECRET_KEY = settings.secret_key
 ALGORITHM = settings.jwt_algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.jwt_access_ttl_min
 CORS_ORIGINS = settings.get_cors_origins()
+if "https://shop-eight-lac.vercel.app" not in CORS_ORIGINS:
+    CORS_ORIGINS.append("https://shop-eight-lac.vercel.app")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -3433,6 +3435,242 @@ def create_order_message(request: Request, order_id: int, payload: dict, db: DbS
 
 
 # Users (admin only)
+def _get_or_create_cart_for_user(db: Session, user_id: int) -> Cart:
+    cart = db.scalar(
+        select(Cart)
+        .where(Cart.user_id == user_id)
+        .options(selectinload(Cart.items).selectinload(CartItem.product))
+    )
+    if cart:
+        return cart
+
+    cart = Cart(user_id=user_id)
+    db.add(cart)
+    db.commit()
+    return db.scalar(
+        select(Cart)
+        .where(Cart.id == cart.id)
+        .options(selectinload(Cart.items).selectinload(CartItem.product))
+    )
+
+
+def _serialize_cart_item(db: Session, item: CartItem, customer_group_id: int | None) -> dict:
+    stock = db.scalar(select(Inventory).where(Inventory.product_id == item.product_id))
+    stock_quantity = stock.quantity if stock else 0
+    product_payload = None
+    if item.product:
+        product_payload = serialize_cart_product(db, item.product, customer_group_id, item.quantity, stock_quantity)
+    return {
+        "id": item.id,
+        "cart_id": item.cart_id,
+        "product_id": item.product_id,
+        "quantity": item.quantity,
+        "added_at": _to_iso_or_none(item.added_at),
+        "product": product_payload,
+    }
+
+
+def _serialize_notification(notification: Notification, current_user: User) -> dict:
+    return {
+        "id": notification.id,
+        "user_id": notification.user_id,
+        "type": notification.type.value if hasattr(notification.type, "value") else str(notification.type),
+        "title": notification.title,
+        "message": notification.message,
+        "target_path": notification.target_path
+        or (
+            "/manager?tab=orders"
+            if notification.target_order_id and can_manage_sales(current_user.role)
+            else "/profile"
+            if notification.target_order_id
+            else "/notifications"
+        ),
+        "target_product_id": notification.target_product_id,
+        "target_inventory_id": notification.target_inventory_id,
+        "target_order_id": notification.target_order_id,
+        "is_read": bool(notification.is_read),
+        "created_at": _to_iso_or_none(notification.created_at),
+    }
+
+
+@app.get("/api/cart")
+def get_cart(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    cart = _get_or_create_cart_for_user(db, current_user.id)
+    return {
+        "id": cart.id,
+        "user_id": cart.user_id,
+        "created_at": _to_iso_or_none(cart.created_at),
+        "updated_at": _to_iso_or_none(cart.updated_at),
+        "items": [_serialize_cart_item(db, item, current_user.customer_group_id) for item in cart.items],
+    }
+
+
+@app.post("/api/cart/items", status_code=status.HTTP_201_CREATED)
+def create_cart_item(payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    try:
+        product_id = int((payload or {}).get("product_id", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_ID", "message": "product_id має бути цілим числом"})
+    if product_id <= 0:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_ID", "message": "Вкажіть коректний product_id"})
+
+    quantity = parse_positive_quantity((payload or {}).get("quantity"), field="quantity")
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
+
+    cart = _get_or_create_cart_for_user(db, current_user.id)
+    cart_item = db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == product_id))
+    if cart_item:
+        cart_item.quantity = min(cart_item.quantity + quantity, MAX_CART_ITEM_QUANTITY)
+    else:
+        cart_item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity)
+        db.add(cart_item)
+
+    db.commit()
+    cart_item = db.scalar(select(CartItem).where(CartItem.id == cart_item.id).options(selectinload(CartItem.product)))
+    return _serialize_cart_item(db, cart_item, current_user.customer_group_id)
+
+
+@app.put("/api/cart/items/{item_id}")
+def update_cart_item(item_id: int, payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    quantity = parse_positive_quantity((payload or {}).get("quantity"), field="quantity")
+    cart_item = db.scalar(
+        select(CartItem)
+        .join(Cart, Cart.id == CartItem.cart_id)
+        .where(CartItem.id == item_id, Cart.user_id == current_user.id)
+        .options(selectinload(CartItem.product))
+    )
+    if not cart_item:
+        raise HTTPException(status_code=404, detail={"code": "CART_ITEM_NOT_FOUND", "message": "Позицію кошика не знайдено"})
+
+    cart_item.quantity = quantity
+    db.commit()
+    return _serialize_cart_item(db, cart_item, current_user.customer_group_id)
+
+
+@app.delete("/api/cart/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_cart_item(item_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    cart_item = db.scalar(
+        select(CartItem)
+        .join(Cart, Cart.id == CartItem.cart_id)
+        .where(CartItem.id == item_id, Cart.user_id == current_user.id)
+    )
+    if not cart_item:
+        raise HTTPException(status_code=404, detail={"code": "CART_ITEM_NOT_FOUND", "message": "Позицію кошика не знайдено"})
+    db.delete(cart_item)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.get("/api/wishlist")
+def get_wishlist(db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    items = db.scalars(
+        select(Wishlist)
+        .where(Wishlist.user_id == current_user.id)
+        .options(selectinload(Wishlist.product))
+        .order_by(Wishlist.added_at.desc())
+    ).all()
+
+    result = []
+    for item in items:
+        stock = db.scalar(select(Inventory).where(Inventory.product_id == item.product_id))
+        stock_quantity = stock.quantity if stock else 0
+        pricing = resolve_effective_product_price(db, item.product, current_user.customer_group_id, 1) if item.product else {"effective_price": 0, "base_price": 0}
+        result.append(
+            {
+                "id": item.id,
+                "product_id": item.product_id,
+                "added_at": _to_iso_or_none(item.added_at),
+                "product": {
+                    "id": item.product.id if item.product else item.product_id,
+                    "name": item.product.name if item.product else "Товар",
+                    "price": pricing.get("effective_price", 0),
+                    "old_price": get_presentational_old_price(pricing),
+                    "sku": item.product.sku if item.product else "",
+                    "slug": item.product.slug if item.product else "",
+                    "description": item.product.description if item.product else "",
+                    "quantity": stock_quantity,
+                    "in_stock": stock_quantity > 0,
+                },
+            }
+        )
+    return result
+
+
+@app.post("/api/wishlist", status_code=status.HTTP_201_CREATED)
+def create_wishlist_item(payload: dict, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    try:
+        product_id = int((payload or {}).get("product_id", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_ID", "message": "product_id має бути цілим числом"})
+    if product_id <= 0:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_ID", "message": "Вкажіть коректний product_id"})
+
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
+
+    existing = db.scalar(select(Wishlist).where(Wishlist.user_id == current_user.id, Wishlist.product_id == product_id))
+    if existing:
+        return {"id": existing.id, "product_id": existing.product_id, "added_at": _to_iso_or_none(existing.added_at)}
+
+    item = Wishlist(user_id=current_user.id, product_id=product_id)
+    db.add(item)
+    db.commit()
+    return {"id": item.id, "product_id": item.product_id, "added_at": _to_iso_or_none(item.added_at)}
+
+
+@app.delete("/api/wishlist/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_wishlist_item(product_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    item = db.scalar(select(Wishlist).where(Wishlist.user_id == current_user.id, Wishlist.product_id == product_id))
+    if not item:
+        raise HTTPException(status_code=404, detail={"code": "WISHLIST_ITEM_NOT_FOUND", "message": "Елемент wishlist не знайдено"})
+    db.delete(item)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.get("/api/notifications")
+def get_notifications(
+    db: DbSession,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    limit: int = 100,
+    offset: int = 0,
+):
+    try:
+        safe_limit = min(max(int(limit or 100), 1), 200)
+        safe_offset = max(int(offset or 0), 0)
+        notifications = db.scalars(
+            select(Notification)
+            .where(Notification.user_id == current_user.id)
+            .order_by(Notification.created_at.desc())
+            .offset(safe_offset)
+            .limit(safe_limit)
+        ).all()
+        total = db.scalar(select(func.count(Notification.id)).where(Notification.user_id == current_user.id)) or 0
+        return {
+            "items": [_serialize_notification(item, current_user) for item in notifications],
+            "total": int(total),
+            "limit": safe_limit,
+            "offset": safe_offset,
+        }
+    except Exception:
+        return _get_notifications_fallback_rows(db, current_user, limit, offset)
+
+
+@app.put("/api/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: int, db: DbSession, current_user: Annotated[User, Depends(get_current_active_user)]):
+    notification = db.scalar(
+        select(Notification).where(Notification.id == notification_id, Notification.user_id == current_user.id)
+    )
+    if not notification:
+        raise HTTPException(status_code=404, detail={"code": "NOTIFICATION_NOT_FOUND", "message": "Сповіщення не знайдено"})
+    notification.is_read = True
+    db.commit()
+    return {"id": notification.id, "is_read": True}
+
+
 @app.get("/api/users")
 def get_users(db: DbSession, current_user: Annotated[User, Depends(get_current_admin_user)]):
     users = db.scalars(select(User).options(selectinload(User.customer_group))).all()
