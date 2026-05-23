@@ -20,6 +20,9 @@ import Notifications from './pages/Notifications';
 import AdminDashboard from './pages/AdminDashboard';
 import ManagerDashboard from './pages/manager/ManagerDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword  from './pages/ResetPassword';
+
 
 export default function App() {
   return (
@@ -34,6 +37,7 @@ export default function App() {
                   <main className="flex-1 pb-12">
                     <Routes>
                     <Route path="/" element={<Home />} />
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
                     <Route path="/catalog" element={<Catalog />} />
                     <Route path="/product/:id" element={<ProductDetail />} />
                     <Route path="/cart" element={<Cart />} />

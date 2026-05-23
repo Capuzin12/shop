@@ -36,6 +36,8 @@ services:
       - DATABASE_URL=postgresql+psycopg://buildshop_user:buildshop_password@db:5432/buildshop_db
       - SECRET_KEY=super_secret_dev_key_min_32_chars_long
       - CORS_ORIGINS=http://localhost,http://localhost:5173,http://localhost:80
+      - RESEND_API_KEY=re_RA5QNkFq_QBtpQiBJWLie8oGANDvpWAHY
+      - RESEND_FROM_EMAIL=onboarding@resend.dev
     volumes:
       - ./server:/app
     command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload

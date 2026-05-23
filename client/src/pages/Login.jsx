@@ -74,6 +74,12 @@ export default function Login() {
             </label>
           </div>
 
+          <div className="mt-1 text-right">
+            <Link to="/forgot-password" className="text-xs font-semibold text-amber-700 hover:underline dark:text-amber-300">
+              Забули пароль?
+            </Link>
+          </div>
+
           <button className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-6 py-4 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300" type="submit">
             <LogIn className="h-4 w-4" />
             Увійти

@@ -54,11 +54,12 @@ class Settings(BaseSettings):
     min_password_length: int = Field(default=12, env='MIN_PASSWORD_LENGTH')
     require_special_char_in_password: bool = Field(default=True, env='REQUIRE_SPECIAL_CHAR')
     session_timeout_minutes: int = Field(default=30, env='SESSION_TIMEOUT_MINUTES')
-    
+
     class Config:
         env_file = '.env'
         env_file_encoding = 'utf-8'
         case_sensitive = False
+        extra = 'ignore'
     
     @validator('secret_key')
     def validate_secret_key(cls, v):

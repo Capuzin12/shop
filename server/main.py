@@ -7,6 +7,8 @@ import uuid
 import hashlib
 import time
 
+
+
 import models  # noqa: F401 — реєстрація ORM-моделей
 from fastapi import Depends, FastAPI, HTTPException, Response, status, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,6 +35,7 @@ from security import (
 from slowapi.errors import RateLimitExceeded
 from errors import log_error
 from reporting import build_admin_report_pdf, build_admin_report_xlsx, collect_admin_report_data
+from password_reset import router as password_reset_router
 
 # Validate settings on startup
 validate_settings()
@@ -56,6 +59,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 oauth2_optional_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 app = FastAPI(title="BuildShop API")
+app.include_router(password_reset_router)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 
