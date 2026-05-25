@@ -1,22 +1,18 @@
 import axios from 'axios';
+import { clientEnv } from './shared/config/env';
 
 const AUTH_TOKEN_KEY = 'auth_token';
 
 const getApiBaseUrl = () => {
-  // Priority 1: Explicit environment variable (for production deployments)
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL;
+  if (clientEnv.apiBaseUrl) {
+    return clientEnv.apiBaseUrl;
   }
 
-  // Priority 2: For local development, use relative URL which Vite proxy will handle
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     return '/';
   }
 
-  // Priority 3: For production without explicit URL, try common backend patterns
   if (typeof window !== 'undefined' && window.location) {
-    // NOTE: protocol and hostname are available but we use a relative /api path instead
-    // Attempt to use /api relative path (must be configured via reverse proxy or API gateway)
     return '/api';
   }
 
@@ -76,7 +72,6 @@ export const clearAuthToken = () => {
 
 export const hasStoredAuthToken = () => Boolean(getStoredAuthToken());
 
-// Initialize header from storage for page refresh/reopen flows.
 applyAuthHeader(getStoredAuthToken());
 
 const MAX_RETRIES = 3;
@@ -165,7 +160,6 @@ api.interceptors.response.use(
       localStorage.removeItem('user');
       clearAuthToken();
 
-      // Avoid full reload loop when user is already on login page.
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }

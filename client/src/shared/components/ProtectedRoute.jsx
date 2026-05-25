@@ -1,0 +1,25 @@
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../features/auth/hooks/useAuth';
+import { getRoleLandingPath } from '../utils/roles';
+
+export default function ProtectedRoute({
+  children,
+  allowedRoles = null,
+  redirectTo = null,
+}) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  const fallbackPath = redirectTo || (user ? getRoleLandingPath(user.role) : '/login');
+
+  if (loading) return <div className="page-shell-comfy text-center text-slate-500">Завантаження...</div>;
+
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+
+  if (Array.isArray(allowedRoles) && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    return <Navigate to={fallbackPath} replace />;
+  }
+
+  return children;
+}
+
+

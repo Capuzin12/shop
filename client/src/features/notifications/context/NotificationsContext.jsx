@@ -1,0 +1,137 @@
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import api from '../../../api';
+import { useAuth } from '../../auth/hooks/useAuth';
+
+const NotificationsContext = createContext(null);
+
+export function NotificationsProvider({ children }) {
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const isRefreshingRef = useRef(false);
+
+  const normalizeNotifications = (list) => {
+    const valid = Array.isArray(list) ? list.filter((n) => n && n.id) : [];
+    return [...valid].sort((a, b) => {
+      const aTime = a?.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b?.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    });
+  };
+
+  const refreshNotifications = async () => {
+    if (!user) {
+      setNotifications([]);
+      setLoading(false);
+      return [];
+    }
+
+    if (isRefreshingRef.current) {
+      return notifications;
+    }
+
+    isRefreshingRef.current = true;
+
+    setLoading(true);
+    try {
+      const response = await api.get('/api/notifications', { params: { limit: 100 } });
+      const notificationsData = response.data;
+      const source = Array.isArray(notificationsData) ? notificationsData : (notificationsData?.items || []);
+      const validNotifications = normalizeNotifications(source);
+      setNotifications(validNotifications);
+      return validNotifications;
+    } catch (error) {
+      if (error.response?.status === 401) {
+        setNotifications([]);
+      } else {
+        console.error('Error fetching notifications:', error);
+      }
+      setNotifications([]);
+      return [];
+    } finally {
+      isRefreshingRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user) {
+      setNotifications([]);
+      return undefined;
+    }
+
+    // Initial fetch immediately after login/restore session
+    refreshNotifications();
+
+    // Refresh when user comes back to tab/window
+    const onFocus = () => refreshNotifications();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshNotifications();
+      }
+    };
+
+    // Event-driven refresh (without polling)
+    const onNotificationsRefresh = () => refreshNotifications();
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('buildshop:notifications-refresh', onNotificationsRefresh);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('buildshop:notifications-refresh', onNotificationsRefresh);
+    };
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const markRead = async (id) => {
+    if (!user) return;
+
+    try {
+      await api.put(`/api/notifications/${id}/read`, {});
+      setNotifications((prev) => prev.map((item) => (
+        item.id === id ? { ...item, is_read: true } : item
+      )));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const markAllRead = async () => {
+    const unreadIds = notifications.filter((item) => !item.is_read).map((item) => item.id);
+    if (unreadIds.length === 0) return;
+
+    // Optimistic UI: user sees read-state immediately.
+    setNotifications((prev) => prev.map((item) => ({ ...item, is_read: true })));
+    const results = await Promise.allSettled(
+      unreadIds.map((id) => api.put(`/api/notifications/${id}/read`, {}))
+    );
+
+    const failed = results.some((result) => result.status === 'rejected');
+    if (failed) {
+      await refreshNotifications();
+    }
+  };
+
+  const value = {
+    notifications,
+    unreadCount: notifications.filter((item) => !item.is_read).length,
+    loading,
+    refreshNotifications,
+    markRead,
+    markAllRead,
+  };
+
+  return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
+}
+
+export function useNotifications() {
+  const context = useContext(NotificationsContext);
+  if (!context) {
+    throw new Error('useNotifications must be used within NotificationsProvider');
+  }
+  return context;
+}
+

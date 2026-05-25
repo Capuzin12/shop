@@ -47,7 +47,7 @@ async def add_request_id_middleware(request: Request, call_next):
             token = auth_header[7:]  # Remove 'Bearer ' prefix
             payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
             # Don't set user_id here as we don't have DB context yet; it's set in route handlers
-        except Exception:  # nosec B110 - Intentional suppression of invalid token errors; handled by auth routes
+        except Exception:
             pass  # Invalid token will be handled by auth routes
     
     # Call the next middleware/route

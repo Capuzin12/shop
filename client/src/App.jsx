@@ -1,28 +1,28 @@
-import { Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
-import { CartProvider } from './contexts/CartContext';
-import { ThemeProvider } from './contexts/ThemeContext';
-import { WishlistProvider } from './contexts/WishlistContext';
-import { NotificationsProvider } from './contexts/NotificationsContext';
-import { FeatureFlagProvider } from './contexts/FeatureFlagContext';
-import Header from './components/Header';
-import GlobalToaster from './components/GlobalToaster';
-import Home from './pages/Home';
-import Catalog from './pages/Catalog';
-import ProductDetail from './pages/ProductDetail';
-import Cart from './pages/Cart';
-import Checkout from './pages/Checkout';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Profile from './pages/Profile';
-import Wishlist from './pages/Wishlist';
-import Notifications from './pages/Notifications';
-import AdminDashboard from './pages/AdminDashboard';
-import ManagerDashboard from './pages/manager/ManagerDashboard';
-import ProtectedRoute from './components/ProtectedRoute';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword  from './pages/ResetPassword';
-
+import { Route, Routes } from 'react-router-dom';
+import { AuthProvider } from './features/auth/context/AuthContext';
+import ForgotPassword from './features/auth/pages/ForgotPassword';
+import Login from './features/auth/pages/Login';
+import Register from './features/auth/pages/Register';
+import ResetPassword from './features/auth/pages/ResetPassword';
+import AdminDashboard from './features/admin/pages/AdminDashboard';
+import ManagerDashboard from './features/admin/pages/ManagerDashboard';
+import Cart from './features/cart/pages/Cart';
+import Checkout from './features/cart/pages/Checkout';
+import Catalog from './features/catalog/pages/Catalog';
+import ProductDetail from './features/catalog/pages/ProductDetail';
+import Home from './features/home/pages/Home';
+import { NotificationsProvider } from './features/notifications/context/NotificationsContext';
+import Notifications from './features/notifications/pages/Notifications';
+import Profile from './features/orders/pages/Profile';
+import { CartProvider } from './features/cart/context/CartContext';
+import { WishlistProvider } from './features/wishlist/context/WishlistContext';
+import Wishlist from './features/wishlist/pages/Wishlist';
+import AppErrorBoundary from './shared/components/AppErrorBoundary';
+import GlobalToaster from './shared/components/GlobalToaster';
+import Header from './shared/components/Header';
+import ProtectedRoute from './shared/components/ProtectedRoute';
+import { FeatureFlagProvider } from './shared/context/FeatureFlagContext';
+import { ThemeProvider } from './shared/context/ThemeContext';
 
 export default function App() {
   return (
@@ -32,37 +32,45 @@ export default function App() {
           <WishlistProvider>
             <NotificationsProvider>
               <CartProvider>
-                <div className="flex min-h-screen flex-col bg-transparent text-slate-900 transition-colors duration-300 dark:text-slate-100">
-                  <Header />
-                  <main className="flex-1 pb-12">
-                    <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/forgot-password" element={<ForgotPassword />} />
-                    <Route path="/reset-password" element={<ResetPassword />} />
-                    <Route path="/catalog" element={<Catalog />} />
-                    <Route path="/product/:id" element={<ProductDetail />} />
-                    <Route path="/cart" element={<Cart />} />
-                    <Route path="/checkout" element={<Checkout />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} />
-                    <Route path="/profile" element={<Profile />} />
-                    <Route path="/users/:userId" element={<Profile />} />
-                    <Route path="/wishlist" element={<Wishlist />} />
-                    <Route path="/notifications" element={<Notifications />} />
-                    <Route path="/admin/*" element={
-                      <ProtectedRoute allowedRoles={['admin', 'content_manager', 'manager', 'warehouse_manager', 'sales_processor']}>
-                        <AdminDashboard />
-                      </ProtectedRoute>
-                    } />
-                    <Route path="/manager/*" element={
-                      <ProtectedRoute allowedRoles={['admin', 'manager', 'warehouse_manager', 'sales_processor']}>
-                        <ManagerDashboard />
-                      </ProtectedRoute>
-                    } />
-                    </Routes>
-                  </main>
-                  <GlobalToaster />
-                </div>
+                <AppErrorBoundary>
+                  <div className="flex min-h-screen flex-col bg-transparent text-slate-900 transition-colors duration-300 dark:text-slate-100">
+                    <Header />
+                    <main className="flex-1 pb-12">
+                      <Routes>
+                        <Route path="/" element={<Home />} />
+                        <Route path="/forgot-password" element={<ForgotPassword />} />
+                        <Route path="/reset-password" element={<ResetPassword />} />
+                        <Route path="/catalog" element={<Catalog />} />
+                        <Route path="/product/:id" element={<ProductDetail />} />
+                        <Route path="/cart" element={<Cart />} />
+                        <Route path="/checkout" element={<Checkout />} />
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/register" element={<Register />} />
+                        <Route path="/profile" element={<Profile />} />
+                        <Route path="/users/:userId" element={<Profile />} />
+                        <Route path="/wishlist" element={<Wishlist />} />
+                        <Route path="/notifications" element={<Notifications />} />
+                        <Route
+                          path="/admin/*"
+                          element={(
+                            <ProtectedRoute allowedRoles={['admin', 'content_manager', 'manager', 'warehouse_manager', 'sales_processor']}>
+                              <AdminDashboard />
+                            </ProtectedRoute>
+                          )}
+                        />
+                        <Route
+                          path="/manager/*"
+                          element={(
+                            <ProtectedRoute allowedRoles={['admin', 'manager', 'warehouse_manager', 'sales_processor']}>
+                              <ManagerDashboard />
+                            </ProtectedRoute>
+                          )}
+                        />
+                      </Routes>
+                    </main>
+                    <GlobalToaster />
+                  </div>
+                </AppErrorBoundary>
               </CartProvider>
             </NotificationsProvider>
           </WishlistProvider>

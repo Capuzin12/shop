@@ -2,7 +2,6 @@
 Configuration management for BuildShop API using Pydantic Settings
 """
 
-import os
 from typing import Optional, List
 from pydantic_settings import BaseSettings
 from pydantic import Field, validator
@@ -39,8 +38,8 @@ class Settings(BaseSettings):
     cors_origin_regex: Optional[str] = Field(default=r'^https://.*\.vercel\.app$', env='CORS_ORIGIN_REGEX')
     
      # API Server
-    api_host: str = Field(default='0.0.0.0', env='API_HOST')  # nosec B104 - 0.0.0.0 is standard for containerized deployments
-    api_port: int = Field(default=8000, env='API_PORT')
+    api_host: str = Field(default='0.0.0.0', env='API_HOST')
+    api_port: int = Field(default=8001, env='API_PORT')
     
     # Rate limiting
     rate_limit_enabled: bool = Field(default=True, env='RATE_LIMIT_ENABLED')
@@ -54,6 +53,13 @@ class Settings(BaseSettings):
     min_password_length: int = Field(default=12, env='MIN_PASSWORD_LENGTH')
     require_special_char_in_password: bool = Field(default=True, env='REQUIRE_SPECIAL_CHAR')
     session_timeout_minutes: int = Field(default=30, env='SESSION_TIMEOUT_MINUTES')
+    
+    # External integrations
+    frontend_url: str = Field(default='http://localhost:5173', env='FRONTEND_URL')
+    resend_api_key: str = Field(default='', env='RESEND_API_KEY')
+    resend_from_email: str = Field(default='BuildShop <noreply@buildshop.ua>', env='RESEND_FROM_EMAIL')
+    password_reset_ttl_minutes: int = Field(default=30, env='PASSWORD_RESET_TTL_MINUTES')
+    report_font_path: str = Field(default='', env='REPORT_FONT_PATH')
 
     class Config:
         env_file = '.env'
@@ -62,17 +68,17 @@ class Settings(BaseSettings):
         extra = 'ignore'
     
     @validator('secret_key')
-    def validate_secret_key(cls, v):
+    def validate_secret_key(cls, v, values):
         """Ensure secret key is not the default dev key in production."""
+        env = values.get('environment', 'development')
         if v == 'dev-only-secret-change-me':
-            env = os.getenv('ENVIRONMENT', 'development')
             if env in ('production', 'prod', 'staging'):
                 raise ValueError(
                     'SECRET_KEY must not be the default dev key in production. '
                     'Set SECRET_KEY environment variable to a strong random value (min 32 chars).'
                 )
         # In production, enforce minimum key length
-        if os.getenv('ENVIRONMENT', 'development') in ('production', 'prod'):
+        if env in ('production', 'prod'):
             if len(str(v)) < 32:
                 raise ValueError('SECRET_KEY must be at least 32 characters in production')
         return v
@@ -87,22 +93,22 @@ class Settings(BaseSettings):
         return v
 
     @validator('auth_cookie_samesite')
-    def validate_auth_cookie_samesite(cls, v):
+    def validate_auth_cookie_samesite(cls, v, values):
         allowed = {'lax', 'strict', 'none'}
         value = str(v or '').strip().lower()
-        if os.getenv('ENVIRONMENT', 'development') in ('production', 'prod') and value in ('', 'lax'):
+        if values.get('environment', 'development') in ('production', 'prod') and value in ('', 'lax'):
             return 'none'
         if value not in allowed:
             raise ValueError(f'AUTH_COOKIE_SAMESITE must be one of {tuple(sorted(allowed))}')
         return value
     
     @validator('database_url')
-    def validate_database_url(cls, v):
+    def validate_database_url(cls, v, values):
         """Validate database URL format."""
         if not v or len(v) < 10:
             raise ValueError('DATABASE_URL is invalid or missing')
         # Warn if SQLite in production (should use PostgreSQL)
-        if v.startswith('sqlite') and os.getenv('ENVIRONMENT', 'development') in ('production', 'prod'):
+        if v.startswith('sqlite') and values.get('environment', 'development') in ('production', 'prod'):
             import warnings
             warnings.warn('SQLite should not be used in production. Use PostgreSQL instead.')
         return v
@@ -119,9 +125,9 @@ class Settings(BaseSettings):
         return s
     
     @validator('auth_cookie_secure')
-    def validate_auth_cookie_secure(cls, v):
+    def validate_auth_cookie_secure(cls, v, values):
         """Enforce secure cookies in production."""
-        if os.getenv('ENVIRONMENT', 'development') in ('production', 'prod'):
+        if values.get('environment', 'development') in ('production', 'prod'):
             if not v:
                 raise ValueError('AUTH_COOKIE_SECURE must be True in production')
         return v
@@ -161,7 +167,7 @@ def validate_settings() -> None:
     """Validate all settings on startup."""
     # Check required environment variables
     if settings.is_production():
-        if settings.secret_key == 'dev-only-secret-change-me':  # nosec B105 - Intentional check to prevent production misconfiguration
+        if settings.secret_key == 'dev-only-secret-change-me':
             raise ValueError('SECRET_KEY must be configured in production')
         if settings.debug:
             raise ValueError('DEBUG mode must be disabled in production')
