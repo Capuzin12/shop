@@ -362,7 +362,10 @@ export default function AdminProducts() {
               <>
                 <DataTable columns={['Назва', 'SKU', 'Ціна', 'Категорія', 'Бренд', 'Статус', 'Дії']}>
                   {products.map((product) => (
-                      <tr key={product.id} className="align-top">
+                      <tr
+                        key={product.id}
+                        className={`align-top transition ${editing === product.id ? 'bg-blue-50 dark:bg-blue-500/10 border-l-4 border-blue-500' : 'border-l-4 border-transparent hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                      >
                         <td className="px-4 py-4">
                           <p className="font-semibold text-slate-900 dark:text-white">{product.name}</p>
                         </td>

@@ -15,7 +15,27 @@ const formatPrice = (price) => new Intl.NumberFormat('uk-UA', {
 
 const ProductImageDisplay = ({ images, product }) => {
   const [imageError, setImageError] = useState(false);
-  const hasImages = images && images.length > 0 && !imageError;
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  const validImages = (images || []).filter(img => img?.url);
+  const hasImages = validImages.length > 0 && !imageError;
+  const currentImage = validImages[currentImageIndex];
+
+  const getImageUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/')) return url;
+    return `/${url}`;
+  };
+
+  const handleImageError = () => {
+    const nextIndex = currentImageIndex + 1;
+    if (nextIndex < validImages.length) {
+      setCurrentImageIndex(nextIndex);
+    } else {
+      setImageError(true);
+    }
+  };
 
   if (!hasImages) {
     return (
@@ -32,12 +52,31 @@ const ProductImageDisplay = ({ images, product }) => {
   }
 
   return (
-    <img 
-      src={images[0]?.url} 
-      alt={images[0]?.alt_text || product.name} 
-      className="h-full w-full object-cover rounded-[2rem]"
-      onError={() => setImageError(true)}
-    />
+    <div className="relative w-full h-full overflow-hidden rounded-[2rem]">
+      <img
+        src={getImageUrl(currentImage?.url)}
+        alt={currentImage?.alt_text || product.name}
+        className="w-full h-full object-contain"
+        onError={handleImageError}
+      />
+      {validImages.length > 1 && (
+        <div className="absolute bottom-4 left-4 flex gap-1">
+          {validImages.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setCurrentImageIndex(idx)}
+              className={`h-2 w-2 rounded-full transition ${
+                idx === currentImageIndex
+                  ? 'bg-white'
+                  : 'bg-white/50 hover:bg-white/75'
+              }`}
+              aria-label={`Image ${idx + 1}`}
+              type="button"
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -133,7 +172,7 @@ export default function ProductDetail() {
       <div className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr]">
 
         <div className="rounded-[2.5rem] border border-white/50 bg-white/75 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-          <div className="flex h-full min-h-[420px] items-center justify-center rounded-[2rem] overflow-hidden">
+          <div className="w-full rounded-[2rem] overflow-hidden" style={{ aspectRatio: '1 / 1.2', maxWidth: '100%' }}>
             <ProductImageDisplay images={product.images} product={product} />
           </div>
         </div>
