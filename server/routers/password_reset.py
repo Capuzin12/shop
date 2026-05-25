@@ -1,5 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -132,6 +133,7 @@ async def validate_reset_token(token: str):
     hashed = _hash_token(token)
     data = _reset_tokens.get(hashed)
 
-    if not data or data["used"] or datetime.utcnow() > data["expires_at"]:
+    expires_at = cast(object, data["expires_at"])
+    if not data or data["used"] or datetime.now(timezone.utc) > cast(datetime, expires_at):
         return {"valid": False}
-    return {"valid": True, "expires_in_minutes": int((data["expires_at"] - datetime.utcnow()).total_seconds() / 60)}
+    return {"valid": True, "expires_in_minutes": int((expires_at - datetime.now(timezone.utc)).total_seconds() / 60)}

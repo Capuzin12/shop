@@ -1,5 +1,6 @@
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
+from typing import cast
 
 from models import (
     Inventory,
@@ -72,16 +73,16 @@ def restock_order_items(db: Session, order: Order, note_prefix: str = "Пове�
             db.add(inventory)
             db.flush()
 
-        quantity_before = int(inventory.quantity or 0)
-        inventory.quantity = quantity_before + int(item.quantity or 0)
-        quantity_after = inventory.quantity
+        quantity_before = int(cast(int, inventory.quantity or 0))
+        inventory.quantity = quantity_before + int(cast(int, item.quantity or 0))
+        quantity_after = int(cast(int, inventory.quantity or 0))
         db.add(inventory)
         db.add(
             InventoryMovement(
                 product_id=item.product_id,
                 order_id=order.id,
                 type=MovementType.return_,
-                quantity=int(item.quantity or 0),
+                quantity=int(cast(int, item.quantity or 0)),
                 quantity_before=quantity_before,
                 quantity_after=quantity_after,
                 note=f"{note_prefix}: замовлення #{order.id}",

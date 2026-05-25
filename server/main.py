@@ -1,8 +1,10 @@
-import models
+from models import Base
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware import Middleware
+from typing import Any, cast
 
 from config import settings, validate_settings
 from logging_config import configure_logging, get_logger
@@ -13,19 +15,28 @@ validate_settings()
 logger = get_logger(__name__)
 configure_logging(debug=settings.debug)
 
-app = FastAPI(title="BuildShop API")
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.get_cors_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Response-Time", "Content-Disposition"],
-    max_age=3600,
+
+async def _rate_limit_exception_handler(request, exc):
+    return custom_rate_limit_handler(request, exc)
+
+app = FastAPI(
+    title="BuildShop API",
+    middleware=[
+        Middleware(
+            cast(Any, CORSMiddleware),
+            allow_origins=settings.get_cors_origins(),
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["X-Request-ID", "X-Response-Time", "Content-Disposition"],
+            max_age=3600,
+        ),
+        Middleware(cast(Any, GZipMiddleware), minimum_size=1024),
+    ],
 )
-app.add_middleware(GZipMiddleware, minimum_size=1024)
+app.state.limiter = limiter
+app.state.models_base = Base
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exception_handler)
 app.middleware("http")(add_request_id_middleware)
 app.middleware("http")(add_security_headers_middleware)
 app.middleware("http")(add_timing_middleware)

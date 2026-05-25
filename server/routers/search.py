@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import and_, or_, select
@@ -90,7 +90,8 @@ def search_suggestions(q: str, db: Annotated[Session, Depends(get_db)]):
             .outerjoin(Category, Product.category_id == Category.id)
             .limit(500)
         ).all()
-        products = [item[0] for item in rank_fuzzy_products(query, fallback_candidates, limit=8)]
+        ranked_products = cast(list[tuple[Product, float]], list(rank_fuzzy_products(query, fallback_candidates, limit=8)))
+        products = [item[0] for item in ranked_products]
         search_mode = "fuzzy"
 
     product_ids = [product.id for product in products]

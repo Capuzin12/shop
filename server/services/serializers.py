@@ -19,10 +19,10 @@ from models import (
     Review,
     Supplier,
     User,
+    UserRole,
 )
 from services.helpers import _to_iso_or_none
 from services.pricing import get_presentational_old_price, resolve_effective_product_price
-from routers.deps import can_manage_sales
 
 logger = get_logger(__name__)
 
@@ -335,7 +335,7 @@ def _serialize_notification(notification: Notification, current_user: User) -> d
         "target_path": notification.target_path
         or (
             "/manager?tab=orders"
-            if notification.target_order_id and can_manage_sales(current_user.role)
+            if notification.target_order_id and current_user.role in (UserRole.admin, UserRole.sales_processor, UserRole.manager)
             else "/profile"
             if notification.target_order_id
             else "/notifications"

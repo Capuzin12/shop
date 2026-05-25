@@ -4,9 +4,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 import re
+from sqlalchemy.orm import Session
 
 from config import settings
 from logging_config import get_logger, set_user_id
+from models import User
 from routers.deps import get_current_active_user, get_db
 from security import limiter
 from services.auth import authenticate_user, create_access_token
@@ -22,7 +24,7 @@ async def login_for_access_token(
     request: Request,
     response: Response,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    db: Annotated = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
@@ -61,7 +63,7 @@ def logout(response: Response):
 
 
 @router.get("/api/me")
-def get_current_user_info(current_user: Annotated = Depends(get_current_active_user)):
+def get_current_user_info(current_user: Annotated[User, Depends(get_current_active_user)]):
     return {
         "id": current_user.id,
         "email": current_user.email,
@@ -78,8 +80,8 @@ def get_current_user_info(current_user: Annotated = Depends(get_current_active_u
 @router.patch("/api/me")
 def update_current_user_info(
     user_data: dict,
-    db: Annotated = Depends(get_db),
-    current_user: Annotated = Depends(get_current_active_user),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
 ):
     allowed_fields = {"phone", "first_name", "last_name"}
     payload = {key: value for key, value in (user_data or {}).items() if key in allowed_fields}

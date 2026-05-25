@@ -1,11 +1,19 @@
 import hashlib
 import secrets
 import string
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Optional, TypedDict, cast
 from config import settings
 
-_reset_tokens: dict[str, dict] = {}
+
+class ResetTokenData(TypedDict):
+    user_id: int
+    email: str
+    expires_at: datetime
+    used: bool
+
+
+_reset_tokens: dict[str, ResetTokenData] = {}
 
 
 def _generate_reset_token() -> str:
@@ -14,7 +22,9 @@ def _generate_reset_token() -> str:
 
 
 def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
+    digest = hashlib.sha256()
+    digest.update(token.encode())
+    return digest.hexdigest()
 
 
 def _store_token(token: str, user_id: int, email: str) -> None:
@@ -25,7 +35,7 @@ def _store_token(token: str, user_id: int, email: str) -> None:
     _reset_tokens[hashed] = {
         "user_id": user_id,
         "email": email,
-        "expires_at": datetime.utcnow() + timedelta(minutes=settings.password_reset_ttl_minutes),
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=settings.password_reset_ttl_minutes),
         "used": False,
     }
 
@@ -37,9 +47,10 @@ def _consume_token(token: str) -> Optional[dict]:
         return None
     if data["used"]:
         return None
-    if datetime.utcnow() > data["expires_at"]:
+    if datetime.now(timezone.utc) > data["expires_at"]:
         del _reset_tokens[hashed]
         return None
-    data["used"] = True
-    return data
+    typed_data = cast(ResetTokenData, data)
+    typed_data["used"] = True
+    return typed_data
 

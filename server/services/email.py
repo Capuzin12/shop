@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import cast
 
 from config import settings
 from logging_config import get_logger
@@ -72,7 +73,7 @@ def _send_reset_email(to_email: str, token: str, first_name: str = "") -> bool:
           <tr>
             <td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0;">
               <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;">
-                © {datetime.utcnow().year} BuildShop - будівельні матеріали онлайн
+                © {datetime.now(timezone.utc).year} BuildShop - будівельні матеріали онлайн
               </p>
             </td>
           </tr>
@@ -100,7 +101,7 @@ def _send_reset_email(to_email: str, token: str, first_name: str = "") -> bool:
             "html": html_body,
             "text": text_body,
         }
-        result = resend.Emails.send(params)
+        result = resend.Emails.send(cast(object, params))
         logger.info(
             "Password reset email sent",
             extra={"resend_id": result.get("id"), "to": to_email},

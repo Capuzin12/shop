@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from typing import cast
 
 from models import Brand
 from routers.deps import get_current_catalog_user, get_db
@@ -39,29 +40,29 @@ def _normalize_brand_payload(payload: dict, *, require_basic: bool) -> dict:
 @router.get("/api/brands")
 def get_brands(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     brands = db.scalars(select(Brand).order_by(Brand.name.asc())).all()
-    return [serialize_brand(brand) for brand in brands]
+    return [serialize_brand(cast(Brand, brand)) for brand in brands]
 
 
 @router.get("/api/brands/{brand_id}")
 def get_brand(
     brand_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     brand = db.get(Brand, brand_id)
     if not brand:
         raise HTTPException(status_code=404, detail={"code": "BRAND_NOT_FOUND", "message": "Бренд не знайдено"})
-    return serialize_brand(brand)
+    return serialize_brand(cast(Brand, brand))
 
 
 @router.post("/api/brands")
 def create_brand(
     brand: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     normalized = _normalize_brand_payload(brand, require_basic=True)
     new_brand = Brand(**normalized)
@@ -80,7 +81,7 @@ def update_brand(
     brand_id: int,
     brand: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     db_brand = db.get(Brand, brand_id)
     if not db_brand:
@@ -94,14 +95,14 @@ def update_brand(
         db.rollback()
         raise HTTPException(status_code=409, detail={"code": "BRAND_EXISTS", "message": "Бренд з таким slug вже існує"})
     db.refresh(db_brand)
-    return serialize_brand(db_brand)
+    return serialize_brand(cast(Brand, db_brand))
 
 
 @router.delete("/api/brands/{brand_id}")
 def delete_brand(
     brand_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     db_brand = db.get(Brand, brand_id)
     if not db_brand:

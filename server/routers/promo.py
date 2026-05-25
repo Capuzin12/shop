@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from typing import cast
 
 from models import DiscountType, PromoCode
 from routers.deps import get_current_active_user, get_current_catalog_user, get_db
@@ -58,7 +59,7 @@ def _normalize_promo_code_payload(payload: dict, *, require_basic: bool) -> dict
 @router.get("/api/promo-codes")
 def get_promo_codes(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     promo_codes = db.scalars(select(PromoCode).order_by(PromoCode.created_at.desc())).all()
     return [serialize_promo_code(promo) for promo in promo_codes]
@@ -68,7 +69,7 @@ def get_promo_codes(
 def validate_promo_code_endpoint(
     payload: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_active_user),
+    current_user: Annotated[object, Depends(get_current_active_user)],
 ):
     return validate_promo_code(payload, db, current_user)
 
@@ -77,19 +78,19 @@ def validate_promo_code_endpoint(
 def get_promo_code(
     promo_code_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     promo_code = db.get(PromoCode, promo_code_id)
     if not promo_code:
         raise HTTPException(status_code=404, detail={"code": "PROMO_NOT_FOUND", "message": "Промокод не знайдено"})
-    return serialize_promo_code(promo_code)
+    return serialize_promo_code(cast(PromoCode, promo_code))
 
 
 @router.post("/api/promo-codes")
 def create_promo_code(
     promo_code: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     normalized = _normalize_promo_code_payload(promo_code, require_basic=True)
     new_promo_code = PromoCode(**normalized)
@@ -108,7 +109,7 @@ def update_promo_code(
     promo_code_id: int,
     promo_code: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     db_promo_code = db.get(PromoCode, promo_code_id)
     if not db_promo_code:
@@ -122,14 +123,14 @@ def update_promo_code(
         db.rollback()
         raise HTTPException(status_code=409, detail={"code": "PROMO_EXISTS", "message": "Промокод з таким кодом вже існує"})
     db.refresh(db_promo_code)
-    return serialize_promo_code(db_promo_code)
+    return serialize_promo_code(cast(PromoCode, db_promo_code))
 
 
 @router.delete("/api/promo-codes/{promo_code_id}")
 def delete_promo_code(
     promo_code_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     db_promo_code = db.get(PromoCode, promo_code_id)
     if not db_promo_code:

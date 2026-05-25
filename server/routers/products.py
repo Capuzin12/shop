@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from models import (
@@ -13,8 +14,9 @@ from models import (
     Review,
     User,
 )
-from routers.deps import get_current_admin_user, get_current_active_user, get_current_catalog_user, get_db, get_optional_user, can_manage_catalog
+from routers.deps import can_manage_catalog, get_current_admin_user, get_current_active_user, get_db, get_optional_user
 from services.helpers import generate_slug_from_name
+import services.orders as order_services
 from services.pricing import get_presentational_old_price, resolve_effective_product_price
 from services.search import search_products_response
 from services.serializers import serialize_product_detail, serialize_review
@@ -84,7 +86,7 @@ def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[d
         value = payload.get(key)
         if key == "category_id":
             try:
-                parsed = int(value)
+                parsed = int(cast(int, value))
             except (TypeError, ValueError):
                 raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле має бути числом"})
             if parsed <= 0:
@@ -95,7 +97,7 @@ def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[d
                 normalized[key] = None
             else:
                 try:
-                    parsed = int(value)
+                    parsed = int(cast(int, value))
                 except (TypeError, ValueError):
                     raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле має бути числом"})
                 if parsed <= 0:
@@ -107,7 +109,7 @@ def _normalize_product_payload(payload: dict, *, require_basic: bool) -> tuple[d
                     normalized[key] = None
                 continue
             try:
-                parsed = float(value)
+                parsed = float(cast(float, value))
             except (TypeError, ValueError):
                 raise HTTPException(status_code=400, detail={"code": "INVALID_PRODUCT_FIELD", "field": key, "message": "Поле має бути числом"})
             if key == "price" and parsed <= 0:
@@ -256,7 +258,7 @@ def get_product_reviews(
     can_review = False
     review_requirement = "Щоб залишити відгук, замовлення з цим товаром має бути доставлено або забрано."
     if current_user:
-        can_review = can_user_review_product(db, current_user.id, product_id)
+        can_review = order_services.can_user_review_product(db, current_user.id, product_id)
     return {
         "reviews": [serialize_review(review) for review in visible_reviews],
         "total": len(visible_reviews),
@@ -277,7 +279,7 @@ def create_or_update_review(
     if not product or not product.is_active:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    if not can_user_review_product(db, current_user.id, product_id):
+    if not order_services.can_user_review_product(db, current_user.id, product_id):
         raise HTTPException(
             status_code=403,
             detail={
@@ -288,7 +290,7 @@ def create_or_update_review(
 
     raw_rating = payload.get("rating")
     try:
-        rating = int(raw_rating)
+        rating = int(cast(int, raw_rating))
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail={"code": "INVALID_REVIEW_RATING", "message": "Оцінка має бути числом від 1 до 5"})
 
@@ -308,7 +310,7 @@ def create_or_update_review(
         existing_review.rating = rating
         existing_review.comment = comment
         existing_review.is_approved = True
-        existing_review.created_at = datetime.utcnow()
+        existing_review.created_at = datetime.now(timezone.utc)
         db.add(existing_review)
         review = existing_review
     else:
@@ -324,7 +326,7 @@ def create_or_update_review(
     db.commit()
     db.refresh(review)
     review = db.scalar(select(Review).where(Review.id == review.id).options(selectinload(Review.user)))
-    return serialize_review(review)
+    return serialize_review(cast(Review, review))
 
 
 @router.post("/api/products")
@@ -365,7 +367,7 @@ def create_product(
             selectinload(Product.brand),
         )
     )
-    return serialize_product_detail(created)
+    return serialize_product_detail(cast(Product, created))
 
 
 @router.put("/api/products/{product_id}")
@@ -427,7 +429,7 @@ def update_product(
             selectinload(Product.brand),
         )
     )
-    return serialize_product_detail(updated)
+    return serialize_product_detail(cast(Product, updated))
 
 
 @router.delete("/api/products/{product_id}")
@@ -454,7 +456,8 @@ def get_effective_price_for_product(
     product = db.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
-    pricing = resolve_effective_product_price(db, product, getattr(current_user, "customer_group_id", None), quantity)
+    product_obj = cast(object, product)
+    pricing = resolve_effective_product_price(db, cast(Product, product_obj), getattr(current_user, "customer_group_id", None), quantity)
     return {
         "effective_price": pricing["effective_price"],
         "base_price": pricing["base_price"],

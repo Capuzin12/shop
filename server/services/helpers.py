@@ -146,7 +146,9 @@ def generate_slug_from_name(name: str) -> str:
 def generate_tracking_number() -> str:
     now = datetime.now()
     date_str = now.strftime("%Y%m%d")
-    random_part = hashlib.md5(f"{uuid.uuid4()}{time.time()}".encode(), usedforsecurity=False).hexdigest()[:8].upper()
+    md5 = hashlib.md5(usedforsecurity=False)
+    md5.update(f"{uuid.uuid4()}{time.time()}".encode())
+    random_part = md5.hexdigest()[:8].upper()
     return f"NP{date_str}-{random_part}"
 
 

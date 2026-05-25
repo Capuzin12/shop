@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from typing import cast
 
 from models import Category
 from routers.deps import get_current_catalog_user, get_db
@@ -63,26 +64,26 @@ def get_categories(db: Annotated[Session, Depends(get_db)], active_only: bool = 
     if active_only:
         query = query.where(Category.is_active == True)
     categories = db.scalars(query.order_by(Category.sort_order.asc(), Category.name.asc())).all()
-    return [serialize_category(category) for category in categories]
+    return [serialize_category(cast(Category, category)) for category in categories]
 
 
 @router.get("/api/categories/{category_id}")
 def get_category(
     category_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     category = db.get(Category, category_id)
     if not category:
         raise HTTPException(status_code=404, detail={"code": "CATEGORY_NOT_FOUND", "message": "Категорію не знайдено"})
-    return serialize_category(category)
+    return serialize_category(cast(Category, category))
 
 
 @router.post("/api/categories")
 def create_category(
     category: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     normalized = _normalize_category_payload(category, require_basic=True)
     new_category = Category(**normalized)
@@ -101,7 +102,7 @@ def update_category(
     category_id: int,
     category: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     db_category = db.get(Category, category_id)
     if not db_category:
@@ -115,14 +116,14 @@ def update_category(
         db.rollback()
         raise HTTPException(status_code=409, detail={"code": "CATEGORY_EXISTS", "message": "Категорія з таким slug вже існує"})
     db.refresh(db_category)
-    return serialize_category(db_category)
+    return serialize_category(cast(Category, db_category))
 
 
 @router.delete("/api/categories/{category_id}")
 def delete_category(
     category_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     db_category = db.get(Category, category_id)
     if not db_category:

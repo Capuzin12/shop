@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from typing import cast
 
 from models import Supplier
 from routers.deps import get_current_catalog_user, get_db
@@ -36,29 +37,29 @@ def _normalize_supplier_payload(payload: dict, *, require_basic: bool) -> dict:
 @router.get("/api/suppliers")
 def get_suppliers(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     suppliers = db.scalars(select(Supplier).order_by(Supplier.name.asc())).all()
-    return [serialize_supplier(supplier) for supplier in suppliers]
+    return [serialize_supplier(cast(Supplier, supplier)) for supplier in suppliers]
 
 
 @router.get("/api/suppliers/{supplier_id}")
 def get_supplier(
     supplier_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     supplier = db.get(Supplier, supplier_id)
     if not supplier:
         raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "Постачальника не знайдено"})
-    return serialize_supplier(supplier)
+    return serialize_supplier(cast(Supplier, supplier))
 
 
 @router.post("/api/suppliers")
 def create_supplier(
     supplier: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     normalized = _normalize_supplier_payload(supplier, require_basic=True)
     new_supplier = Supplier(**normalized)
@@ -73,7 +74,7 @@ def update_supplier(
     supplier_id: int,
     supplier: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     db_supplier = db.get(Supplier, supplier_id)
     if not db_supplier:
@@ -83,14 +84,14 @@ def update_supplier(
         setattr(db_supplier, key, value)
     db.commit()
     db.refresh(db_supplier)
-    return serialize_supplier(db_supplier)
+    return serialize_supplier(cast(Supplier, db_supplier))
 
 
 @router.delete("/api/suppliers/{supplier_id}")
 def delete_supplier(
     supplier_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_catalog_user),
+    current_user: Annotated[object, Depends(get_current_catalog_user)],
 ):
     db_supplier = db.get(Supplier, supplier_id)
     if not db_supplier:

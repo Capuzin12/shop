@@ -1,4 +1,5 @@
 import re
+from typing import Any, cast
 
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select
@@ -16,6 +17,7 @@ from models import (
     NotificationType,
     Order,
     OrderItem,
+    OrderStatus,
     PaymentMethod,
     PromoCode,
     Product,
@@ -48,6 +50,19 @@ def get_order_status_ua(status_value: str) -> str:
         "refunded": "Повернено",
     }
     return status_map.get(status_value, status_value)
+
+
+def can_user_review_product(db: Session, user_id: int, product_id: int) -> bool:
+    eligible_statuses = [OrderStatus.delivered, OrderStatus.picked_up]
+    return db.scalar(
+        select(Order.id)
+        .join(OrderItem, OrderItem.order_id == Order.id)
+        .where(
+            Order.user_id == user_id,
+            OrderItem.product_id == product_id,
+            Order.status.in_(eligible_statuses),
+        )
+    ) is not None
 
 
 def validate_promo_code(payload: dict, db: Session, current_user: User):
@@ -108,7 +123,8 @@ def create_order(order_data: dict, db: Session, current_user: User):
             raise HTTPException(status_code=400, detail={"code": "INVALID_NUMERIC_FIELD", "field": name, "message": f"Поле {name} не може бути від'ємним"})
         return parsed
 
-    items_data = normalize_order_items_payload(order_data.get("items"))
+    items_raw = order_data.get("items")
+    items_data = normalize_order_items_payload(cast(list[dict], items_raw))
 
     contact_name = _clean_text(order_data.get("contact_name"), 200)
     if not contact_name:
@@ -117,9 +133,9 @@ def create_order(order_data: dict, db: Session, current_user: User):
     if len(contact_name) < 2:
         raise HTTPException(status_code=400, detail={"code": "INVALID_CONTACT_NAME", "field": "contact_name", "message": "Вкажіть коректне ім'я отримувача"})
 
-    contact_phone = _normalize_phone(order_data.get("contact_phone"))
+    contact_phone = _normalize_phone(str(order_data.get("contact_phone") or ""))
     if not contact_phone:
-        contact_phone = _normalize_phone(current_user.phone)
+        contact_phone = _normalize_phone(str(current_user.phone or ""))
     if not re.match(r"^\+?\d{10,15}$", contact_phone):
         raise HTTPException(status_code=400, detail={"code": "INVALID_CONTACT_PHONE", "field": "contact_phone", "message": "Вкажіть коректний номер телефону"})
 
@@ -176,16 +192,16 @@ def create_order(order_data: dict, db: Session, current_user: User):
             .where(Product.id.in_(product_ids))
             .options(selectinload(Product.inventory))
         ).all()
-        products_by_id = {product.id: product for product in products}
+        products_by_id: dict[int, Product] = {product.id: product for product in products}
 
         for item in items_data:
-            product_id = item.get("product_id")
+            product_id = int(item.get("product_id") or 0)
             quantity = parse_positive_quantity(item.get("quantity"), field="quantity")
-            if not product_id:
+            if product_id <= 0:
                 raise HTTPException(status_code=400, detail={"code": "INVALID_ITEM", "message": "Кожна позиція має містити коректні product_id та quantity"})
 
             product = products_by_id.get(product_id)
-            if not product:
+            if product is None:
                 raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "product_id": product_id, "message": f"Товар #{product_id} не знайдено"})
             if not product.is_active:
                 raise HTTPException(status_code=400, detail={"code": "PRODUCT_INACTIVE", "product_id": product_id, "message": f"Товар '{product.name}' недоступний для замовлення"})
@@ -220,9 +236,9 @@ def create_order(order_data: dict, db: Session, current_user: User):
                 )
             )
 
-            quantity_before = inventory.quantity
-            inventory.quantity -= quantity
-            quantity_after = inventory.quantity
+            quantity_before = int(inventory.quantity or 0)
+            inventory.quantity = quantity_before - quantity
+            quantity_after = int(inventory.quantity or 0)
             db.add(inventory)
             inventory_changes.append((product_id, quantity, quantity_before, quantity_after))
 
@@ -279,11 +295,11 @@ def create_order(order_data: dict, db: Session, current_user: User):
 
         if inventory_changes:
             affected_product_ids = [change[0] for change in inventory_changes]
-            affected_inventory = db.scalars(
+            affected_inventory = list(db.scalars(
                 select(Inventory)
                 .where(Inventory.product_id.in_(affected_product_ids))
-                .options(selectinload(Inventory.product))
-            ).all()
+                .options(selectinload(cast(Any, Inventory.product)))
+            ).all())
             create_low_stock_notifications(db, affected_inventory)
 
         cart = db.scalar(select(Cart).where(Cart.user_id == current_user.id))

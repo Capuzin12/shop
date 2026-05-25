@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any, cast
 
 from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
@@ -7,7 +8,7 @@ from models import CustomerGroup, Product, ProductDiscount, ProductPrice
 
 
 def get_active_product_discount(db: Session, product_id: int) -> ProductDiscount | None:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return db.scalar(
         select(ProductDiscount)
         .where(
@@ -48,9 +49,9 @@ def resolve_effective_product_price(
         tier = db.scalar(
             select(ProductPrice)
             .where(
-                ProductPrice.product_id == product.id,
-                ProductPrice.customer_group_id == customer_group_id,
-                ProductPrice.min_quantity <= qty,
+                cast(Any, ProductPrice.product_id) == product.id,
+                cast(Any, ProductPrice.customer_group_id) == customer_group_id,
+                cast(Any, ProductPrice.min_quantity) <= qty,
             )
             .order_by(ProductPrice.min_quantity.desc())
         )
@@ -92,7 +93,9 @@ def get_presentational_old_price(pricing: dict) -> float | None:
         base_for_display = pricing.get("base_price")
     effective_price = pricing.get("effective_price")
     if pricing.get("active_discount") and base_for_display is not None and effective_price is not None:
-        if float(effective_price) < float(base_for_display):
-            return float(base_for_display)
+        base_value = float(cast(Any, base_for_display))
+        effective_value = float(cast(Any, effective_price))
+        if effective_value < base_value:
+            return base_value
     return None
 
