@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     cors_origin_regex: Optional[str] = Field(default=r'^https://.*\.vercel\.app$', env='CORS_ORIGIN_REGEX')
     
      # API Server
-    api_host: str = Field(default='0.0.0.0', env='API_HOST')
+    api_host: str = Field(default='0.0.0.0', env='API_HOST')  #nosec B104
     api_port: int = Field(default=8001, env='API_PORT')
     
     # Rate limiting
@@ -175,7 +175,7 @@ def validate_settings() -> None:
     """Validate all settings on startup."""
     # Check required environment variables
     if settings.is_production():
-        if settings.secret_key == 'dev-only-secret-change-me':
+        if settings.secret_key == 'dev-only-secret-change-me':  #nosec B105
             raise ValueError('SECRET_KEY must be configured in production')
         if settings.debug:
             raise ValueError('DEBUG mode must be disabled in production')

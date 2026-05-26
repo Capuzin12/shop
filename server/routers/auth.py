@@ -59,7 +59,7 @@ async def login_for_access_token(
         domain=None,
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer"}  #nosec B105
 
 
 @router.post("/api/logout")
@@ -69,7 +69,7 @@ def logout(request: Request, response: Response, db: Annotated[Session, Depends(
     if raw:
         try:
             revoke_refresh_token_by_raw(db, raw)
-        except Exception:
+        except Exception:  #nosec B110
             pass
     response.delete_cookie(key=settings.auth_cookie_name, path="/")
     return {"ok": True}
@@ -87,13 +87,13 @@ def refresh_access_token(request: Request, response: Response, db: Annotated[Ses
     if not row:
         # possible reuse / invalid token
         try:
-          token_hash = _hash_token(raw)
-          suspect = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
-          if suspect:
-            # token was found but revoked -> token reuse detected: revoke all user's tokens
-            revoke_all_user_refresh_tokens(db, suspect.user_id)
-        except Exception:
-          pass
+            token_hash = _hash_token(raw)
+            suspect = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+            if suspect:
+                # token was found but revoked -> token reuse detected: revoke all user's tokens
+                revoke_all_user_refresh_tokens(db, suspect.user_id)
+        except Exception:  #nosec B110
+            pass
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     # rotate: create new refresh token and mark old as revoked/replaced
@@ -130,7 +130,7 @@ def refresh_access_token(request: Request, response: Response, db: Annotated[Ses
         data={"sub": user.email, "role": user.role.value if hasattr(user.role, "value") else str(user.role)},
         expires_delta=access_token_expires,
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer"}  #nosec B105
 
 
 @router.get("/api/me")

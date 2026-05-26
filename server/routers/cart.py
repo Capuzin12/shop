@@ -25,7 +25,8 @@ def _get_or_create_cart_for_user(db: Session, user_id: int) -> Cart:
     refreshed_cart = cast(Cart | None, db.scalar(
         select(Cart).where(Cart.id == cart.id).options(selectinload(Cart.items).selectinload(CartItem.product).selectinload(Product.images))  # type: ignore[arg-type]
     ))
-    assert refreshed_cart is not None
+    if refreshed_cart is None:
+        raise ValueError("Failed to refresh cart after creation")
     return refreshed_cart
 
 

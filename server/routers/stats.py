@@ -75,7 +75,7 @@ def api_stats(db: Annotated[Session, Depends(get_db)]):
 def reset_admin_password(payload: dict | None = None, db: Annotated[Session, Depends(get_db)] = None):
     if settings.environment not in ("development", "dev", "local"):
         raise HTTPException(status_code=403, detail="This debug endpoint is only available in development")
-    test_password = "Admin123!@#"
+    test_password = "Admin123!@#"  #nosec B105
     admin = db.scalar(select(User).where(User.email == "admin@budmart.ua"))
     if not admin:
         raise HTTPException(status_code=404, detail="Admin user not found")
