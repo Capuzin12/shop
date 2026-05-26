@@ -44,7 +44,21 @@ const ProductImageDisplay = ({ images, product }) => {
   const [zoomEnabled, setZoomEnabled] = useState(false);
   const [zoomPoint, setZoomPoint] = useState({ x: 50, y: 50 });
   // overlay position (percent of container) and dragging state
-  const [overlayPos, setOverlayPos] = useState({ left: 9, top: 11 });
+  const [overlayPos, setOverlayPos] = useState(() => {
+    try {
+      const key = `zoom_overlay_${product?.id}`;
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.left === 'number' && typeof parsed.top === 'number') {
+          return { left: parsed.left, top: parsed.top };
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return { left: 9, top: 11 };
+  });
   const [overlayDragging, setOverlayDragging] = useState(false);
   const overlayDragRef = useRef(null);
   const containerRef = useRef(null);
@@ -132,21 +146,7 @@ const ProductImageDisplay = ({ images, product }) => {
   const OVERLAY_W_PCT = 76;
   const OVERLAY_H_PCT = 62;
 
-  // load saved overlay position per product
-  useEffect(() => {
-    try {
-      const key = `zoom_overlay_${product?.id}`;
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed.left === 'number' && typeof parsed.top === 'number') {
-          setOverlayPos({ left: parsed.left, top: parsed.top });
-        }
-      }
-    } catch (err) {
-      // ignore
-    }
-  }, [product?.id]);
+  // overlay position is initialized from localStorage via state initializer
 
   if (!hasImages) {
     return (
@@ -232,7 +232,7 @@ const ProductImageDisplay = ({ images, product }) => {
           <div
             role="presentation"
             onPointerDown={(e) => {
-              try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch (err) {}
+              try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* ignore */ }
               const containerRect = containerRef.current?.getBoundingClientRect();
               overlayDragRef.current = {
                 startX: e.clientX,
@@ -260,10 +260,10 @@ const ProductImageDisplay = ({ images, product }) => {
               setOverlayPos({ left: nextLeft, top: nextTop });
             }}
             onPointerUp={(e) => {
-              try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch (err) {}
+              try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch { /* ignore */ }
               setOverlayDragging(false);
               const last = overlayDragRef.current?.lastPos || { left: overlayPos.left, top: overlayPos.top };
-              try { localStorage.setItem(`zoom_overlay_${product?.id}`, JSON.stringify(last)); } catch (err) {}
+              try { localStorage.setItem(`zoom_overlay_${product?.id}`, JSON.stringify(last)); } catch { /* ignore */ }
             }}
             onPointerCancel={() => { setOverlayDragging(false); overlayDragRef.current = null; }}
             className={`absolute z-20 h-[62%] w-[76%] overflow-hidden rounded-[1.8rem] border border-white/80 bg-white/95 shadow-[0_24px_70px_rgba(15,23,42,0.25)] ring-1 ring-black/10 ${overlayDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
