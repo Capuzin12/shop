@@ -10,6 +10,74 @@ const GUEST_CHECKOUT_KEY = 'buildshop-checkout-draft';
 
 import { formatPrice } from '../../../shared/utils/format';
 
+const DELIVERY_OPTIONS = [
+  {
+    id: 'nova_poshta',
+    label: 'Нова пошта',
+    description: 'Доставка у відділення або поштомат по Україні.',
+    baseCost: 90,
+    freeFrom: 4000,
+    addressLabel: 'Відділення або поштомат',
+  },
+  {
+    id: 'ukrposhta',
+    label: 'Укрпошта',
+    description: 'Економна доставка у відділення.',
+    baseCost: 60,
+    freeFrom: 3000,
+    addressLabel: 'Відділення Укрпошти',
+  },
+  {
+    id: 'courier',
+    label: 'Курʼєр',
+    description: 'Доставка за повною адресою до дверей.',
+    baseCost: 250,
+    freeFrom: 6000,
+    addressLabel: 'Повна адреса доставки',
+  },
+  {
+    id: 'pickup',
+    label: 'Самовивіз',
+    description: 'Безкоштовно з головного складу BuildShop у Києві.',
+    baseCost: 0,
+    freeFrom: 0,
+    addressLabel: 'Точка самовивозу',
+  },
+];
+
+const PAYMENT_OPTIONS = [
+  {
+    id: 'card',
+    label: 'Карткою при отриманні',
+    description: 'Оплата карткою під час видачі або доставки.',
+  },
+  {
+    id: 'card_online',
+    label: 'Онлайн-оплата карткою',
+    description: 'Безпечна передоплата карткою для швидшої обробки замовлення.',
+  },
+  {
+    id: 'cash',
+    label: 'Готівкою при отриманні',
+    description: 'Оплата готівкою в точці видачі або курʼєру.',
+  },
+  {
+    id: 'bank_transfer',
+    label: 'Безготівковий переказ',
+    description: 'Оплата за рахунком для юридичних осіб та B2B-клієнтів.',
+  },
+];
+
+const PICKUP_CITY = 'Київ';
+const PICKUP_ADDRESS = 'Головний склад BuildShop, вул. Промислова, 12';
+
+const PAYMENT_COMPATIBILITY = {
+  nova_poshta: ['card', 'card_online', 'cash', 'bank_transfer'],
+  ukrposhta: ['card', 'card_online', 'bank_transfer'],
+  courier: ['card', 'card_online', 'cash', 'bank_transfer'],
+  pickup: ['card', 'card_online', 'cash'],
+};
+
 const getImageUrl = (url) => {
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
@@ -69,6 +137,13 @@ const mapOrderError = (errorPayload, fallbackMessage) => {
 
 const composeAddress = (street, district, fallback) => {
   return [street, district].filter(Boolean).join(', ').trim() || fallback || '';
+};
+
+const getDeliveryOption = (deliveryMethod) => DELIVERY_OPTIONS.find((option) => option.id === deliveryMethod) || DELIVERY_OPTIONS[0];
+
+const getAvailablePaymentOptions = (deliveryMethod) => {
+  const allowed = PAYMENT_COMPATIBILITY[deliveryMethod] || PAYMENT_COMPATIBILITY.nova_poshta;
+  return PAYMENT_OPTIONS.filter((option) => allowed.includes(option.id));
 };
 
 const parsePhoton = (data) => {
@@ -171,8 +246,11 @@ export default function Checkout() {
 
   const getInputClass = (field) => `form-input ${fieldErrors[field] ? 'form-input-error' : ''}`;
   const orderSubtotal = getTotal();
+  const selectedDelivery = getDeliveryOption(formData.delivery_method);
+  const allowedPayments = getAvailablePaymentOptions(formData.delivery_method);
+  const estimatedDeliveryCost = orderSubtotal >= selectedDelivery.freeFrom ? 0 : selectedDelivery.baseCost;
   const promoDiscountPreview = promoValidation?.valid ? Number(promoValidation.discount || 0) : 0;
-  const estimatedTotal = Math.max(orderSubtotal - promoDiscountPreview, 0);
+  const estimatedTotal = Math.max(orderSubtotal + estimatedDeliveryCost - promoDiscountPreview, 0);
 
   useEffect(() => {
     localStorage.setItem(GUEST_CHECKOUT_KEY, JSON.stringify(formData));
@@ -189,7 +267,23 @@ export default function Checkout() {
   }, [user]);
 
   const updateField = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value };
+
+      if (field === 'delivery_method') {
+        const allowed = PAYMENT_COMPATIBILITY[value] || PAYMENT_COMPATIBILITY.nova_poshta;
+        if (!allowed.includes(next.payment_method)) {
+          next.payment_method = allowed[0];
+        }
+
+        if (value === 'pickup') {
+          next.delivery_city = PICKUP_CITY;
+          next.delivery_address = PICKUP_ADDRESS;
+        }
+      }
+
+      return next;
+    });
     if (field === 'promo_code') {
       setPromoValidation(null);
     }
@@ -308,6 +402,11 @@ export default function Checkout() {
       })),
     };
 
+    if (payload.delivery_method === 'pickup') {
+      payload.delivery_city = PICKUP_CITY;
+      payload.delivery_address = payload.delivery_address || PICKUP_ADDRESS;
+    }
+
     const parsed = checkoutSchema.safeParse(payload);
     if (!parsed.success) {
       setFieldErrors(mapZodErrors(parsed.error));
@@ -404,13 +503,85 @@ export default function Checkout() {
               {fieldErrors.contact_email ? <p className="form-error-text">{fieldErrors.contact_email}</p> : null}
             </label>
             <label className="block">
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Спосіб доставки<span className="required-mark">*</span></span>
+              <div className="grid gap-3">
+                {DELIVERY_OPTIONS.map((option) => {
+                  const active = formData.delivery_method === option.id;
+                  const freeDeliveryReached = option.freeFrom > 0 && orderSubtotal >= option.freeFrom;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => updateField('delivery_method', option.id)}
+                      className={`rounded-2xl border px-4 py-4 text-left transition ${
+                        active
+                          ? 'border-amber-300 bg-amber-50 dark:border-amber-400/40 dark:bg-amber-400/10'
+                          : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950/30 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span className="text-sm font-semibold text-slate-900 dark:text-white">{option.label}</span>
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                          {freeDeliveryReached ? 'Безкоштовно' : formatPrice(option.baseCost)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{option.description}</p>
+                      {option.freeFrom > 0 ? (
+                        <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+                          Безкоштовно від {formatPrice(option.freeFrom)}
+                        </p>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {fieldErrors.delivery_method ? <p className="form-error-text">{fieldErrors.delivery_method}</p> : null}
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Спосіб оплати<span className="required-mark">*</span></span>
+              <div className="grid gap-3">
+                {allowedPayments.map((option) => {
+                  const active = formData.payment_method === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => updateField('payment_method', option.id)}
+                      className={`rounded-2xl border px-4 py-4 text-left transition ${
+                        active
+                          ? 'border-amber-300 bg-amber-50 dark:border-amber-400/40 dark:bg-amber-400/10'
+                          : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950/30 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">{option.label}</p>
+                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{option.description}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              {fieldErrors.payment_method ? <p className="form-error-text">{fieldErrors.payment_method}</p> : null}
+            </label>
+            <label className="block">
               <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Місто<span className="required-mark">*</span></span>
-              <input value={formData.delivery_city} onChange={(e) => updateField('delivery_city', e.target.value)} className={getInputClass('delivery_city')} required />
+              <input
+                value={formData.delivery_city}
+                onChange={(e) => updateField('delivery_city', e.target.value)}
+                className={getInputClass('delivery_city')}
+                required
+                disabled={formData.delivery_method === 'pickup'}
+              />
               {fieldErrors.delivery_city ? <p className="form-error-text">{fieldErrors.delivery_city}</p> : null}
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Адреса<span className="required-mark">*</span></span>
-              <input value={formData.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} className={getInputClass('delivery_address')} required />
+              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">{selectedDelivery.addressLabel}<span className="required-mark">*</span></span>
+              <input
+                value={formData.delivery_address}
+                onChange={(e) => updateField('delivery_address', e.target.value)}
+                className={getInputClass('delivery_address')}
+                required
+                disabled={formData.delivery_method === 'pickup'}
+                placeholder={formData.delivery_method === 'pickup' ? PICKUP_ADDRESS : ''}
+              />
               {fieldErrors.delivery_address ? <p className="form-error-text">{fieldErrors.delivery_address}</p> : null}
             </label>
             <label className="block md:col-span-2">
@@ -498,6 +669,12 @@ export default function Checkout() {
 
           <div className="mt-6 rounded-[1.75rem] bg-slate-950 p-5 text-white dark:bg-amber-400 dark:text-slate-950">
             <p className="text-xs uppercase tracking-[0.2em] text-white/70 dark:text-slate-800/70">Разом</p>
+            <p className="mt-1 text-sm text-white/70 dark:text-slate-800/70">
+              Товари: {formatPrice(orderSubtotal)}
+            </p>
+            <p className="mt-1 text-sm text-white/70 dark:text-slate-800/70">
+              Доставка: {estimatedDeliveryCost > 0 ? formatPrice(estimatedDeliveryCost) : 'Безкоштовно'}
+            </p>
             {promoDiscountPreview > 0 ? (
               <p className="mt-1 text-sm text-emerald-200 dark:text-emerald-900">Знижка: -{formatPrice(promoDiscountPreview)}</p>
             ) : null}

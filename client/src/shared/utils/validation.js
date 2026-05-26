@@ -38,10 +38,22 @@ export const checkoutSchema = z.object({
   delivery_city: z.string().trim().min(1, 'Вкажіть місто доставки'),
   delivery_address: z.string().trim().min(1, 'Вкажіть адресу доставки'),
   delivery_method: z.enum(['nova_poshta', 'ukrposhta', 'courier', 'pickup']),
-  payment_method: z.enum(['card', 'cash', 'bank_transfer']),
+  payment_method: z.enum(['card', 'card_online', 'cash', 'bank_transfer']),
   promo_code: z.string().trim().max(50, 'Промокод занадто довгий').optional().or(z.literal('')).refine((value) => !value || /^[A-Za-z0-9_-]+$/.test(value), {
     message: 'Промокод може містити лише літери, цифри, дефіс або підкреслення',
   }),
+}).superRefine((data, ctx) => {
+  if (data.delivery_method === 'pickup') {
+    return;
+  }
+
+  if (data.delivery_method === 'ukrposhta' && data.payment_method === 'cash') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['payment_method'],
+      message: 'Післяплата недоступна для Укрпошти у цій конфігурації',
+    });
+  }
 });
 
 export const productFilterSchema = z.object({

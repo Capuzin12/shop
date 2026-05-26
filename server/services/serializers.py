@@ -85,8 +85,10 @@ def serialize_order_summary(order: Order):
         "discount": order.discount,
         "total": order.total,
         "delivery_method": order.delivery_method.value if hasattr(order.delivery_method, "value") else order.delivery_method,
+        "tracking_number": order.tracking_number,
         "payment_method": order.payment_method.value if hasattr(order.payment_method, "value") else order.payment_method,
         "payment_status": order.payment_status.value if hasattr(order.payment_status, "value") else order.payment_status,
+        "comment": order.comment,
         "created_at": order.created_at.isoformat() if order.created_at else None,
         "updated_at": order.updated_at.isoformat() if order.updated_at else None,
         "items": [

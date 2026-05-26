@@ -5,8 +5,8 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from main import create_order, validate_promo_code
-from models import Base, Category, DiscountType, Inventory, Order, Product, PromoCode, User, UserRole
+from models import Base, Category, DeliveryMethod, DiscountType, Inventory, Order, PaymentStatus, Product, PromoCode, User, UserRole
+from services.orders import create_order, validate_promo_code
 
 
 @pytest.fixture()
@@ -114,8 +114,9 @@ def test_create_order_applies_promo_discount_and_increments_usage(db_session):
     result = create_order(payload, db_session, user)
 
     assert result["subtotal"] == pytest.approx(240.0)  # nosec B101
+    assert result["delivery_cost"] == pytest.approx(90.0)  # nosec B101
     assert result["discount"] == pytest.approx(24.0)  # nosec B101
-    assert result["total"] == pytest.approx(216.0)  # nosec B101
+    assert result["total"] == pytest.approx(306.0)  # nosec B101
 
     order = db_session.scalar(select(Order).where(Order.id == result["id"]))
     assert order is not None  # nosec B101
@@ -153,4 +154,77 @@ def test_create_order_rejects_invalid_promo_and_does_not_increment_usage(db_sess
 
     orders = db_session.scalars(select(Order)).all()
     assert len(orders) == 0  # nosec B101
+
+
+def test_create_order_pickup_autofills_location_and_keeps_delivery_free(db_session):
+    user = seed_customer(db_session)
+    product = seed_product_with_inventory(db_session, price=150.0)
+
+    payload = {
+        "contact_name": "Покупець",
+        "contact_phone": "+380501112233",
+        "contact_email": "customer@example.com",
+        "delivery_city": "",
+        "delivery_address": "",
+        "delivery_method": "pickup",
+        "payment_method": "cash",
+        "items": [{"product_id": product.id, "quantity": 2}],
+    }
+
+    result = create_order(payload, db_session, user)
+
+    assert result["subtotal"] == pytest.approx(300.0)  # nosec B101
+    assert result["delivery_cost"] == pytest.approx(0.0)  # nosec B101
+    assert result["total"] == pytest.approx(300.0)  # nosec B101
+
+    order = db_session.scalar(select(Order).where(Order.id == result["id"]))
+    assert order is not None  # nosec B101
+    assert order.delivery_method == DeliveryMethod.pickup  # nosec B101
+    assert order.delivery_city == "Київ"  # nosec B101
+    assert "Самовивіз: головний склад BuildShop" in order.delivery_address  # nosec B101
+    assert order.payment_status == PaymentStatus.pending  # nosec B101
+
+
+def test_create_order_rejects_cash_for_ukrposhta(db_session):
+    user = seed_customer(db_session)
+    product = seed_product_with_inventory(db_session, price=200.0)
+
+    payload = {
+        "contact_name": "Покупець",
+        "contact_phone": "+380501112233",
+        "contact_email": "customer@example.com",
+        "delivery_city": "Львів",
+        "delivery_address": "Відділення №5",
+        "delivery_method": "ukrposhta",
+        "payment_method": "cash",
+        "items": [{"product_id": product.id, "quantity": 1}],
+    }
+
+    with pytest.raises(HTTPException) as exc:
+        create_order(payload, db_session, user)
+
+    assert exc.value.status_code == 400  # nosec B101
+    assert exc.value.detail["code"] == "PAYMENT_DELIVERY_COMBINATION_NOT_ALLOWED"  # nosec B101
+
+
+def test_create_order_applies_delivery_cost_for_nova_poshta_below_free_threshold(db_session):
+    user = seed_customer(db_session)
+    product = seed_product_with_inventory(db_session, price=350.0)
+
+    payload = {
+        "contact_name": "Покупець",
+        "contact_phone": "+380501112233",
+        "contact_email": "customer@example.com",
+        "delivery_city": "Одеса",
+        "delivery_address": "Поштомат 12",
+        "delivery_method": "nova_poshta",
+        "payment_method": "card_online",
+        "items": [{"product_id": product.id, "quantity": 2}],
+    }
+
+    result = create_order(payload, db_session, user)
+
+    assert result["subtotal"] == pytest.approx(700.0)  # nosec B101
+    assert result["delivery_cost"] == pytest.approx(90.0)  # nosec B101
+    assert result["total"] == pytest.approx(790.0)  # nosec B101
 

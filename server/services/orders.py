@@ -23,6 +23,7 @@ from models import (
     Product,
     User,
     UserRole,
+    PaymentStatus,
 )
 from services.helpers import normalize_order_items_payload, parse_positive_quantity
 from services.inventory import create_low_stock_notifications
@@ -30,6 +31,44 @@ from services.pricing import resolve_effective_product_price
 from services.serializers import serialize_promo_code
 
 logger = get_logger(__name__)
+
+DELIVERY_RULES = {
+    DeliveryMethod.nova_poshta: {
+        "base_cost": 90.0,
+        "free_from": 4000.0,
+        "address_label": "Відділення або поштомат",
+        "city_required": True,
+        "address_required": True,
+        "allowed_payments": {PaymentMethod.card, PaymentMethod.card_online, PaymentMethod.cash, PaymentMethod.bank_transfer},
+    },
+    DeliveryMethod.ukrposhta: {
+        "base_cost": 60.0,
+        "free_from": 3000.0,
+        "address_label": "Відділення Укрпошти",
+        "city_required": True,
+        "address_required": True,
+        "allowed_payments": {PaymentMethod.card, PaymentMethod.card_online, PaymentMethod.bank_transfer},
+    },
+    DeliveryMethod.courier: {
+        "base_cost": 250.0,
+        "free_from": 6000.0,
+        "address_label": "Повна адреса доставки",
+        "city_required": True,
+        "address_required": True,
+        "allowed_payments": {PaymentMethod.card, PaymentMethod.card_online, PaymentMethod.cash, PaymentMethod.bank_transfer},
+    },
+    DeliveryMethod.pickup: {
+        "base_cost": 0.0,
+        "free_from": 0.0,
+        "address_label": "Точка самовивозу",
+        "city_required": False,
+        "address_required": False,
+        "allowed_payments": {PaymentMethod.card, PaymentMethod.card_online, PaymentMethod.cash},
+    },
+}
+
+PICKUP_LOCATION_CITY = "Київ"
+PICKUP_LOCATION_ADDRESS = "Самовивіз: головний склад BuildShop, вул. Промислова, 12"
 
 
 def _find_promo_code_by_code(db: Session, code: str | None) -> PromoCode | None:
@@ -143,13 +182,6 @@ def create_order(order_data: dict, db: Session, current_user: User):
     if contact_email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", contact_email):
         raise HTTPException(status_code=400, detail={"code": "INVALID_CONTACT_EMAIL", "field": "contact_email", "message": "Email має некоректний формат"})
 
-    delivery_city = _clean_text(order_data.get("delivery_city"), 100)
-    delivery_address = _clean_text(order_data.get("delivery_address"), 500)
-    if not delivery_city:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_DELIVERY_CITY", "field": "delivery_city", "message": "Вкажіть місто доставки"})
-    if not delivery_address:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_DELIVERY_ADDRESS", "field": "delivery_address", "message": "Вкажіть адресу доставки"})
-
     delivery_method_input = order_data.get("delivery_method") or DeliveryMethod.nova_poshta
     payment_method_input = order_data.get("payment_method") or PaymentMethod.card
     try:
@@ -161,7 +193,36 @@ def create_order(order_data: dict, db: Session, current_user: User):
     except ValueError:
         raise HTTPException(status_code=400, detail={"code": "INVALID_PAYMENT_METHOD", "field": "payment_method", "message": "Некоректний спосіб оплати"})
 
-    delivery_cost = _parse_non_negative("delivery_cost", order_data.get("delivery_cost"), 0.0)
+    delivery_rule = DELIVERY_RULES[delivery_method]
+    if payment_method not in delivery_rule["allowed_payments"]:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "PAYMENT_DELIVERY_COMBINATION_NOT_ALLOWED",
+                "field": "payment_method",
+                "message": "Обраний спосіб оплати недоступний для цього способу доставки",
+            },
+        )
+
+    delivery_city = _clean_text(order_data.get("delivery_city"), 100)
+    delivery_address = _clean_text(order_data.get("delivery_address"), 500)
+
+    if delivery_method == DeliveryMethod.pickup:
+        delivery_city = delivery_city or PICKUP_LOCATION_CITY
+        delivery_address = delivery_address or PICKUP_LOCATION_ADDRESS
+    else:
+        if delivery_rule["city_required"] and not delivery_city:
+            raise HTTPException(status_code=400, detail={"code": "INVALID_DELIVERY_CITY", "field": "delivery_city", "message": "Вкажіть місто доставки"})
+        if delivery_rule["address_required"] and not delivery_address:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "INVALID_DELIVERY_ADDRESS",
+                    "field": "delivery_address",
+                    "message": f"Вкажіть: {delivery_rule['address_label'].lower()}",
+                },
+            )
+
     comment = _clean_text(order_data.get("comment"), 1000)
     promo_code_text = str(order_data.get("promo_code") or "").strip()
 
@@ -173,9 +234,10 @@ def create_order(order_data: dict, db: Session, current_user: User):
         "delivery_address": delivery_address,
         "delivery_method": delivery_method,
         "payment_method": payment_method,
-        "delivery_cost": delivery_cost,
+        "delivery_cost": 0.0,
         "discount": 0.0,
         "comment": comment,
+        "payment_status": PaymentStatus.pending,
     }
     if order_data.get("address_id"):
         filtered_data["address_id"] = order_data.get("address_id")
@@ -242,7 +304,8 @@ def create_order(order_data: dict, db: Session, current_user: User):
             db.add(inventory)
             inventory_changes.append((product_id, quantity, quantity_before, quantity_after))
 
-        delivery_cost = float(order.delivery_cost or 0)
+        delivery_cost = 0.0 if subtotal >= float(delivery_rule["free_from"]) else float(delivery_rule["base_cost"])
+        order.delivery_cost = delivery_cost
         discount = 0.0
 
         promo = None
@@ -258,22 +321,31 @@ def create_order(order_data: dict, db: Session, current_user: User):
                     },
                 )
 
-        promo_is_valid, promo_message = promo.is_valid(subtotal)
-        if not promo_is_valid:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "code": "PROMO_INVALID",
-                    "field": "promo_code",
-                    "message": promo_message,
-                },
-            )
+            promo_is_valid, promo_message = promo.is_valid(subtotal)
+            if not promo_is_valid:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "PROMO_INVALID",
+                        "field": "promo_code",
+                        "message": promo_message,
+                    },
+                )
 
-        discount = round(float(promo.calculate_discount(subtotal)), 2)
-        order.promo_code_id = promo.id
+            discount = round(float(promo.calculate_discount(subtotal)), 2)
+            order.promo_code_id = promo.id
 
         if discount > subtotal + delivery_cost:
             discount = subtotal + delivery_cost
+        if delivery_method == DeliveryMethod.pickup and PICKUP_LOCATION_ADDRESS not in order.delivery_address:
+            order.delivery_address = PICKUP_LOCATION_ADDRESS
+            order.delivery_city = PICKUP_LOCATION_CITY
+
+        if delivery_method != DeliveryMethod.pickup and delivery_rule["address_label"]:
+            delivery_note = f"Доставка: {delivery_rule['address_label']}"
+            if delivery_note not in comment:
+                order.comment = f"{delivery_note}\n{comment}".strip()
+
         order.discount = discount
         order.subtotal = subtotal
         order.total = max(subtotal + delivery_cost - discount, 0)
