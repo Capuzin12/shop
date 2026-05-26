@@ -3,77 +3,78 @@ Configuration management for BuildShop API using Pydantic Settings
 """
 
 from typing import Optional, List
-from pydantic_settings import BaseSettings
-from pydantic import Field, validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator, ValidationInfo
 import re
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-    
+
+    model_config = SettingsConfigDict(
+        env_file='.env',
+        env_file_encoding='utf-8',
+        case_sensitive=False,
+        extra='ignore',
+    )
+
     # Core settings
-    debug: bool = Field(default=False, env='DEBUG')
-    environment: str = Field(default='development', env='ENVIRONMENT')
-    
+    debug: bool = Field(default=False, validation_alias='DEBUG')
+    environment: str = Field(default='development', validation_alias='ENVIRONMENT')
+
     # Database
-    database_url: str = Field(default='sqlite:///./app.db', env='DATABASE_URL')
-    
+    database_url: str = Field(default='sqlite:///./app.db', validation_alias='DATABASE_URL')
+
     # JWT/Auth
-    secret_key: str = Field(default='dev-only-secret-change-me', env='SECRET_KEY')
-    jwt_algorithm: str = Field(default='HS256', env='JWT_ALGORITHM')
-    jwt_access_ttl_min: int = Field(default=30, env='JWT_ACCESS_TTL_MIN')
-    jwt_refresh_ttl_min: int = Field(default=1440, env='JWT_REFRESH_TTL_MIN')  # 24 hours
-    auth_cookie_name: str = Field(default='access_token', env='AUTH_COOKIE_NAME')
-    auth_cookie_samesite: str = Field(default='lax', env='AUTH_COOKIE_SAMESITE')
-    auth_cookie_secure: bool = Field(default=True, env='AUTH_COOKIE_SECURE')  # HTTPS only
+    secret_key: str = Field(default='dev-only-secret-change-me', validation_alias='SECRET_KEY')
+    jwt_algorithm: str = Field(default='HS256', validation_alias='JWT_ALGORITHM')
+    jwt_access_ttl_min: int = Field(default=30, validation_alias='JWT_ACCESS_TTL_MIN')
+    jwt_refresh_ttl_min: int = Field(default=1440, validation_alias='JWT_REFRESH_TTL_MIN')  # 24 hours
+    auth_cookie_name: str = Field(default='access_token', validation_alias='AUTH_COOKIE_NAME')
+    auth_cookie_samesite: str = Field(default='lax', validation_alias='AUTH_COOKIE_SAMESITE')
+    auth_cookie_secure: bool = Field(default=True, validation_alias='AUTH_COOKIE_SECURE')  # HTTPS only
     # For RS* algorithms provide PEM keys as environment variables (raw PEM text)
-    jwt_private_key: Optional[str] = Field(default=None, env='JWT_PRIVATE_KEY')
-    jwt_public_key: Optional[str] = Field(default=None, env='JWT_PUBLIC_KEY')
+    jwt_private_key: Optional[str] = Field(default=None, validation_alias='JWT_PRIVATE_KEY')
+    jwt_public_key: Optional[str] = Field(default=None, validation_alias='JWT_PUBLIC_KEY')
 
     # CORS
     # Default includes localhost for dev, plus common deployment URLs
     # For production: set via CORS_ORIGINS env var (comma-separated)
     cors_origins: str = Field(
         default='http://localhost:5173,https://shop-eight-lac.vercel.app,https://buildshop.vercel.app',
-        env='CORS_ORIGINS'
+        validation_alias='CORS_ORIGINS',
     )
     # Optional: regex for dynamic origins (e.g., all Vercel preview URLs)
-    cors_origin_regex: Optional[str] = Field(default=r'^https://.*\.vercel\.app$', env='CORS_ORIGIN_REGEX')
-    
-     # API Server
-    api_host: str = Field(default='0.0.0.0', env='API_HOST')  #nosec B104
-    api_port: int = Field(default=8001, env='API_PORT')
-    
-    # Rate limiting
-    rate_limit_enabled: bool = Field(default=True, env='RATE_LIMIT_ENABLED')
-    rate_limit_requests_per_minute: int = Field(default=100, env='RATE_LIMIT_REQUESTS_PER_MINUTE')
-    rate_limit_login_per_minute: int = Field(default=5, env='RATE_LIMIT_LOGIN_PER_MINUTE')
-    rate_limit_api_per_minute: int = Field(default=100, env='RATE_LIMIT_API_PER_MINUTE')
-    
-    # Security
-    max_login_attempts: int = Field(default=5, env='MAX_LOGIN_ATTEMPTS')
-    login_attempt_window_minutes: int = Field(default=15, env='LOGIN_ATTEMPT_WINDOW_MINUTES')
-    min_password_length: int = Field(default=12, env='MIN_PASSWORD_LENGTH')
-    require_special_char_in_password: bool = Field(default=True, env='REQUIRE_SPECIAL_CHAR')
-    session_timeout_minutes: int = Field(default=30, env='SESSION_TIMEOUT_MINUTES')
-    
-    # External integrations
-    frontend_url: str = Field(default='http://localhost:5173', env='FRONTEND_URL')
-    resend_api_key: str = Field(default='', env='RESEND_API_KEY')
-    resend_from_email: str = Field(default='BuildShop <noreply@buildshop.ua>', env='RESEND_FROM_EMAIL')
-    password_reset_ttl_minutes: int = Field(default=30, env='PASSWORD_RESET_TTL_MINUTES')
-    report_font_path: str = Field(default='', env='REPORT_FONT_PATH')
+    cors_origin_regex: Optional[str] = Field(default=r'^https://.*\.vercel\.app$', validation_alias='CORS_ORIGIN_REGEX')
 
-    class Config:
-        env_file = '.env'
-        env_file_encoding = 'utf-8'
-        case_sensitive = False
-        extra = 'ignore'
-    
-    @validator('secret_key')
-    def validate_secret_key(cls, v, values):
+     # API Server
+    api_host: str = Field(default='0.0.0.0', validation_alias='API_HOST')  #nosec B104
+    api_port: int = Field(default=8001, validation_alias='API_PORT')
+
+    # Rate limiting
+    rate_limit_enabled: bool = Field(default=True, validation_alias='RATE_LIMIT_ENABLED')
+    rate_limit_requests_per_minute: int = Field(default=100, validation_alias='RATE_LIMIT_REQUESTS_PER_MINUTE')
+    rate_limit_login_per_minute: int = Field(default=5, validation_alias='RATE_LIMIT_LOGIN_PER_MINUTE')
+    rate_limit_api_per_minute: int = Field(default=100, validation_alias='RATE_LIMIT_API_PER_MINUTE')
+
+    # Security
+    max_login_attempts: int = Field(default=5, validation_alias='MAX_LOGIN_ATTEMPTS')
+    login_attempt_window_minutes: int = Field(default=15, validation_alias='LOGIN_ATTEMPT_WINDOW_MINUTES')
+    min_password_length: int = Field(default=12, validation_alias='MIN_PASSWORD_LENGTH')
+    require_special_char_in_password: bool = Field(default=True, validation_alias='REQUIRE_SPECIAL_CHAR')
+    session_timeout_minutes: int = Field(default=30, validation_alias='SESSION_TIMEOUT_MINUTES')
+
+    # External integrations
+    frontend_url: str = Field(default='http://localhost:5173', validation_alias='FRONTEND_URL')
+    resend_api_key: str = Field(default='', validation_alias='RESEND_API_KEY')
+    resend_from_email: str = Field(default='BuildShop <noreply@buildshop.ua>', validation_alias='RESEND_FROM_EMAIL')
+    password_reset_ttl_minutes: int = Field(default=30, validation_alias='PASSWORD_RESET_TTL_MINUTES')
+    report_font_path: str = Field(default='', validation_alias='REPORT_FONT_PATH')
+
+    @field_validator('secret_key')
+    def validate_secret_key(cls, v, info: ValidationInfo):
         """Ensure secret key is not the default dev key in production."""
-        env = values.get('environment', 'development')
+        env = info.data.get('environment', 'development') if info.data else 'development'
         if v == 'dev-only-secret-change-me':
             if env in ('production', 'prod', 'staging'):
                 raise ValueError(
@@ -86,7 +87,7 @@ class Settings(BaseSettings):
                 raise ValueError('SECRET_KEY must be at least 32 characters in production')
         return v
     
-    @validator('jwt_algorithm')
+    @field_validator('jwt_algorithm')
     def validate_jwt_algorithm(cls, v):
         """Ensure JWT algorithm is secure."""
         # HS256 is acceptable but RS256 is better for distributed systems
@@ -100,28 +101,30 @@ class Settings(BaseSettings):
             pass
         return v
 
-    @validator('auth_cookie_samesite')
-    def validate_auth_cookie_samesite(cls, v, values):
+    @field_validator('auth_cookie_samesite')
+    def validate_auth_cookie_samesite(cls, v, info: ValidationInfo):
         allowed = {'lax', 'strict', 'none'}
         value = str(v or '').strip().lower()
-        if values.get('environment', 'development') in ('production', 'prod') and value in ('', 'lax'):
+        env = info.data.get('environment', 'development') if info.data else 'development'
+        if env in ('production', 'prod') and value in ('', 'lax'):
             return 'none'
         if value not in allowed:
             raise ValueError(f'AUTH_COOKIE_SAMESITE must be one of {tuple(sorted(allowed))}')
         return value
     
-    @validator('database_url')
-    def validate_database_url(cls, v, values):
+    @field_validator('database_url')
+    def validate_database_url(cls, v, info: ValidationInfo):
         """Validate database URL format."""
         if not v or len(v) < 10:
             raise ValueError('DATABASE_URL is invalid or missing')
         # Warn if SQLite in production (should use PostgreSQL)
-        if v.startswith('sqlite') and values.get('environment', 'development') in ('production', 'prod'):
+        env = info.data.get('environment', 'development') if info.data else 'development'
+        if v.startswith('sqlite') and env in ('production', 'prod'):
             import warnings
             warnings.warn('SQLite should not be used in production. Use PostgreSQL instead.')
         return v
 
-    @validator('cors_origin_regex')
+    @field_validator('cors_origin_regex')
     def validate_cors_origin_regex(cls, v):
         if v is None or not str(v).strip():
             return None
@@ -132,10 +135,11 @@ class Settings(BaseSettings):
             raise ValueError(f'CORS_ORIGIN_REGEX is not a valid regex: {e}') from e
         return s
     
-    @validator('auth_cookie_secure')
-    def validate_auth_cookie_secure(cls, v, values):
+    @field_validator('auth_cookie_secure')
+    def validate_auth_cookie_secure(cls, v, info: ValidationInfo):
         """Enforce secure cookies in production."""
-        if values.get('environment', 'development') in ('production', 'prod'):
+        env = info.data.get('environment', 'development') if info.data else 'development'
+        if env in ('production', 'prod'):
             if not v:
                 raise ValueError('AUTH_COOKIE_SECURE must be True in production')
         return v
@@ -143,6 +147,16 @@ class Settings(BaseSettings):
     def get_cors_origins(self) -> List[str]:
         """Parse and normalize CORS origins from env (trim, add protocol if needed, drop trailing slash, dedupe)."""
         normalized: list[str] = []
+
+        # Always allow the configured frontend origin as a safety net for deployments
+        # (e.g. Render env vars can be incomplete or accidentally overwritten).
+        frontend_origin = str(self.frontend_url or '').strip()
+        if frontend_origin:
+            if not frontend_origin.startswith('http://') and not frontend_origin.startswith('https://'):
+                frontend_origin = f'https://{frontend_origin}'
+            frontend_origin = frontend_origin.rstrip('/')
+            normalized.append(frontend_origin)
+
         for origin in self.cors_origins.split(','):
             value = origin.strip()
             if not value:
