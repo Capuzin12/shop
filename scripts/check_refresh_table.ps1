@@ -7,6 +7,9 @@ if (-not $PgConn) {
   exit 1
 }
 
+# psql expects a libpq-style URL, not SQLAlchemy dialect suffix
+$PgConnForPsql = $PgConn -replace '^postgresql\+psycopg://', 'postgresql://'
+
 Write-Host "Checking refresh_tokens table..."
-& psql $PgConn -c "SELECT to_regclass('public.refresh_tokens') as exists, (SELECT COUNT(*) FROM public.refresh_tokens) as rows;"
+& psql $PgConnForPsql -c "SELECT to_regclass('public.refresh_tokens') as exists, (SELECT COUNT(*) FROM public.refresh_tokens) as rows;"
 

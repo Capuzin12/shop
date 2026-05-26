@@ -93,9 +93,9 @@ CREATE TRIGGER trg_users_default_customer_group
 CREATE TABLE public.refresh_tokens (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  token_hash VARCHAR(128) NOT NULL UNIQUE,
-  issued_at TIMESTAMP DEFAULT now() NOT NULL,
-  expires_at TIMESTAMP NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  issued_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
   revoked BOOLEAN DEFAULT FALSE NOT NULL,
   replaced_by INTEGER REFERENCES public.refresh_tokens(id),
   device_info TEXT,
