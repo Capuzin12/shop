@@ -27,6 +27,14 @@ from services.pricing import get_presentational_old_price, resolve_effective_pro
 logger = get_logger(__name__)
 
 
+def _get_primary_product_image_url(product: Product):
+    images = sorted((getattr(product, "images", None) or []), key=lambda i: ((i.is_main is not False and i.is_main) is False, (i.sort_order or 0), (i.id or 0)))
+    for image in images:
+        if getattr(image, "url", None):
+            return image.url
+    return None
+
+
 def serialize_model(obj, seen=None):
     if seen is None:
         seen = set()
@@ -125,17 +133,14 @@ def serialize_customer_group(group: CustomerGroup):
 
 def serialize_cart_product(db: Session, product: Product, customer_group_id: int | None, cart_quantity: int, stock_quantity: int) -> dict:
     pricing = resolve_effective_product_price(db, product, customer_group_id, cart_quantity)
-    return {
-        "id": product.id,
-        "name": product.name,
+    result = serialize_product_summary(product)
+    result.update({
         "price": pricing["effective_price"],
         "old_price": get_presentational_old_price(pricing),
-        "sku": product.sku,
-        "slug": product.slug,
-        "description": product.description,
         "quantity": stock_quantity,
         "in_stock": stock_quantity > 0,
-    }
+    })
+    return result
 
 
 def serialize_category(category: Category):
@@ -217,6 +222,7 @@ def serialize_product_summary(product: Product):
         "brand_id": product.brand_id,
         "category_name": product.category.name if getattr(product, "category", None) else None,
         "brand_name": product.brand.name if getattr(product, "brand", None) else None,
+        "image_url": _get_primary_product_image_url(product),
         "created_at": product.created_at.isoformat() if product.created_at else None,
         "updated_at": product.updated_at.isoformat() if product.updated_at else None,
     }

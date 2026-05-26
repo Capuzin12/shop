@@ -10,6 +10,13 @@ const GUEST_CHECKOUT_KEY = 'buildshop-checkout-draft';
 
 import { formatPrice } from '../../../shared/utils/format';
 
+const getImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('/')) return url;
+  return `/${url}`;
+};
+
 const readDraft = () => {
   try {
     const raw = localStorage.getItem(GUEST_CHECKOUT_KEY);
@@ -460,21 +467,28 @@ export default function Checkout() {
               const isOutOfStock = typeof available === 'number' && available >= 0 && available < item.quantity;
               return (
                 <div key={item.id} className={`flex items-center justify-between rounded-2xl border px-4 py-3 dark:border-white/10 dark:bg-white/5 ${isOutOfStock ? 'border-rose-300 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10' : 'border-slate-200 bg-slate-50'}`}>
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-white">{item.name}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {item.quantity} x {formatPrice(item.price)}
-                      {typeof available === 'number' && available > 0 && available < item.quantity && (
-                        <span className="ml-2 text-rose-500"> (в наявності: {available})</span>
-                      )}
-                      {available === 0 && (
-                        <span className="ml-2 text-rose-500"> (немає в наявності)</span>
-                      )}
-                      {available === null && (
-                        <span className="ml-2 text-slate-400"> (склад оновлюється)</span>
-                      )}
-                    </p>
-                    {item.description ? <p className="mt-1 max-w-[360px] text-xs text-slate-400 dark:text-slate-500">{item.description}</p> : null}
+                  <div className="flex items-center gap-3">
+                    {item.image_url ? (
+                      <div className="h-14 w-14 flex-none overflow-hidden rounded-2xl bg-white dark:bg-slate-950/50">
+                        <img src={getImageUrl(item.image_url)} alt={item.name || 'Товар'} className="h-full w-full object-cover" loading="lazy" />
+                      </div>
+                    ) : null}
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-white">{item.name}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        {item.quantity} x {formatPrice(item.price)}
+                        {typeof available === 'number' && available > 0 && available < item.quantity && (
+                          <span className="ml-2 text-rose-500"> (в наявності: {available})</span>
+                        )}
+                        {available === 0 && (
+                          <span className="ml-2 text-rose-500"> (немає в наявності)</span>
+                        )}
+                        {available === null && (
+                          <span className="ml-2 text-slate-400"> (склад оновлюється)</span>
+                        )}
+                      </p>
+                      {item.description ? <p className="mt-1 max-w-[360px] text-xs text-slate-400 dark:text-slate-500">{item.description}</p> : null}
+                    </div>
                   </div>
                   <p className="font-bold text-amber-600 dark:text-amber-300">{formatPrice(item.price * item.quantity)}</p>
                 </div>

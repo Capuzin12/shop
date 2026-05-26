@@ -4,6 +4,13 @@ import { useMemo } from 'react';
 import { useCart } from '../context/CartContext';
 import { formatPrice } from '../../../shared/utils/format';
 
+const getImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('/')) return url;
+  return `/${url}`;
+};
+
 const getStockQuantity = (item) => {
   if (typeof item?.stock_quantity === 'number') return item.stock_quantity;
   if (typeof item?.in_stock === 'boolean') return item.in_stock ? item.quantity || 0 : 0;
@@ -70,14 +77,26 @@ export default function Cart() {
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {cart.map((item) => (
           <div key={item.id} className="group rounded-[2rem] border border-white/50 bg-white/80 p-5 shadow-lg shadow-amber-100/30 transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none">
-            <div className="mb-5 rounded-[1.5rem] bg-[linear-gradient(135deg,#ffe9d2,_#fff7ef)] p-6 dark:bg-[linear-gradient(135deg,#2b231d,_#18181f)]">
-              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
-                <span>{item.sku || 'BuildShop'}</span>
-                <span className="rounded-full bg-white/80 px-3 py-1 text-amber-700 dark:bg-white/10 dark:text-amber-300">У кошику</span>
+            <div className="mb-5 overflow-hidden rounded-[1.5rem] bg-[linear-gradient(135deg,#ffe9d2,_#fff7ef)] dark:bg-[linear-gradient(135deg,#2b231d,_#18181f)]">
+              {item.image_url ? (
+                <div className="relative aspect-[4/3] w-full overflow-hidden bg-white/40 dark:bg-slate-950/40">
+                  <img
+                    src={getImageUrl(item.image_url)}
+                    alt={item.name || 'Товар'}
+                    className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                </div>
+              ) : null}
+              <div className="p-6">
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
+                  <span>{item.sku || 'BuildShop'}</span>
+                  <span className="rounded-full bg-white/80 px-3 py-1 text-amber-700 dark:bg-white/10 dark:text-amber-300">У кошику</span>
+                </div>
+                <h2 className="mt-6 min-h-[72px] text-2xl font-bold text-slate-900 dark:text-white">
+                  {item.name || 'Товар'}
+                </h2>
               </div>
-              <h2 className="mt-8 min-h-[72px] text-2xl font-bold text-slate-900 dark:text-white">
-                {item.name || 'Товар'}
-              </h2>
             </div>
 
             <div className="space-y-4">

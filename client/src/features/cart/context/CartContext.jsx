@@ -53,6 +53,7 @@ const normalizeServerCart = (serverCart) => {
     old_price: item.product?.old_price || null,
     stock_quantity: item.product?.quantity ?? item.product?.stock_quantity ?? 0,
     in_stock: item.product?.in_stock ?? (item.product?.quantity ?? 0) > 0,
+    image_url: item.product?.image_url || null,
   }));
 };
 
@@ -69,6 +70,7 @@ const normalizeProductForCart = (product) => {
     old_price: product.old_price || null,
     stock_quantity: stockQuantity,
     in_stock: product.in_stock ?? stockQuantity > 0,
+    image_url: product.image_url ?? product?.images?.find?.((image) => image?.is_main)?.url ?? product?.images?.[0]?.url ?? null,
   };
 };
 
@@ -180,6 +182,7 @@ export const CartProvider = ({ children }) => {
             old_price: normalizedProduct.old_price,
             quantity: normalizedProduct.stock_quantity,
             in_stock: normalizedProduct.in_stock,
+            image_url: normalizedProduct.image_url,
           },
         };
         const nextServer = {
@@ -324,6 +327,7 @@ export const CartProvider = ({ children }) => {
         quantity: safeQuantity,
         stock_quantity,
         in_stock: product.in_stock ?? stock_quantity > 0,
+        image_url: product.image_url ?? product?.images?.find?.((image) => image?.is_main)?.url ?? product?.images?.[0]?.url ?? null,
       }];
     });
   };

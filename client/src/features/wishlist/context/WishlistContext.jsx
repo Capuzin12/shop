@@ -30,6 +30,7 @@ const normalizeGuestItem = (product) => ({
     sku: product.sku ?? '',
     slug: product.slug ?? '',
     badge: product.badge ?? null,
+    image_url: product.image_url ?? product?.images?.find?.((image) => image?.is_main)?.url ?? product?.images?.[0]?.url ?? null,
   },
   added_at: new Date().toISOString(),
 });
@@ -44,6 +45,7 @@ const normalizeWishlistItem = (product) => ({
     sku: product.sku ?? '',
     slug: product.slug ?? '',
     badge: product.badge ?? null,
+    image_url: product.image_url ?? product?.images?.find?.((image) => image?.is_main)?.url ?? product?.images?.[0]?.url ?? null,
   },
   added_at: new Date().toISOString(),
 });

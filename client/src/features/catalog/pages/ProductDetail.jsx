@@ -57,7 +57,7 @@ const ProductImageDisplay = ({ images, product }) => {
   const hasImages = validImages.length > 0 && !imageError;
   const currentImage = validImages[currentImageIndex] || validImages[0];
   const currentImageUrl = currentImage?.resolvedUrl || null;
-  const zoomActive = zoomEnabled || isHovering;
+  const zoomActive = zoomEnabled && isHovering;
 
   const goToImage = (index) => {
     if (!validImages.length) return;
@@ -174,7 +174,10 @@ const ProductImageDisplay = ({ images, product }) => {
             ) : null}
 
             <button
-              onClick={() => setZoomEnabled((value) => !value)}
+              onClick={() => {
+                setZoomEnabled((value) => !value);
+                setZoomPoint({ x: 50, y: 50 });
+              }}
               className={`inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold shadow-lg shadow-black/10 transition ${
                 zoomEnabled
                   ? 'bg-amber-400 text-slate-950 hover:bg-amber-300'
@@ -239,7 +242,7 @@ export default function ProductDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const { addToCart } = useCart();
-  const { isWishlisted, toggleWishlist } = useWishlist();
+  const { isWishlisted, toggleWishlist, refreshWishlist } = useWishlist();
   const [product, setProduct] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [reviewsMeta, setReviewsMeta] = useState({ total: 0, avg_rating: null, can_review: false, review_requirement: '' });
@@ -342,7 +345,17 @@ export default function ProductDetail() {
             </div>
             <button
               onClick={async () => {
+                // Toggle wishlist item and ensure provider state is refreshed so
+                // other pages (наприклад, сторінка `Wishlist`) update immediately.
                 const nextState = await toggleWishlist(product);
+                try {
+                  // toggleWishlist normally refreshes for logged users, but call
+                  // refreshWishlist explicitly to cover race-cases and guests.
+                  await refreshWishlist();
+                } catch (e) {
+                  // ignore refresh errors — toggle already updated optimistic state
+                  // and we still show a message to the user
+                }
                 setWishlistMessage(nextState ? 'Товар додано до вподобайок' : 'Товар прибрано з вподобайок');
               }}
               className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl transition ${

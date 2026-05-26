@@ -1,5 +1,6 @@
 import { Heart, ShoppingCart } from 'lucide-react';
 import { useState } from 'react';
+import { useWishlist } from '../../wishlist/context/WishlistContext';
 import { Link } from 'react-router-dom';
 import { formatPrice } from '../../../shared/utils/format';
 
@@ -20,6 +21,7 @@ const getImageUrl = (url) => {
 
 export default function ProductCard({ product, viewConfig, liked, onToggleWishlist, onAddToCart }) {
   const [imageLoadError, setImageLoadError] = useState(false);
+  const { toggleWishlist: ctxToggleWishlist, refreshWishlist } = useWishlist();
   const stock = getStockCopy(product);
   const description = product.description || 'Короткий опис буде додано пізніше.';
   const imageUrl = getImageUrl(product.image_url);
@@ -70,7 +72,18 @@ export default function ProductCard({ product, viewConfig, liked, onToggleWishli
               </span>
             ) : null}
             <button
-              onClick={() => onToggleWishlist(product)}
+              onClick={async () => {
+                try {
+                  // Prefer prop handler if provided (keeps backward compatibility),
+                  // otherwise use context directly. After toggling call refresh to
+                  // ensure wishlist page and header counters update immediately.
+                  if (onToggleWishlist) await onToggleWishlist(product);
+                  else await ctxToggleWishlist(product);
+                  await refreshWishlist();
+                } catch {
+                  // ignore — optimistic UI already updated
+                }
+              }}
               className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl transition ${
                 liked
                   ? 'bg-rose-100 text-rose-500 dark:bg-rose-500/15 dark:text-rose-300'

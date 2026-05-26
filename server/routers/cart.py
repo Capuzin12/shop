@@ -1,10 +1,10 @@
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from models import Cart, CartItem, Product
+from models import Cart, CartItem, Product, User
 from routers.deps import get_current_active_user, get_db
 from services.helpers import _to_iso_or_none, parse_positive_quantity
 from services.serializers import _serialize_cart_item
@@ -14,23 +14,25 @@ router = APIRouter(tags=["cart"])
 
 
 def _get_or_create_cart_for_user(db: Session, user_id: int) -> Cart:
-    cart = db.scalar(
-        select(Cart).where(Cart.user_id == user_id).options(selectinload(Cart.items).selectinload(CartItem.product))
-    )
+    cart = cast(Cart | None, db.scalar(
+        select(Cart).where(Cart.user_id == user_id).options(selectinload(Cart.items).selectinload(CartItem.product).selectinload(Product.images))  # type: ignore[arg-type]
+    ))
     if cart:
         return cart
     cart = Cart(user_id=user_id)
     db.add(cart)
     db.commit()
-    return db.scalar(
-        select(Cart).where(Cart.id == cart.id).options(selectinload(Cart.items).selectinload(CartItem.product))
-    )
+    refreshed_cart = cast(Cart | None, db.scalar(
+        select(Cart).where(Cart.id == cart.id).options(selectinload(Cart.items).selectinload(CartItem.product).selectinload(Product.images))  # type: ignore[arg-type]
+    ))
+    assert refreshed_cart is not None
+    return refreshed_cart
 
 
 @router.get("/api/cart")
 def get_cart(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_active_user),
+    current_user: Annotated[User, Depends(get_current_active_user)],
 ):
     cart = _get_or_create_cart_for_user(db, current_user.id)
     return {
@@ -46,7 +48,7 @@ def get_cart(
 def create_cart_item(
     payload: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_active_user),
+    current_user: Annotated[User, Depends(get_current_active_user)],
 ):
     try:
         product_id = int((payload or {}).get("product_id", 0))
@@ -59,15 +61,15 @@ def create_cart_item(
     if not product:
         raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Товар не знайдено"})
     cart = _get_or_create_cart_for_user(db, current_user.id)
-    cart_item = db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == product_id))
-    if cart_item:
-        cart_item.quantity = min(cart_item.quantity + quantity, MAX_CART_ITEM_QUANTITY)
+    existing_cart_item = db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == product_id))
+    if existing_cart_item:
+        existing_cart_item.quantity = min(existing_cart_item.quantity + quantity, MAX_CART_ITEM_QUANTITY)
+        resolved_cart_item = existing_cart_item
     else:
-        cart_item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity)
-        db.add(cart_item)
+        resolved_cart_item = CartItem(cart_id=cart.id, product_id=product_id, quantity=quantity)
+        db.add(resolved_cart_item)
     db.commit()
-    cart_item = db.scalar(select(CartItem).where(CartItem.id == cart_item.id).options(selectinload(CartItem.product)))
-    return _serialize_cart_item(db, cart_item, current_user.customer_group_id)
+    return _serialize_cart_item(db, resolved_cart_item, current_user.customer_group_id)
 
 
 @router.put("/api/cart/items/{item_id}")
@@ -75,14 +77,14 @@ def update_cart_item(
     item_id: int,
     payload: dict,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_active_user),
+    current_user: Annotated[User, Depends(get_current_active_user)],
 ):
     quantity = parse_positive_quantity((payload or {}).get("quantity"), field="quantity")
     cart_item = db.scalar(
         select(CartItem)
         .join(Cart, Cart.id == CartItem.cart_id)
         .where(CartItem.id == item_id, Cart.user_id == current_user.id)
-        .options(selectinload(CartItem.product))
+        .options(selectinload(CartItem.product).selectinload(Product.images))  # type: ignore[arg-type]
     )
     if not cart_item:
         raise HTTPException(status_code=404, detail={"code": "CART_ITEM_NOT_FOUND", "message": "Позицію кошика не знайдено"})
@@ -95,7 +97,7 @@ def update_cart_item(
 def delete_cart_item(
     item_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated = Depends(get_current_active_user),
+    current_user: Annotated[User, Depends(get_current_active_user)],
 ):
     cart_item = db.scalar(select(CartItem).join(Cart, Cart.id == CartItem.cart_id).where(CartItem.id == item_id, Cart.user_id == current_user.id))
     if not cart_item:
