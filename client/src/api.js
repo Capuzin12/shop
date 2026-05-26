@@ -134,28 +134,30 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
 
-      // Attempt transparent token refresh using HttpOnly refresh cookie
-      try {
-        if (!refreshInProgress) {
-          refreshInProgress = api.post('/token/refresh').then((r) => {
-            const newToken = r?.data?.access_token;
-            if (newToken) setAuthToken(newToken);
-            return newToken;
-          }).catch(() => null).finally(() => { refreshInProgress = null; });
-        }
-        const newToken = await refreshInProgress;
-        if (newToken) {
-          // retry original request with new token
-          config.headers = config.headers || {};
-          config.headers.Authorization = `Bearer ${newToken}`;
-          return api(config);
-        }
-      } catch (e) {
-        // refresh failed
-      }
+       // Attempt transparent token refresh using HttpOnly refresh cookie
+       try {
+         if (!refreshInProgress) {
+           refreshInProgress = api.post('/token/refresh').then((r) => {
+             const newToken = r?.data?.access_token;
+             if (newToken) setAuthToken(newToken);
+             return newToken;
+           }).catch(() => null).finally(() => { refreshInProgress = null; });
+         }
+         const newToken = await refreshInProgress;
+         if (newToken) {
+           // retry original request with new token
+           config.headers = config.headers || {};
+           config.headers.Authorization = `Bearer ${newToken}`;
+           return api(config);
+         }
+       } catch (_) {
+         // refresh failed, silently ignore
+       }
 
-      // fallback: force login
-      try { localStorage.removeItem('user'); } catch (_) {}
+       // fallback: force login
+       try { localStorage.removeItem('user'); } catch (_) {
+         // ignore any errors clearing user data
+       }
       clearAuthToken();
 
       if (window.location.pathname !== '/login') {

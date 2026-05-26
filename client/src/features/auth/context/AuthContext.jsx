@@ -54,13 +54,13 @@ export const AuthProvider = ({ children }) => {
           console.error('Error initializing auth:', error);
           clearAuth();
         }
-      } else {
-        // Try a silent refresh using HttpOnly refresh cookie; if it fails, remain logged out
-        try {
-          await refreshUser();
-        } catch (error) {
-          clearAuth();
-        }
+       } else {
+         // Try a silent refresh using HttpOnly refresh cookie; if it fails, remain logged out
+         try {
+           await refreshUser();
+         } catch (_) {
+           clearAuth();
+         }
       }
       setLoading(false);
     };
