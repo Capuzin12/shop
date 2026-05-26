@@ -4,8 +4,10 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from logging_config import get_logger
 from models import (
     Inventory,
     Product,
@@ -22,6 +24,7 @@ from services.search import search_products_response
 from services.serializers import serialize_product_detail, serialize_review
 
 router = APIRouter(tags=["products"])
+logger = get_logger(__name__)
 
 
 def _normalize_product_attributes_payload(payload: dict) -> list[dict] | None:
@@ -404,7 +407,11 @@ def update_product(
     old_price_value = float(db_product.price)
     new_price_value = float(normalized_product.get("price", old_price_value))
     if new_price_value != old_price_value:
-        db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": current_user.id})
+        if db.bind is not None and db.bind.dialect.name == "postgresql":
+            try:
+                db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": current_user.id})
+            except Exception as exc:
+                logger.warning("Could not set price history user context for product update: %s", exc)
     for key, value in normalized_product.items():
         setattr(db_product, key, value)
 
@@ -418,7 +425,30 @@ def update_product(
         for attribute in attributes_data:
             db.add(ProductAttribute(product_id=db_product.id, **attribute))
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        error_text = str(exc.orig).lower() if getattr(exc, "orig", None) else str(exc).lower()
+        if "products_slug_key" in error_text or "slug" in error_text and "unique" in error_text:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "SLUG_EXISTS", "field": "slug", "message": "Товар з таким slug вже існує"},
+            ) from exc
+        if "products_sku_key" in error_text or "sku" in error_text and "unique" in error_text:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "SKU_EXISTS", "field": "sku", "message": "Товар з таким SKU вже існує"},
+            ) from exc
+        if "foreign key" in error_text:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_PRODUCT_RELATION", "message": "Некоректна категорія або бренд для товару"},
+            ) from exc
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "PRODUCT_UPDATE_FAILED", "message": "Не вдалося зберегти товар через помилку даних"},
+        ) from exc
     updated = db.scalar(
         select(Product)
         .where(Product.id == db_product.id)
