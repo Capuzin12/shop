@@ -101,7 +101,14 @@ async def get_current_user(
     if not raw_token:
         raise credentials_exception
     try:
-        payload = jwt.decode(raw_token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+        algo = settings.jwt_algorithm or 'HS256'
+        if algo.startswith('RS'):
+            pub = settings.jwt_public_key
+            if not pub:
+                raise credentials_exception
+            payload = jwt.decode(raw_token, pub, algorithms=[algo])
+        else:
+            payload = jwt.decode(raw_token, settings.secret_key, algorithms=[algo])
         email: str = payload.get("sub")
         token_role: str | None = payload.get("role")
         if email is None:
@@ -125,7 +132,14 @@ async def get_optional_user(
     if not raw_token:
         return None
     try:
-        payload = jwt.decode(raw_token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+        algo = settings.jwt_algorithm or 'HS256'
+        if algo.startswith('RS'):
+            pub = settings.jwt_public_key
+            if not pub:
+                return None
+            payload = jwt.decode(raw_token, pub, algorithms=[algo])
+        else:
+            payload = jwt.decode(raw_token, settings.secret_key, algorithms=[algo])
     except JWTError:
         return None
     email: str | None = payload.get("sub")

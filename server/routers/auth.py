@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from logging_config import get_logger, set_user_id
-from models import User
+from models import User, RefreshToken
 from routers.deps import get_current_active_user, get_db
 from security import limiter
-from services.auth import authenticate_user, create_access_token
+from services.auth import authenticate_user, create_access_token, create_refresh_token, verify_refresh_token, revoke_refresh_token_by_raw, _hash_token, revoke_all_user_refresh_tokens
+from sqlalchemy import select
 from services.serializers import serialize_user_summary
 
 router = APIRouter(tags=["auth"])
@@ -43,23 +44,93 @@ async def login_for_access_token(
         data={"sub": user.email, "role": user.role.value if hasattr(user.role, "value") else str(user.role)},
         expires_delta=access_token_expires,
     )
+
+    # Create refresh token and store hash server-side; send raw refresh token in HttpOnly cookie
+    raw_refresh, rt_row = create_refresh_token(db, user, ip=request.client.host if request.client else None, device=request.headers.get("User-Agent"))
+    refresh_max_age = int(timedelta(minutes=settings.jwt_refresh_ttl_min).total_seconds())
     response.set_cookie(
         key=settings.auth_cookie_name,
-        value=access_token,
+        value=raw_refresh,
         httponly=True,
         secure=settings.auth_cookie_secure,
         samesite=settings.auth_cookie_samesite,
-        max_age=int(access_token_expires.total_seconds()),
+        max_age=refresh_max_age,
         path="/",
         domain=None,
     )
+
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.post("/api/logout")
-def logout(response: Response):
+def logout(request: Request, response: Response, db: Annotated[Session, Depends(get_db)]):
+    # Revoke refresh token if present
+    raw = request.cookies.get(settings.auth_cookie_name)
+    if raw:
+        try:
+            revoke_refresh_token_by_raw(db, raw)
+        except Exception:
+            pass
     response.delete_cookie(key=settings.auth_cookie_name, path="/")
     return {"ok": True}
+
+
+@router.post("/token/refresh")
+@limiter.limit("10/minute")
+def refresh_access_token(request: Request, response: Response, db: Annotated[Session, Depends(get_db)]):
+    """Rotate refresh token and issue new access token. """
+    raw = request.cookies.get(settings.auth_cookie_name)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing refresh token")
+
+    row = verify_refresh_token(db, raw)
+    if not row:
+        # possible reuse / invalid token
+        try:
+          token_hash = _hash_token(raw)
+          suspect = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+          if suspect:
+            # token was found but revoked -> token reuse detected: revoke all user's tokens
+            revoke_all_user_refresh_tokens(db, suspect.user_id)
+        except Exception:
+          pass
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    # rotate: create new refresh token and mark old as revoked/replaced
+    user = db.scalar(select(User).where(User.id == row.user_id))
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token user")
+
+    # revoke old
+    try:
+        row.revoked = True
+        db.add(row)
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    raw_new, new_row = create_refresh_token(db, user, ip=request.client.host if request.client else None, device=request.headers.get("User-Agent"))
+
+    # set new cookie
+    refresh_max_age = int(timedelta(minutes=settings.jwt_refresh_ttl_min).total_seconds())
+    response.set_cookie(
+        key=settings.auth_cookie_name,
+        value=raw_new,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite=settings.auth_cookie_samesite,
+        max_age=refresh_max_age,
+        path="/",
+        domain=None,
+    )
+
+    # issue new access token
+    access_token_expires = timedelta(minutes=settings.jwt_access_ttl_min)
+    access_token = create_access_token(
+        data={"sub": user.email, "role": user.role.value if hasattr(user.role, "value") else str(user.role)},
+        expires_delta=access_token_expires,
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.get("/api/me")

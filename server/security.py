@@ -45,7 +45,15 @@ async def add_request_id_middleware(request: Request, call_next):
             from jose import jwt
             from config import settings
             token = auth_header[7:]  # Remove 'Bearer ' prefix
-            payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+            # select correct key for decoding depending on algorithm
+            algo = settings.jwt_algorithm or 'HS256'
+            if algo.startswith('RS'):
+                pub = settings.jwt_public_key
+                if not pub:
+                    raise Exception('JWT public key not configured')
+                payload = jwt.decode(token, pub, algorithms=[algo])
+            else:
+                payload = jwt.decode(token, settings.secret_key, algorithms=[algo])
             # Don't set user_id here as we don't have DB context yet; it's set in route handlers
         except Exception:
             pass  # Invalid token will be handled by auth routes

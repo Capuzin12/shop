@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
-from sqlalchemy import Boolean, ForeignKey, String, Text
+from sqlalchemy import Boolean, ForeignKey, String, Text, Integer, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -60,6 +60,8 @@ class User(Base):
     customer_group: Mapped[Optional["CustomerGroup"]] = relationship(
         back_populates="users"
     )
+    # refresh token sessions stored server-side (only hash stored)
+    refresh_tokens: Mapped[List["RefreshToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.email}>"
@@ -81,4 +83,21 @@ class Address(Base):
 
     user: Mapped["User"] = relationship(back_populates="addresses")
     orders: Mapped[List["Order"]] = relationship(back_populates="address")
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    issued_at: Mapped[DateTime] = mapped_column(default=func.now(), nullable=False)
+    expires_at: Mapped[DateTime] = mapped_column(nullable=False)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    replaced_by: Mapped[Optional[int]] = mapped_column(ForeignKey("refresh_tokens.id"), nullable=True)
+    device_info: Mapped[Optional[str]] = mapped_column(Text)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45))
+
+    user: Mapped["User"] = relationship(back_populates="refresh_tokens")
+
 

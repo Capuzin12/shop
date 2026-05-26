@@ -1,0 +1,31 @@
+version: '3.7'
+services:
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: budmart-server:latest
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-RS256}
+      - JWT_PRIVATE_KEY_FILE=/run/secrets/jwt_private.pem
+      - JWT_PUBLIC_KEY_FILE=/run/secrets/jwt_public.pem
+      - SECRET_KEY=${SECRET_KEY}
+      - AUTH_COOKIE_NAME=${AUTH_COOKIE_NAME:-refresh_token}
+      - COOKIE_SAMESITE=${COOKIE_SAMESITE:-Lax}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+    ports:
+      - "8000:8000"
+    secrets:
+      - jwt_private
+      - jwt_public
+    volumes:
+      - ./server:/app:ro
+    command: ["/bin/sh","-c","/app/server/docker/entrypoint.sh"]
+
+secrets:
+  jwt_private:
+    file: ./secrets/jwt_private.pem
+  jwt_public:
+    file: ./secrets/jwt_public.pem
+

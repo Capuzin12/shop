@@ -31,6 +31,7 @@ DROP TABLE IF EXISTS public.client_errors          CASCADE;
 DROP TABLE IF EXISTS public.audit_logs             CASCADE;
 DROP TABLE IF EXISTS public.addresses              CASCADE;
 DROP TABLE IF EXISTS public.users                  CASCADE;
+DROP TABLE IF EXISTS public.refresh_tokens        CASCADE;
 DROP TABLE IF EXISTS public.customer_groups        CASCADE;
 DROP TABLE IF EXISTS public.alembic_version        CASCADE;
 
@@ -87,6 +88,22 @@ $$;
 CREATE TRIGGER trg_users_default_customer_group
   BEFORE INSERT ON public.users
   FOR EACH ROW EXECUTE FUNCTION public.fn_set_default_customer_group();
+
+-- Refresh tokens table for server-side refresh token storage (hashes only)
+CREATE TABLE public.refresh_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(128) NOT NULL UNIQUE,
+  issued_at TIMESTAMP DEFAULT now() NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  revoked BOOLEAN DEFAULT FALSE NOT NULL,
+  replaced_by INTEGER REFERENCES public.refresh_tokens(id),
+  device_info TEXT,
+  ip_address VARCHAR(45)
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON public.refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON public.refresh_tokens(expires_at);
 
 CREATE TABLE public.addresses (
   id          SERIAL    PRIMARY KEY,

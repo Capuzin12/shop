@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useState, useEffect, useRef } from 'react';
-import api, { clearAuthToken, hasStoredAuthToken, setAuthToken } from '../../../api';
+import api, { clearAuthToken, setAuthToken } from '../../../api';
 
 const AuthContext = createContext();
 
@@ -46,7 +46,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       const savedUser = localStorage.getItem('user');
-      if (savedUser || hasStoredAuthToken()) {
+      // Attempt to refresh session if we have a saved user or a refresh cookie may exist.
+      if (savedUser) {
         try {
           await refreshUser();
         } catch (error) {
@@ -54,7 +55,12 @@ export const AuthProvider = ({ children }) => {
           clearAuth();
         }
       } else {
-        clearAuth();
+        // Try a silent refresh using HttpOnly refresh cookie; if it fails, remain logged out
+        try {
+          await refreshUser();
+        } catch (error) {
+          clearAuth();
+        }
       }
       setLoading(false);
     };

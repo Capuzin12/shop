@@ -26,7 +26,10 @@ class Settings(BaseSettings):
     auth_cookie_name: str = Field(default='access_token', env='AUTH_COOKIE_NAME')
     auth_cookie_samesite: str = Field(default='lax', env='AUTH_COOKIE_SAMESITE')
     auth_cookie_secure: bool = Field(default=True, env='AUTH_COOKIE_SECURE')  # HTTPS only
-    
+    # For RS* algorithms provide PEM keys as environment variables (raw PEM text)
+    jwt_private_key: Optional[str] = Field(default=None, env='JWT_PRIVATE_KEY')
+    jwt_public_key: Optional[str] = Field(default=None, env='JWT_PUBLIC_KEY')
+
     # CORS
     # Default includes localhost for dev, plus common deployment URLs
     # For production: set via CORS_ORIGINS env var (comma-separated)
@@ -90,6 +93,11 @@ class Settings(BaseSettings):
         valid_algorithms = ('HS256', 'HS384', 'HS512', 'RS256', 'RS384', 'RS512')
         if v not in valid_algorithms:
             raise ValueError(f'JWT_ALGORITHM must be one of {valid_algorithms}')
+        # If RS* algorithm is selected ensure keys are provided via env
+        if v.startswith('RS'):
+            # JWT keys may be loaded from env vars JWT_PRIVATE_KEY / JWT_PUBLIC_KEY
+            # We cannot access instance values here, so just allow but runtime will validate
+            pass
         return v
 
     @validator('auth_cookie_samesite')

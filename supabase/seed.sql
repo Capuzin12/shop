@@ -914,6 +914,7 @@ SELECT setval(pg_get_serial_sequence('public.notifications', 'id'), COALESCE((SE
 SELECT setval(pg_get_serial_sequence('public.audit_logs', 'id'), COALESCE((SELECT MAX(id) FROM public.audit_logs), 1), true);
 SELECT setval(pg_get_serial_sequence('public.client_errors', 'id'), COALESCE((SELECT MAX(id) FROM public.client_errors), 1), true);
 SELECT setval(pg_get_serial_sequence('public.inventory_movements', 'id'), COALESCE((SELECT MAX(id) FROM public.inventory_movements), 1), true);
+SELECT setval(pg_get_serial_sequence('public.refresh_tokens', 'id'), COALESCE((SELECT MAX(id) FROM public.refresh_tokens), 1), true);
 
 -- Перевірочний блок (контрольні counts/aggregates)
 SELECT 'products_total' AS metric, COUNT(*)::BIGINT AS value FROM public.products

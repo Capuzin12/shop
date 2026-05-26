@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { clientEnv } from './shared/config/env';
 
-const AUTH_TOKEN_KEY = 'auth_token';
+// Access token is stored in-memory for improved security. Refresh token is stored in an HttpOnly cookie.
+const AUTH_TOKEN_KEY = 'auth_token'; // kept for compatibility only
 
 const getApiBaseUrl = () => {
   if (clientEnv.apiBaseUrl) {
@@ -25,54 +26,30 @@ const api = axios.create({
   withCredentials: true,
 });
 
-const getStoredAuthToken = () => {
-  try {
-    return localStorage.getItem(AUTH_TOKEN_KEY) || sessionStorage.getItem(AUTH_TOKEN_KEY) || null;
-  } catch {
-    return null;
-  }
-};
+// Keep token in memory; use refresh cookie to obtain new access tokens
+let inMemoryAuthToken = null;
+let refreshInProgress = null;
 
 const applyAuthHeader = (token) => {
   if (token) {
+    inMemoryAuthToken = token;
     api.defaults.headers.common.Authorization = `Bearer ${token}`;
   } else {
+    inMemoryAuthToken = null;
     delete api.defaults.headers.common.Authorization;
   }
 };
 
-export const setAuthToken = (token, remember = true) => {
+export const setAuthToken = (token) => {
   const safeToken = String(token || '').trim();
-  if (!safeToken) {
-    return;
-  }
-  try {
-    if (remember) {
-      localStorage.setItem(AUTH_TOKEN_KEY, safeToken);
-      sessionStorage.removeItem(AUTH_TOKEN_KEY);
-    } else {
-      sessionStorage.setItem(AUTH_TOKEN_KEY, safeToken);
-      localStorage.removeItem(AUTH_TOKEN_KEY);
-    }
-  } catch {
-    // Storage may be unavailable in strict browser privacy modes.
-  }
+  if (!safeToken) return;
   applyAuthHeader(safeToken);
 };
 
 export const clearAuthToken = () => {
-  try {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    sessionStorage.removeItem(AUTH_TOKEN_KEY);
-  } catch {
-    // no-op
-  }
   applyAuthHeader(null);
 };
 
-export const hasStoredAuthToken = () => Boolean(getStoredAuthToken());
-
-applyAuthHeader(getStoredAuthToken());
 
 const MAX_RETRIES = 3;
 const RETRYABLE_STATUSES = new Set([500, 502, 503, 504]);
@@ -157,7 +134,28 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
 
-      localStorage.removeItem('user');
+      // Attempt transparent token refresh using HttpOnly refresh cookie
+      try {
+        if (!refreshInProgress) {
+          refreshInProgress = api.post('/token/refresh').then((r) => {
+            const newToken = r?.data?.access_token;
+            if (newToken) setAuthToken(newToken);
+            return newToken;
+          }).catch(() => null).finally(() => { refreshInProgress = null; });
+        }
+        const newToken = await refreshInProgress;
+        if (newToken) {
+          // retry original request with new token
+          config.headers = config.headers || {};
+          config.headers.Authorization = `Bearer ${newToken}`;
+          return api(config);
+        }
+      } catch (e) {
+        // refresh failed
+      }
+
+      // fallback: force login
+      try { localStorage.removeItem('user'); } catch (_) {}
       clearAuthToken();
 
       if (window.location.pathname !== '/login') {
@@ -178,7 +176,7 @@ api.interceptors.response.use(
 );
 
 api.interceptors.request.use((config) => {
-  const token = getStoredAuthToken();
+  const token = inMemoryAuthToken;
   if (token && !config.headers?.Authorization) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;

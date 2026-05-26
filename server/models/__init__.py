@@ -9,7 +9,7 @@ from .enums import (
     SupplyStatus,
     DiscountType,
 )
-from .user import User, Address, CustomerGroup
+from .user import User, Address, CustomerGroup, RefreshToken
 from .product import (
     Category,
     Brand,
@@ -42,6 +42,7 @@ __all__ = [
     "User",
     "Address",
     "CustomerGroup",
+    "RefreshToken",
     "Category",
     "Brand",
     "Product",
