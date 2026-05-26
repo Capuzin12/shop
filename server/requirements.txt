@@ -1,4 +1,4 @@
-fastapi>=0.137.0
+fastapi>=0.136.0
 uvicorn[standard]>=0.32.0
 sqlalchemy>=2.0.0
 passlib[argon2,bcrypt]>=1.7.4
