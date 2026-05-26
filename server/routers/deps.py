@@ -103,7 +103,7 @@ async def get_current_user(
     try:
         algo = settings.jwt_algorithm or 'HS256'
         if algo.startswith('RS'):
-            pub = settings.jwt_public_key
+            pub = settings.resolved_jwt_public_key
             if not pub:
                 raise credentials_exception
             payload = jwt.decode(raw_token, pub, algorithms=[algo])
@@ -134,7 +134,7 @@ async def get_optional_user(
     try:
         algo = settings.jwt_algorithm or 'HS256'
         if algo.startswith('RS'):
-            pub = settings.jwt_public_key
+            pub = settings.resolved_jwt_public_key
             if not pub:
                 return None
             payload = jwt.decode(raw_token, pub, algorithms=[algo])

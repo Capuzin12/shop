@@ -49,7 +49,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     algo = settings.jwt_algorithm or 'HS256'
     if algo.startswith('RS'):
         # Expect PEM private key in settings.jwt_private_key
-        private = settings.jwt_private_key
+        private = settings.resolved_jwt_private_key
         if not private:
             raise RuntimeError('JWT private key not configured for RS* algorithm')
         encoded_jwt = jwt.encode(to_encode, private, algorithm=algo)

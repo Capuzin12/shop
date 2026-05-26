@@ -2,10 +2,12 @@
 Configuration management for BuildShop API using Pydantic Settings
 """
 
+import base64
 from typing import Optional, List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, ValidationInfo
 import re
+import textwrap
 
 
 class Settings(BaseSettings):
@@ -36,6 +38,8 @@ class Settings(BaseSettings):
     # For RS* algorithms provide PEM keys as environment variables (raw PEM text)
     jwt_private_key: Optional[str] = Field(default=None, validation_alias='JWT_PRIVATE_KEY')
     jwt_public_key: Optional[str] = Field(default=None, validation_alias='JWT_PUBLIC_KEY')
+    jwt_private_key_b64: Optional[str] = Field(default=None, validation_alias='JWT_PRIVATE_KEY_B64')
+    jwt_public_key_b64: Optional[str] = Field(default=None, validation_alias='JWT_PUBLIC_KEY_B64')
 
     # CORS
     # Default includes localhost for dev, plus common deployment URLs
@@ -143,6 +147,48 @@ class Settings(BaseSettings):
             if not v:
                 raise ValueError('AUTH_COOKIE_SECURE must be True in production')
         return v
+
+    @staticmethod
+    def _format_der_as_pem(decoded_bytes: bytes, label: str) -> str:
+        body = base64.b64encode(decoded_bytes).decode('ascii')
+        wrapped = '\n'.join(textwrap.wrap(body, 64))
+        return f'-----BEGIN {label}-----\n{wrapped}\n-----END {label}-----'
+
+    @classmethod
+    def _decode_pem_value(cls, value: Optional[str], encoded_value: Optional[str], label: str) -> Optional[str]:
+        raw = str(value or '').strip()
+        if raw:
+            return raw.replace('\\n', '\n')
+
+        encoded = str(encoded_value or '').strip()
+        if not encoded:
+            return None
+        encoded = encoded.replace('\\n', '').replace('\r', '').replace('\n', '').strip()
+        if len(encoded) % 4:
+            encoded += '=' * (4 - (len(encoded) % 4))
+
+        try:
+            decoded_bytes = base64.b64decode(encoded)
+        except Exception as e:
+            raise ValueError(f'Invalid base64-encoded JWT key: {e}') from e
+
+        try:
+            decoded_text = decoded_bytes.decode('utf-8').strip()
+        except UnicodeDecodeError:
+            return cls._format_der_as_pem(decoded_bytes, label)
+
+        if 'BEGIN' in decoded_text:
+            return decoded_text.replace('\\n', '\n')
+
+        return cls._format_der_as_pem(decoded_bytes, label)
+
+    @property
+    def resolved_jwt_private_key(self) -> Optional[str]:
+        return self._decode_pem_value(self.jwt_private_key, self.jwt_private_key_b64, 'PRIVATE KEY')
+
+    @property
+    def resolved_jwt_public_key(self) -> Optional[str]:
+        return self._decode_pem_value(self.jwt_public_key, self.jwt_public_key_b64, 'PUBLIC KEY')
     
     def get_cors_origins(self) -> List[str]:
         """Parse and normalize CORS origins from env (trim, add protocol if needed, drop trailing slash, dedupe)."""
@@ -193,4 +239,9 @@ def validate_settings() -> None:
             raise ValueError('SECRET_KEY must be configured in production')
         if settings.debug:
             raise ValueError('DEBUG mode must be disabled in production')
+    if (settings.jwt_algorithm or 'HS256').startswith('RS'):
+        if not settings.resolved_jwt_private_key:
+            raise ValueError('JWT private key must be configured for RS* algorithms')
+        if not settings.resolved_jwt_public_key:
+            raise ValueError('JWT public key must be configured for RS* algorithms')
 
