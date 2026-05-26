@@ -26,3 +26,6 @@ server/app.db
 *.sqlite
 backups/
 restore_test/
+
+# Prevent accidental commit of generated JWT private key
+jwt_private.pem
