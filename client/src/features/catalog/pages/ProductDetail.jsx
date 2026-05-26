@@ -1,4 +1,4 @@
-import { Heart, Minus, Plus, ShoppingCart } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart, Minus, Plus, Search, ShoppingCart } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../../../api';
@@ -13,28 +13,104 @@ const formatPrice = (price) => new Intl.NumberFormat('uk-UA', {
   maximumFractionDigits: 0,
 }).format(price || 0);
 
+const getImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('/')) return url;
+  return `/${url}`;
+};
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const findNextAvailableImageIndex = (startIndex, direction, total, blockedIndexes) => {
+  if (!total) return -1;
+  const step = direction >= 0 ? 1 : -1;
+
+  for (let offset = 0; offset < total; offset += 1) {
+    const index = (startIndex + offset * step + total) % total;
+    if (!blockedIndexes.has(index)) return index;
+  }
+
+  return -1;
+};
+
 const ProductImageDisplay = ({ images, product }) => {
   const [imageError, setImageError] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [failedImageIndexes, setFailedImageIndexes] = useState(() => new Set());
+  const [isHovering, setIsHovering] = useState(false);
+  const [zoomEnabled, setZoomEnabled] = useState(false);
+  const [zoomPoint, setZoomPoint] = useState({ x: 50, y: 50 });
 
-  const validImages = (images || []).filter(img => img?.url);
+  const validImages = [
+    ...(Array.isArray(images) ? images : []),
+    ...(product?.image_url ? [{ url: product.image_url, alt_text: product.name, is_main: true }] : []),
+  ]
+    .filter((img) => img?.url)
+    .map((img) => ({
+      ...img,
+      resolvedUrl: getImageUrl(img.url),
+    }))
+    .filter((img) => img.resolvedUrl)
+    .filter((img, index, list) => list.findIndex((candidate) => candidate.resolvedUrl === img.resolvedUrl) === index);
+
   const hasImages = validImages.length > 0 && !imageError;
-  const currentImage = validImages[currentImageIndex];
+  const currentImage = validImages[currentImageIndex] || validImages[0];
+  const currentImageUrl = currentImage?.resolvedUrl || null;
+  const zoomActive = zoomEnabled || isHovering;
 
-  const getImageUrl = (url) => {
-    if (!url) return null;
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    if (url.startsWith('/')) return url;
-    return `/${url}`;
+  const goToImage = (index) => {
+    if (!validImages.length) return;
+    const nextIndex = ((index % validImages.length) + validImages.length) % validImages.length;
+    setCurrentImageIndex(nextIndex);
+    setImageError(false);
+  };
+
+  const moveImage = (step) => {
+    if (!validImages.length) return;
+    const candidate = findNextAvailableImageIndex(
+      currentImageIndex + step,
+      step,
+      validImages.length,
+      failedImageIndexes,
+    );
+    if (candidate !== -1) {
+      setCurrentImageIndex(candidate);
+      setImageError(false);
+    }
   };
 
   const handleImageError = () => {
-    const nextIndex = currentImageIndex + 1;
-    if (nextIndex < validImages.length) {
-      setCurrentImageIndex(nextIndex);
-    } else {
-      setImageError(true);
-    }
+    setFailedImageIndexes((previous) => {
+      const nextFailed = new Set(previous);
+      nextFailed.add(currentImageIndex);
+
+      const nextIndex = findNextAvailableImageIndex(
+        currentImageIndex + 1,
+        1,
+        validImages.length,
+        nextFailed,
+      );
+
+      if (nextIndex === -1) {
+        setImageError(true);
+      } else {
+        setCurrentImageIndex(nextIndex);
+        setImageError(false);
+      }
+
+      return nextFailed;
+    });
+  };
+
+  const handlePointerMove = (event) => {
+    if (!currentImageUrl) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100);
+    const y = clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100);
+
+    setZoomPoint({ x, y });
   };
 
   if (!hasImages) {
@@ -52,30 +128,109 @@ const ProductImageDisplay = ({ images, product }) => {
   }
 
   return (
-    <div className="relative w-full h-full overflow-hidden rounded-[2rem]">
-      <img
-        src={getImageUrl(currentImage?.url)}
-        alt={currentImage?.alt_text || product.name}
-        className="w-full h-full object-contain"
-        onError={handleImageError}
-      />
-      {validImages.length > 1 && (
-        <div className="absolute bottom-4 left-4 flex gap-1">
-          {validImages.map((_, idx) => (
+    <div className="space-y-4">
+      <div
+        className="relative overflow-hidden rounded-[2rem] bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.08),_transparent_30%),linear-gradient(135deg,#fffaf4,_#f4f7fb)] dark:bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.12),_transparent_26%),linear-gradient(135deg,#211916,_#141820)]"
+        style={{ minHeight: '420px' }}
+        onPointerEnter={() => setIsHovering(true)}
+        onPointerLeave={() => setIsHovering(false)}
+        onPointerMove={handlePointerMove}
+      >
+        <img
+          src={currentImageUrl}
+          alt={currentImage?.alt_text || product.name}
+          className="h-full w-full object-contain p-4 sm:p-6"
+          loading="eager"
+          onError={handleImageError}
+        />
+
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent dark:from-black/25" />
+
+        <div className="absolute inset-x-4 top-4 flex items-center justify-between gap-3">
+          <div className="rounded-full bg-slate-950/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-white backdrop-blur">
+            {currentImageIndex + 1} / {validImages.length}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {validImages.length > 1 ? (
+              <>
+                <button
+                  onClick={() => moveImage(-1)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/85 text-slate-700 shadow-lg shadow-black/10 transition hover:bg-white dark:bg-slate-950/75 dark:text-white"
+                  type="button"
+                  aria-label="Попереднє фото"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() => moveImage(1)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/85 text-slate-700 shadow-lg shadow-black/10 transition hover:bg-white dark:bg-slate-950/75 dark:text-white"
+                  type="button"
+                  aria-label="Наступне фото"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </>
+            ) : null}
+
             <button
-              key={idx}
-              onClick={() => setCurrentImageIndex(idx)}
-              className={`h-2 w-2 rounded-full transition ${
-                idx === currentImageIndex
-                  ? 'bg-white'
-                  : 'bg-white/50 hover:bg-white/75'
+              onClick={() => setZoomEnabled((value) => !value)}
+              className={`inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold shadow-lg shadow-black/10 transition ${
+                zoomEnabled
+                  ? 'bg-amber-400 text-slate-950 hover:bg-amber-300'
+                  : 'bg-white/85 text-slate-700 hover:bg-white dark:bg-slate-950/75 dark:text-white'
               }`}
-              aria-label={`Image ${idx + 1}`}
               type="button"
-            />
+              aria-pressed={zoomEnabled}
+            >
+              <Search className="h-4 w-4" />
+              <span>{zoomEnabled ? 'Лупа: ON' : 'Лупа'}</span>
+            </button>
+          </div>
+        </div>
+
+        {zoomActive && currentImageUrl ? (
+          <div
+            className="pointer-events-none absolute h-20 w-20 rounded-full border-2 border-white/90 shadow-[0_18px_45px_rgba(15,23,42,0.35)] ring-1 ring-black/10 sm:h-28 sm:w-28"
+            style={{
+              left: `${zoomPoint.x}%`,
+              top: `${zoomPoint.y}%`,
+              transform: 'translate(-50%, -50%)',
+              backgroundImage: `url('${currentImageUrl}')`,
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: '240%',
+              backgroundPosition: `${zoomPoint.x}% ${zoomPoint.y}%`,
+              backgroundColor: 'rgba(15, 23, 42, 0.08)',
+            }}
+          />
+        ) : null}
+      </div>
+
+      {validImages.length > 1 ? (
+        <div className="flex gap-3 overflow-x-auto pb-1">
+          {validImages.map((image, idx) => (
+            <button
+              key={image.id ?? `${image.resolvedUrl}-${idx}`}
+              onClick={() => goToImage(idx)}
+              className={`group relative h-20 w-20 flex-none overflow-hidden rounded-[1.15rem] border bg-white/80 transition sm:h-24 sm:w-24 ${
+                idx === currentImageIndex
+                  ? 'border-amber-400 shadow-lg shadow-amber-100 ring-2 ring-amber-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-900'
+                  : 'border-slate-200/80 hover:border-slate-300 hover:shadow-md dark:border-white/10 dark:hover:border-white/25'
+              }`}
+              type="button"
+              aria-label={`Показати фото ${idx + 1}`}
+            >
+              <img
+                src={image.resolvedUrl}
+                alt={image.alt_text || `${product.name} ${idx + 1}`}
+                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                loading="lazy"
+              />
+              <span className={`absolute inset-0 rounded-[1.15rem] transition ${idx === currentImageIndex ? 'bg-amber-400/10' : 'bg-transparent'}`} />
+            </button>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
@@ -172,9 +327,11 @@ export default function ProductDetail() {
       <div className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr]">
 
         <div className="rounded-[2.5rem] border border-white/50 bg-white/75 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-          <div className="w-full rounded-[2rem] overflow-hidden" style={{ aspectRatio: '1 / 1.2', maxWidth: '100%' }}>
-            <ProductImageDisplay images={product.images} product={product} />
-          </div>
+          <ProductImageDisplay
+            key={`${product.id}-${(Array.isArray(product.images) ? product.images : []).map((img) => img?.url || '').join('|')}-${product.image_url || ''}`}
+            images={product.images}
+            product={product}
+          />
         </div>
 
         <div className="rounded-[2.5rem] border border-white/50 bg-white/75 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
