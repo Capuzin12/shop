@@ -1,6 +1,6 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Bell, Heart, LogOut, Menu, Moon, Search, ShoppingCart, SunMedium, User, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { useCart } from '../../features/cart/context/CartContext';
 import { useTheme } from '../context/ThemeContext';
@@ -29,19 +29,18 @@ export default function Header() {
   const { unreadCount } = useNotifications();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
-  const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const backofficeLinks = getBackofficeLinks(user?.role);
-
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [location.pathname]);
 
   const handleLogout = async () => {
     setMobileMenuOpen(false);
     await logout();
     navigate('/');
+  };
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
   };
 
   const handleSearch = (e) => {
@@ -168,7 +167,7 @@ export default function Header() {
                     <User className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <Link to="/profile" className="block truncate text-sm font-semibold text-slate-800 dark:text-white">
+                    <Link to="/profile" onClick={closeMobileMenu} className="block truncate text-sm font-semibold text-slate-800 dark:text-white">
                       {user.first_name || user.email}
                     </Link>
                     <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
@@ -177,9 +176,9 @@ export default function Header() {
                   </div>
                 </div>
                 <div className="mt-4 grid gap-2">
-                  <Link to="/profile" className={mobileLinkClass}>Профіль</Link>
+                  <Link to="/profile" onClick={closeMobileMenu} className={mobileLinkClass}>Профіль</Link>
                   {backofficeLinks.map((link) => (
-                    <Link key={link.path} to={link.path} className={mobileLinkClass}>
+                    <Link key={link.path} to={link.path} onClick={closeMobileMenu} className={mobileLinkClass}>
                       {link.label}
                     </Link>
                   ))}
@@ -195,22 +194,22 @@ export default function Header() {
               </div>
             ) : (
               <div className="grid gap-2">
-                <Link to="/login" className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300">
+                <Link to="/login" onClick={closeMobileMenu} className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300">
                   Увійти
                 </Link>
-                <Link to="/register" className={mobileLinkClass}>
+                <Link to="/register" onClick={closeMobileMenu} className={mobileLinkClass}>
                   Створити акаунт
                 </Link>
               </div>
             )}
 
             <div className="grid gap-2">
-              <Link to="/catalog" className={mobileLinkClass}>Каталог</Link>
-              <Link to="/wishlist" className={mobileLinkClass}>
+              <Link to="/catalog" onClick={closeMobileMenu} className={mobileLinkClass}>Каталог</Link>
+              <Link to="/wishlist" onClick={closeMobileMenu} className={mobileLinkClass}>
                 <span>Обране</span>
                 {wishlistCount ? <span className="text-xs font-bold text-amber-600 dark:text-amber-300">{wishlistCount}</span> : null}
               </Link>
-              <Link to="/notifications" className={mobileLinkClass}>
+              <Link to="/notifications" onClick={closeMobileMenu} className={mobileLinkClass}>
                 <span>Сповіщення</span>
                 {unreadCount ? <span className="text-xs font-bold text-rose-500">{unreadCount}</span> : null}
               </Link>
