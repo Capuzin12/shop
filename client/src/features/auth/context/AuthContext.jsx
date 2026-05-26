@@ -58,7 +58,7 @@ export const AuthProvider = ({ children }) => {
          // Try a silent refresh using HttpOnly refresh cookie; if it fails, remain logged out
          try {
            await refreshUser();
-         } catch (_) {
+         } catch {
            clearAuth();
          }
       }

@@ -150,14 +150,14 @@ api.interceptors.response.use(
            config.headers.Authorization = `Bearer ${newToken}`;
            return api(config);
          }
-       } catch (_) {
-         // refresh failed, silently ignore
-       }
+        } catch {
+          // refresh failed, silently ignore
+        }
 
-       // fallback: force login
-       try { localStorage.removeItem('user'); } catch (_) {
-         // ignore any errors clearing user data
-       }
+        // fallback: force login
+        try { localStorage.removeItem('user'); } catch {
+          // ignore any errors clearing user data
+        }
       clearAuthToken();
 
       if (window.location.pathname !== '/login') {
