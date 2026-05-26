@@ -44,16 +44,16 @@ export default function Login() {
 
   return (
     <div className="page-shell-comfy">
-      <div className="grid gap-8 lg:grid-cols-[0.95fr,1.05fr]">
-        <div className="rounded-[2.5rem] border border-white/50 bg-white/75 p-8 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
+      <div className="grid gap-6 lg:grid-cols-[0.95fr,1.05fr] lg:gap-8">
+        <div className="rounded-[2.5rem] border border-white/50 bg-white/75 p-6 shadow-xl shadow-amber-100/40 backdrop-blur sm:p-8 dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-600 dark:text-amber-300">Акаунт</p>
-          <h1 className="mt-4 text-5xl font-black text-slate-950 dark:text-white">Вхід до акаунта</h1>
+          <h1 className="mt-4 text-4xl font-black text-slate-950 sm:text-5xl dark:text-white">Вхід до акаунта</h1>
           <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
             Увійдіть, щоб переглядати замовлення, керувати профілем та швидше оформлювати покупки.
           </p>
         </div>
 
-        <form noValidate onSubmit={handleSubmit} className="rounded-[2.5rem] border border-white/50 bg-white/75 p-8 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
+        <form noValidate onSubmit={handleSubmit} className="rounded-[2.5rem] border border-white/50 bg-white/75 p-6 shadow-xl shadow-amber-100/40 backdrop-blur sm:p-8 dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
           <h2 className="text-2xl font-black text-slate-900 dark:text-white">Увійти</h2>
           {error ? <p className="form-error-banner">{error}</p> : null}
 

@@ -1,7 +1,7 @@
 import { render, waitFor } from '@testing-library/react';
 import { useEffect, useRef } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { CartProvider, useCart } from './CartContext';
+import { CartProvider, useCart } from './context/CartContext';
 
 const { mockApi } = vi.hoisted(() => ({
   mockApi: {
@@ -12,11 +12,11 @@ const { mockApi } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../api', () => ({
+vi.mock('../../api', () => ({
   default: mockApi,
 }));
 
-vi.mock('./AuthContext', () => ({
+vi.mock('../auth/hooks/useAuth', () => ({
   useAuth: () => ({ user: { id: 10 } }),
 }));
 

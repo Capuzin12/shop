@@ -48,7 +48,7 @@ async def add_request_id_middleware(request: Request, call_next):
             # select correct key for decoding depending on algorithm
             algo = settings.jwt_algorithm or 'HS256'
             if algo.startswith('RS'):
-                pub = settings.jwt_public_key
+                pub = settings.resolved_jwt_public_key
                 if not pub:
                     raise Exception('JWT public key not configured')
                 payload = jwt.decode(token, pub, algorithms=[algo])

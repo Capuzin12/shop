@@ -139,7 +139,7 @@ export default function Profile() {
       <div className="page-shell">
         <div className="mb-8 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Публічний профіль</p>
-          <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">
+          <h1 className="mt-2 text-3xl font-black text-slate-900 sm:text-4xl dark:text-white">
             {publicProfile.first_name} {publicProfile.last_name}
           </h1>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
@@ -267,7 +267,7 @@ export default function Profile() {
     <div className="page-shell">
       <div className="mb-8 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
         <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Центр облікового запису</p>
-        <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">Профіль</h1>
+        <h1 className="mt-2 text-3xl font-black text-slate-900 sm:text-4xl dark:text-white">Профіль</h1>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[0.9fr,1.1fr]">
