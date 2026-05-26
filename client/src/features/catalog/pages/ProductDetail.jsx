@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Heart, Minus, Plus, Search, ShoppingCart } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../../../api';
 import { useEffectivePrice } from '../../../shared/hooks/useProductPrices';
@@ -34,6 +34,8 @@ const findNextAvailableImageIndex = (startIndex, direction, total, blockedIndexe
   return -1;
 };
 
+const ZOOM_SCALE = 2.6;
+
 const ProductImageDisplay = ({ images, product }) => {
   const [imageError, setImageError] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -41,6 +43,11 @@ const ProductImageDisplay = ({ images, product }) => {
   const [isHovering, setIsHovering] = useState(false);
   const [zoomEnabled, setZoomEnabled] = useState(false);
   const [zoomPoint, setZoomPoint] = useState({ x: 50, y: 50 });
+  // overlay position (percent of container) and dragging state
+  const [overlayPos, setOverlayPos] = useState({ left: 9, top: 11 });
+  const [overlayDragging, setOverlayDragging] = useState(false);
+  const overlayDragRef = useRef(null);
+  const containerRef = useRef(null);
 
   const validImages = [
     ...(Array.isArray(images) ? images : []),
@@ -113,6 +120,34 @@ const ProductImageDisplay = ({ images, product }) => {
     setZoomPoint({ x, y });
   };
 
+  // compute background position for zoom based on cursor center only
+  const zoomBackgroundPosition = (() => {
+    const scale = ZOOM_SCALE;
+    const x = ((zoomPoint.x * scale) - 50) / (scale - 1);
+    const y = ((zoomPoint.y * scale) - 50) / (scale - 1);
+    return `${x}% ${y}%`;
+  })();
+
+  // overlay dimensions in percent (must match styles below)
+  const OVERLAY_W_PCT = 76;
+  const OVERLAY_H_PCT = 62;
+
+  // load saved overlay position per product
+  useEffect(() => {
+    try {
+      const key = `zoom_overlay_${product?.id}`;
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.left === 'number' && typeof parsed.top === 'number') {
+          setOverlayPos({ left: parsed.left, top: parsed.top });
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+  }, [product?.id]);
+
   if (!hasImages) {
     return (
       <div className="flex h-full min-h-[420px] items-center justify-center rounded-[2rem] bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.25),_transparent_38%),linear-gradient(135deg,#fff3e0,_#fffaf5)] p-8 dark:bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.12),_transparent_28%),linear-gradient(135deg,#211916,_#141820)]">
@@ -130,6 +165,7 @@ const ProductImageDisplay = ({ images, product }) => {
   return (
     <div className="space-y-4">
       <div
+        ref={containerRef}
         className="relative overflow-hidden rounded-[2rem] bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.08),_transparent_30%),linear-gradient(135deg,#fffaf4,_#f4f7fb)] dark:bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.12),_transparent_26%),linear-gradient(135deg,#211916,_#141820)]"
         style={{ minHeight: '420px' }}
         onPointerEnter={() => setIsHovering(true)}
@@ -194,18 +230,57 @@ const ProductImageDisplay = ({ images, product }) => {
 
         {zoomActive && currentImageUrl ? (
           <div
-            className="pointer-events-none absolute h-20 w-20 rounded-full border-2 border-white/90 shadow-[0_18px_45px_rgba(15,23,42,0.35)] ring-1 ring-black/10 sm:h-28 sm:w-28"
+            role="presentation"
+            onPointerDown={(e) => {
+              try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch (err) {}
+              const containerRect = containerRef.current?.getBoundingClientRect();
+              overlayDragRef.current = {
+                startX: e.clientX,
+                startY: e.clientY,
+                startLeft: overlayPos.left,
+                startTop: overlayPos.top,
+                containerWidth: containerRect?.width || 1,
+                containerHeight: containerRect?.height || 1,
+              };
+              setOverlayDragging(true);
+            }}
+            onPointerMove={(e) => {
+              if (!overlayDragging || !overlayDragRef.current) return;
+              const dX = e.clientX - overlayDragRef.current.startX;
+              const dY = e.clientY - overlayDragRef.current.startY;
+              const percentX = (dX / overlayDragRef.current.containerWidth) * 100;
+              const percentY = (dY / overlayDragRef.current.containerHeight) * 100;
+              const minLeft = 0;
+              const maxLeft = 100 - OVERLAY_W_PCT;
+              const minTop = 0;
+              const maxTop = 100 - OVERLAY_H_PCT;
+              const nextLeft = clamp(overlayDragRef.current.startLeft + percentX, minLeft, maxLeft);
+              const nextTop = clamp(overlayDragRef.current.startTop + percentY, minTop, maxTop);
+              overlayDragRef.current.lastPos = { left: nextLeft, top: nextTop };
+              setOverlayPos({ left: nextLeft, top: nextTop });
+            }}
+            onPointerUp={(e) => {
+              try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch (err) {}
+              setOverlayDragging(false);
+              const last = overlayDragRef.current?.lastPos || { left: overlayPos.left, top: overlayPos.top };
+              try { localStorage.setItem(`zoom_overlay_${product?.id}`, JSON.stringify(last)); } catch (err) {}
+            }}
+            onPointerCancel={() => { setOverlayDragging(false); overlayDragRef.current = null; }}
+            className={`absolute z-20 h-[62%] w-[76%] overflow-hidden rounded-[1.8rem] border border-white/80 bg-white/95 shadow-[0_24px_70px_rgba(15,23,42,0.25)] ring-1 ring-black/10 ${overlayDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
             style={{
-              left: `${zoomPoint.x}%`,
-              top: `${zoomPoint.y}%`,
-              transform: 'translate(-50%, -50%)',
+              left: `${overlayPos.left}%`,
+              top: `${overlayPos.top}%`,
+              touchAction: 'none',
               backgroundImage: `url('${currentImageUrl}')`,
               backgroundRepeat: 'no-repeat',
-              backgroundSize: '240%',
-              backgroundPosition: `${zoomPoint.x}% ${zoomPoint.y}%`,
-              backgroundColor: 'rgba(15, 23, 42, 0.08)',
+              backgroundSize: `${ZOOM_SCALE * 100}%`,
+              backgroundPosition: zoomBackgroundPosition,
             }}
-          />
+          >
+            <div className="absolute left-4 top-4 flex items-center gap-2">
+              <div className="rounded-full bg-slate-950/75 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white backdrop-blur">Збільшене зображення</div>
+            </div>
+          </div>
         ) : null}
       </div>
 
@@ -352,7 +427,7 @@ export default function ProductDetail() {
                   // toggleWishlist normally refreshes for logged users, but call
                   // refreshWishlist explicitly to cover race-cases and guests.
                   await refreshWishlist();
-                } catch (e) {
+                } catch {
                   // ignore refresh errors — toggle already updated optimistic state
                   // and we still show a message to the user
                 }
