@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
-from sqlalchemy import Boolean, ForeignKey, String, Text, Integer, DateTime
+from sqlalchemy import Boolean, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -91,8 +91,8 @@ class RefreshToken(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
-    issued_at: Mapped[DateTime] = mapped_column(default=func.now(), nullable=False)
-    expires_at: Mapped[DateTime] = mapped_column(nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     replaced_by: Mapped[Optional[int]] = mapped_column(ForeignKey("refresh_tokens.id"), nullable=True)
     device_info: Mapped[Optional[str]] = mapped_column(Text)
