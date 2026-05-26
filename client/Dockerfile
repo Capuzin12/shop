@@ -37,17 +37,11 @@ COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Add nginx security configuration
-RUN echo "server_tokens off;" >> /etc/nginx/nginx.conf && \
-    echo "client_max_body_size 20m;" >> /etc/nginx/nginx.conf
-
 EXPOSE 80
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://localhost/health.html || exit 1
 
-# Run nginx as non-root user
-USER nginx
 
 CMD ["nginx", "-g", "daemon off;"]
