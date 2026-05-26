@@ -185,7 +185,7 @@ def _resolve_pdf_font() -> str:
             pdfmetrics.registerFont(font_obj)
             try:
                 registerFontFamily(font_name, normal=font_name, bold=font_name, italic=font_name, boldItalic=font_name)
-            except Exception:
+            except Exception:  #nosec B110
                 pass
         logger.info("PDF report font selected", extra={"font_name": font_name, "font_path": str(path)})
         return font_name

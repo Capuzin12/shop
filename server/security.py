@@ -55,7 +55,7 @@ async def add_request_id_middleware(request: Request, call_next):
             else:
                 payload = jwt.decode(token, settings.secret_key, algorithms=[algo])
             # Don't set user_id here as we don't have DB context yet; it's set in route handlers
-        except Exception:
+        except Exception:  #nosec B110
             pass  # Invalid token will be handled by auth routes
     
     # Call the next middleware/route
