@@ -154,15 +154,11 @@ api.interceptors.response.use(
           // refresh failed, silently ignore
         }
 
-        // fallback: force login
+  // fallback: clear auth silently, do not redirect
         try { localStorage.removeItem('user'); } catch {
           // ignore any errors clearing user data
         }
-      clearAuthToken();
-
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+        clearAuthToken();
 
       return Promise.reject(error);
     }
