@@ -46,7 +46,6 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       const savedUser = localStorage.getItem('user');
-      // Attempt to refresh session if we have a saved user or a refresh cookie may exist.
       if (savedUser) {
         try {
           await refreshUser();
@@ -54,13 +53,6 @@ export const AuthProvider = ({ children }) => {
           console.error('Error initializing auth:', error);
           clearAuth();
         }
-       } else {
-         // Try a silent refresh using HttpOnly refresh cookie; if it fails, remain logged out
-         try {
-           await refreshUser();
-         } catch {
-           clearAuth();
-         }
       }
       setLoading(false);
     };
