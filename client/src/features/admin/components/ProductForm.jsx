@@ -86,7 +86,7 @@ export default function ProductForm({
         </div>
       ) : null}
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-3">
         <div>
           <input value={formData.name} onChange={(e) => onChange('name', e.target.value)} placeholder="Назва *" className={`form-input text-sm ${fieldErrors.name ? 'form-input-error' : ''}`} required />
           {fieldErrors.name ? <p className="form-error-text text-xs">{fieldErrors.name}</p> : null}
@@ -99,35 +99,30 @@ export default function ProductForm({
           <input value={formData.sku} onChange={(e) => onChange('sku', e.target.value)} placeholder="SKU *" className={`form-input text-sm ${fieldErrors.sku ? 'form-input-error' : ''}`} required />
           {fieldErrors.sku ? <p className="form-error-text text-xs">{fieldErrors.sku}</p> : null}
         </div>
-        <div>
-          <input value={formData.price} onChange={(e) => onChange('price', e.target.value)} placeholder="Ціна *" type="number" className={`form-input text-sm ${fieldErrors.price ? 'form-input-error' : ''}`} required />
-          {fieldErrors.price ? <p className="form-error-text text-xs">{fieldErrors.price}</p> : null}
-        </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-3">
         <div>
           {categories.length > 0 ? (
-            <select value={formData.category_id} onChange={(e) => onChange('category_id', e.target.value)} className={`form-input text-sm ${fieldErrors.category_id ? 'form-input-error' : ''}`} required>
-              <option value="">Категорія *</option>
-              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-            </select>
+              <select value={formData.category_id} onChange={(e) => onChange('category_id', e.target.value)} className={`form-input text-sm ${fieldErrors.category_id ? 'form-input-error' : ''}`} required>
+                <option value="">Категорія *</option>
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+              </select>
           ) : (
-            <input value={formData.category_id} onChange={(e) => onChange('category_id', e.target.value)} placeholder="ID категорії *" type="number" className={`form-input text-sm ${fieldErrors.category_id ? 'form-input-error' : ''}`} required />
+              <input value={formData.category_id} onChange={(e) => onChange('category_id', e.target.value)} placeholder="ID категорії *" type="number" className={`form-input text-sm ${fieldErrors.category_id ? 'form-input-error' : ''}`} required />
           )}
           {fieldErrors.category_id ? <p className="form-error-text text-xs">{fieldErrors.category_id}</p> : null}
         </div>
         <div>
           {brands.length > 0 ? (
-            <select value={formData.brand_id} onChange={(e) => onChange('brand_id', e.target.value)} className="form-input text-sm">
-              <option value="">Без бренду</option>
-              {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
-            </select>
+              <select value={formData.brand_id} onChange={(e) => onChange('brand_id', e.target.value)} className="form-input text-sm">
+                <option value="">Без бренду</option>
+                {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
+              </select>
           ) : (
-            <input value={formData.brand_id} onChange={(e) => onChange('brand_id', e.target.value)} placeholder="ID бренду" type="number" className="form-input text-sm" />
+              <input value={formData.brand_id} onChange={(e) => onChange('brand_id', e.target.value)} placeholder="ID бренду" type="number" className="form-input text-sm" />
           )}
         </div>
-        <input value={formData.old_price} onChange={(e) => onChange('old_price', e.target.value)} placeholder="Стара ціна" type="number" className="form-input text-sm" />
         <select value={formData.badge} onChange={(e) => onChange('badge', e.target.value)} className="form-input text-sm">
           <option value="">Без бейджа</option>
           <option value="new">Новинка</option>

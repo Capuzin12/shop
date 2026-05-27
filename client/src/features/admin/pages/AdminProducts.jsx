@@ -17,7 +17,6 @@ const DEFAULT_FORM = {
   sku: '',
   description: '',
   price: '',
-  old_price: '',
   category_id: '',
   brand_id: '',
   unit: 'шт',
@@ -187,8 +186,6 @@ export default function AdminProducts() {
     slug: String(formData.slug || '').trim(),
     sku: String(formData.sku || '').trim(),
     description: String(formData.description || '').trim() || null,
-    price: Number(formData.price),
-    old_price: formData.old_price === '' ? null : Number(formData.old_price),
     category_id: Number(formData.category_id),
     brand_id: formData.brand_id === '' ? null : Number(formData.brand_id),
     unit: String(formData.unit || '').trim() || 'шт',
@@ -218,7 +215,6 @@ export default function AdminProducts() {
         sku: full.sku || '',
         description: full.description || '',
         price: full.price ?? '',
-        old_price: full.old_price ?? '',
         category_id: full.category_id ?? '',
         brand_id: full.brand_id ?? '',
         unit: full.unit || 'шт',
@@ -244,20 +240,16 @@ export default function AdminProducts() {
     e.preventDefault();
     const nextErrors = {};
     const payload = buildPayload();
-    const { name, slug, sku, price, category_id: categoryId, brand_id: brandId, weight_kg: weight, unit } = payload;
-    const oldPrice = formData.old_price === '' ? null : Number(formData.old_price);
+    const { name, slug, sku, category_id: categoryId, brand_id: brandId, weight_kg: weight, unit } = payload;
     const imagesError = validateImages(formData.images_text);
     const attributesError = validateAttributes(formData.attributes_text);
 
     if (!name) nextErrors.name = 'Вкажіть назву товару';
     if (!sku) nextErrors.sku = 'Вкажіть SKU';
-    if (!Number.isFinite(price) || price <= 0) nextErrors.price = 'Ціна має бути більшою за 0';
     if (!Number.isInteger(categoryId) || categoryId <= 0) nextErrors.category_id = 'Вкажіть коректний ID категорії';
     if (slug && !isValidSlug(slug)) nextErrors.slug = 'Slug може містити лише малі латинські літери, цифри та дефіс';
     if (sku && !isValidSku(sku)) nextErrors.sku = 'SKU має містити 3-100 символів: літери, цифри, крапку, дефіс, / або _';
     if (brandId !== null && (!Number.isInteger(brandId) || brandId <= 0)) nextErrors.brand_id = 'Бренд має бути коректним ID';
-    if (oldPrice !== null && (!Number.isFinite(oldPrice) || oldPrice < 0)) nextErrors.old_price = 'Стара ціна не може бути від\'ємною';
-    if (oldPrice !== null && Number.isFinite(oldPrice) && oldPrice > 0 && oldPrice <= price) nextErrors.old_price = 'Стара ціна має бути більшою за поточну';
     if (weight !== null && (!Number.isFinite(weight) || weight < 0)) nextErrors.weight_kg = 'Вага має бути невід\'ємним числом';
     if (!unit) nextErrors.unit = 'Вкажіть одиницю виміру';
     if (imagesError) nextErrors.images_text = imagesError;

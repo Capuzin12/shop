@@ -133,12 +133,30 @@ def upsert_product_price(product_id: int, payload: dict, db: Annotated[Session, 
         raise HTTPException(status_code=400, detail={"code": "INVALID_PRICE_PAYLOAD", "message": "Некоректні дані тарифу"})
     if min_quantity < 1 or price < 0:
         raise HTTPException(status_code=400, detail={"code": "INVALID_PRICE_PAYLOAD", "message": "Перевірте price та min_quantity"})
-    row = db.scalar(select(ProductPrice).where(ProductPrice.product_id == product_id, ProductPrice.customer_group_id == customer_group_id, ProductPrice.min_quantity == min_quantity))
+    row = db.scalar(select(ProductPrice).where(
+        ProductPrice.product_id == product_id,
+        ProductPrice.customer_group_id == customer_group_id,
+        ProductPrice.min_quantity == min_quantity
+    ))
     if row:
+        old_price = float(row.price)
+        if old_price != price:
+            db.add(PriceHistory(
+                product_id=product_id,
+                old_price=old_price,
+                new_price=price,
+                changed_by=current_user.id,
+            ))
         row.price = price
     else:
         row = ProductPrice(product_id=product_id, customer_group_id=customer_group_id, min_quantity=min_quantity, price=price)
         db.add(row)
+        db.add(PriceHistory(
+            product_id=product_id,
+            old_price=0.0,
+            new_price=price,
+            changed_by=current_user.id,
+        ))
     db.commit()
     db.refresh(row)
     return {"id": row.id, "product_id": row.product_id, "customer_group_id": row.customer_group_id, "price": row.price, "min_quantity": row.min_quantity, "updated_at": row.updated_at.isoformat() if row.updated_at else None}

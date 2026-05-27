@@ -405,16 +405,6 @@ def update_product(
                 detail={"code": "SLUG_EXISTS", "message": f"Товар з таким slug вже існує: {normalized_product['slug']}"},
             )
 
-    old_price_value = float(db_product.price)
-    new_price_value = float(normalized_product.get("price", old_price_value))
-    if new_price_value != old_price_value:
-        price_history = PriceHistory(
-            product_id=db_product.id,
-            old_price=old_price_value,
-            new_price=new_price_value,
-            changed_by=current_user.id,
-        )
-        db.add(price_history)
     for key, value in normalized_product.items():
         setattr(db_product, key, value)
 
