@@ -325,7 +325,7 @@ export default function AdminProducts() {
                   <button type="button" className="text-sm font-semibold text-blue-600 dark:text-blue-300" onClick={() => setShowPriceHistory((prev) => !prev)}>
                     {showPriceHistory ? 'Сховати історію цін' : 'Показати історію цін'}
                   </button>
-                  {showPriceHistory ? <div className="mt-3"><PriceHistoryLog productId={editing} /></div> : null}
+                  {showPriceHistory ? <div className="mt-3"><PriceHistoryLog key={editing} productId={editing} /></div> : null}
                 </div>
               </div>
           ) : null}

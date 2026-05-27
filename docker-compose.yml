@@ -4,7 +4,6 @@ services:
     env_file:
       - ./server/.env
     environment:
-      # Важно: используйте значения, которые реально прописаны в вашем .env
       POSTGRES_USER: buildshop_user
       POSTGRES_PASSWORD: buildshop_password
       POSTGRES_DB: buildshop_db
@@ -21,8 +20,9 @@ services:
       context: ./server
     env_file:
       - ./server/.env
+    ports:
+        - "8001:8001"
     environment:
-      # ИСПРАВЛЕНО: меняем localhost на db
       - DATABASE_URL=postgresql+psycopg://buildshop_user:buildshop_password@db:5432/buildshop_db
     depends_on:
       db:
@@ -32,7 +32,6 @@ services:
     build:
       context: ./client
       args:
-        # Убедитесь, что в ./client/.env VITE_API_BASE_URL=https://onrender.com
         - VITE_API_BASE_URL=${VITE_API_BASE_URL}
         - VITE_IMGBB_API_KEY=${VITE_IMGBB_API_KEY}
     env_file:

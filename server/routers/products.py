@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from logging_config import get_logger
 from models import (
     Inventory,
+    PriceHistory,
     Product,
     ProductAttribute,
     ProductImage,
@@ -407,11 +408,13 @@ def update_product(
     old_price_value = float(db_product.price)
     new_price_value = float(normalized_product.get("price", old_price_value))
     if new_price_value != old_price_value:
-        if db.bind is not None and db.bind.dialect.name == "postgresql":
-            try:
-                db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": current_user.id})
-            except Exception as exc:
-                logger.warning("Could not set price history user context for product update: %s", exc)
+        price_history = PriceHistory(
+            product_id=db_product.id,
+            old_price=old_price_value,
+            new_price=new_price_value,
+            changed_by=current_user.id,
+        )
+        db.add(price_history)
     for key, value in normalized_product.items():
         setattr(db_product, key, value)
 

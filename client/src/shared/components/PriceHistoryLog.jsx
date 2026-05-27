@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useProductPriceHistory } from '../hooks/usePriceHistory';
 
 /**
@@ -8,6 +8,11 @@ export default function PriceHistoryLog({ productId }) {
   const [page, setPage] = useState(1);
   const { data, isLoading, isError } = useProductPriceHistory(productId, page);
   const items = data?.items || [];
+  const totalPages = useMemo(() => {
+    const total = Number(data?.total || 0);
+    const perPage = Number(data?.per_page || 20);
+    return Math.max(1, Math.ceil(total / Math.max(1, perPage)));
+  }, [data?.per_page, data?.total]);
 
   return (
     <div className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
@@ -45,9 +50,9 @@ export default function PriceHistoryLog({ productId }) {
       </div>
 
       <div className="mt-3 flex items-center justify-between text-sm">
-        <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} className="rounded-xl border border-slate-200 px-3 py-1 dark:border-white/10">Назад</button>
+        <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="rounded-xl border border-slate-200 px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10">Назад</button>
         <span>Сторінка {page}</span>
-        <button type="button" onClick={() => setPage((p) => p + 1)} className="rounded-xl border border-slate-200 px-3 py-1 dark:border-white/10">Далі</button>
+        <button type="button" disabled={page >= totalPages || items.length === 0} onClick={() => setPage((p) => p + 1)} className="rounded-xl border border-slate-200 px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10">Далі</button>
       </div>
     </div>
   );

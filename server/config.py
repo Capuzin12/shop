@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # Default includes localhost for dev, plus common deployment URLs
     # For production: set via CORS_ORIGINS env var (comma-separated)
     cors_origins: str = Field(
-        default='http://localhost:5173,https://shop-eight-lac.vercel.app,https://buildshop.vercel.app',
+        default='http://localhost,http://localhost:5173,https://shop-eight-lac.vercel.app,https://buildshop.vercel.app',
         validation_alias='CORS_ORIGINS',
     )
     # Optional: regex for dynamic origins (e.g., all Vercel preview URLs)
