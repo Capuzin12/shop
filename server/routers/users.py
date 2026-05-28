@@ -1,11 +1,11 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from models import CustomerGroup, User, UserRole
+from models import CustomerGroup, User, UserRole, Review
 from routers.deps import get_current_admin_user, get_db
 from schemas.auth import UserCreateRequest
 from security import limiter
@@ -13,7 +13,6 @@ from services.auth import get_password_hash, validate_password_strength
 from services.serializers import serialize_user_summary
 
 router = APIRouter(tags=["users"])
-
 
 @router.get("/api/users")
 def get_users(
@@ -94,8 +93,41 @@ def get_public_user_profile(user_id: int, db: Annotated[Session, Depends(get_db)
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail={"code": "USER_NOT_FOUND", "message": "Користувача не знайдено"})
-    return {"id": user.id, "first_name": user.first_name, "last_name": user.last_name, "role": user.role.value if hasattr(user.role, "value") else str(user.role)}
+    reviews_count = db.scalar(
+        select(func.count(Review.id))
+        .where(Review.user_id == user_id, Review.is_approved == True)
+    ) or 0
 
+    recent_reviews_db = db.scalars(
+        select(Review)
+        .where(Review.user_id == user_id, Review.is_approved == True)
+        .options(selectinload(Review.product))
+        .order_by(Review.created_at.desc())
+        .limit(5)
+    ).all()
+
+    recent_reviews = [
+        {
+            "id": r.id,
+            "rating": r.rating,
+            "comment": r.comment,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "product": {
+                "id": r.product.id if r.product else None,
+                "name": r.product.name if r.product else "Невідомий товар",
+            }
+        }
+        for r in recent_reviews_db
+    ]
+
+    return {
+        "id": user.id,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+        "reviews_count": reviews_count,
+        "recent_reviews": recent_reviews
+    }
 
 @router.patch("/api/users/{user_id}/customer-group")
 def assign_user_customer_group(

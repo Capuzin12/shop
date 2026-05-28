@@ -20,8 +20,8 @@ const STATUS_LABELS = {
 const ORDER_STATUS_FLOW = {
   new: ['processing', 'cancelled'],
   processing: ['shipped', 'cancelled'],
-  shipped: ['delivered', 'picked_up'],
-  delivered: ['refunded'],
+  shipped: ['delivered', 'picked_up', 'refunded'],
+  delivered: ['picked_up', 'refunded'],
   picked_up: ['refunded'],
   cancelled: [],
   refunded: [],

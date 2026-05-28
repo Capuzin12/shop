@@ -427,9 +427,10 @@ export default function Checkout() {
     try {
       setSubmitting(true);
       await api.post('/api/orders', payload);
-
       clearCart();
       localStorage.removeItem(GUEST_CHECKOUT_KEY);
+      window.dispatchEvent(new Event('buildshop:notifications-refresh'));
+
       navigate('/profile');
     } catch (error) {
       console.error('Error creating order:', error);

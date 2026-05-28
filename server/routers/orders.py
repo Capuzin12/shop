@@ -19,12 +19,11 @@ ORDER_STATUS_FLOW = {
     OrderStatus.new: {OrderStatus.processing, OrderStatus.cancelled},
     OrderStatus.processing: {OrderStatus.shipped, OrderStatus.cancelled},
     OrderStatus.shipped: {OrderStatus.delivered, OrderStatus.picked_up, OrderStatus.refunded},
-    OrderStatus.delivered: {OrderStatus.refunded},
+    OrderStatus.delivered: {OrderStatus.picked_up, OrderStatus.refunded},
     OrderStatus.picked_up: {OrderStatus.refunded},
     OrderStatus.cancelled: set(),
     OrderStatus.refunded: set(),
 }
-
 
 def _get_orders_fallback_rows(db: Session, current_user: User):
     orders_query = select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
@@ -181,9 +180,23 @@ def cancel_order(order_id: int, payload: dict | None, db: Annotated[Session, Dep
             order.admin_note = f"{order.admin_note + chr(10) if order.admin_note else ''}Скасовано клієнтом: {reason[:300]}"
         order.status = OrderStatus.cancelled
         restock_order_items(db, order, note_prefix="Скасування клієнтом")
+
+        # 1. Сповіщення для менеджерів та адміністраторів
         staff_users = db.scalars(select(User).where(User.role.in_([UserRole.admin, UserRole.sales_processor, UserRole.manager]), User.is_active == True)).all()
         for staff in staff_users:
             db.add(Notification(user_id=staff.id, type=NotificationType.order_status, title=f"Клієнт скасував замовлення #{order.id}", message=f"Замовлення #{order.id} скасовано клієнтом {current_user.first_name} {current_user.last_name}.", target_path="/manager?tab=orders", target_order_id=order.id))
+
+        # 2. ДОДАНО: Сповіщення для самого користувача
+        if order.user_id:
+            db.add(Notification(
+                user_id=order.user_id,
+                type=NotificationType.order_status,
+                title=f"Замовлення #{order.id} скасовано",
+                message=f"Ви успішно скасували своє замовлення #{order.id}.",
+                target_path="/profile",
+                target_order_id=order.id
+            ))
+
         db.commit()
         db.refresh(order)
         return serialize_order_summary(order)
@@ -236,4 +249,3 @@ def create_order_message(request: Request, order_id: int, payload: dict, db: Ann
         db.rollback()
         logger.error("Error creating order message", extra={"order_id": order_id, "error": str(error), "request_id": get_request_id()})
         raise
-
