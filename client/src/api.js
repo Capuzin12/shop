@@ -134,10 +134,6 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
 
-      if (requestUrl.includes('/api/me')) {
-        return Promise.reject(error);
-      }
-
        // Attempt transparent token refresh using HttpOnly refresh cookie
        try {
          if (!refreshInProgress) {
