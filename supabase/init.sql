@@ -317,6 +317,12 @@ CREATE TABLE public.inventory_movements (
   created_at      TIMESTAMP NOT NULL DEFAULT now()
 );
 
+CREATE INDEX inventory_movements_product_idx      ON public.inventory_movements (product_id);
+CREATE INDEX inventory_movements_created_at_idx   ON public.inventory_movements (created_at DESC);
+CREATE INDEX inventory_movements_type_idx         ON public.inventory_movements (type);
+CREATE INDEX inventory_movements_supply_order_idx ON public.inventory_movements (supply_order_id);
+CREATE INDEX inventory_movements_order_idx        ON public.inventory_movements (order_id);
+
 CREATE TABLE public.orders (
   id               SERIAL           PRIMARY KEY,
   user_id          INTEGER          REFERENCES public.users(id) ON DELETE SET NULL,

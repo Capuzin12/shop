@@ -16,7 +16,13 @@ export default function Notifications() {
     if (notification?.target_order_id) {
       return '/profile';
     }
-    if (notification?.target_inventory_id || notification?.target_product_id || notification?.type === 'low_stock' || notification?.type === 'supply_arrival') {
+    if (notification?.type === 'supply_arrival') {
+      if (canManageInventory) {
+        return '/manager?tab=stock-receiving';
+      }
+      return '/catalog';
+    }
+    if (notification?.target_inventory_id || notification?.target_product_id || notification?.type === 'low_stock') {
       if (canManageInventory) {
         return '/manager?tab=inventory';
       }
@@ -52,7 +58,8 @@ export default function Notifications() {
     const orderId = inferOrderIdFromNotification(notification);
     if (isOrderContext && orderId) return isStaff ? `Відкрити чат замовлення #${orderId}` : `Відкрити замовлення #${orderId}`;
     if (isOrderContext) return isStaff ? 'Відкрити чат замовлення' : 'Відкрити замовлення';
-    if (notification?.target_inventory_id || notification?.type === 'low_stock' || notification?.type === 'supply_arrival') return 'Перейти до складу';
+    if (notification?.type === 'supply_arrival') return 'Відкрити прийом товарів';
+    if (notification?.target_inventory_id || notification?.type === 'low_stock') return 'Перейти до складу';
     if (notification?.target_product_id) return 'Відкрити картку товару';
     return 'Відкрити деталі';
   };
@@ -61,7 +68,10 @@ export default function Notifications() {
     if (isOrderContextNotification(notification)) {
       return 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300';
     }
-    if (notification?.target_inventory_id || notification?.type === 'low_stock' || notification?.type === 'supply_arrival') {
+    if (notification?.type === 'supply_arrival') {
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300';
+    }
+    if (notification?.target_inventory_id || notification?.type === 'low_stock') {
       return 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300';
     }
     if (notification?.target_product_id) {

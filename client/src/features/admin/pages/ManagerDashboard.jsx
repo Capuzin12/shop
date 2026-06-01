@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/hooks/useAuth';
 import { BackofficeShell, FilterButton, Panel, StatCard } from '../components/BackofficeUI';
+import AdminStockReceiving from './AdminStockReceiving';
 import ManagerInventory from './ManagerInventory';
 import ManagerOrders from './ManagerOrders';
 import ManagerProducts from './ManagerProducts';
@@ -24,6 +25,7 @@ export default function ManagerDashboard() {
   const canManageOrders = ['admin', 'manager', 'sales_processor'].includes(user?.role);
   const canManageInventory = ['admin', 'manager', 'warehouse_manager'].includes(user?.role);
   const canManageProducts = ['admin', 'manager', 'warehouse_manager'].includes(user?.role);
+  const canManageReceiving = canManageInventory;
   const roleLabel = getRoleLabel(user?.role);
 
   const fetchStats = useCallback(async () => {
@@ -67,6 +69,7 @@ export default function ManagerDashboard() {
     canManageOrders ? { id: 'orders', label: 'Замовлення' } : null,
     canManageProducts ? { id: 'products', label: 'Товари' } : null,
     canManageInventory ? { id: 'inventory', label: 'Склад' } : null,
+    canManageReceiving ? { id: 'stock-receiving', label: 'Прийом товарів' } : null,
   ].filter(Boolean);
 
   const activeTab = tabFromQuery || preferredTab;
@@ -123,6 +126,7 @@ export default function ManagerDashboard() {
         {currentTab === 'orders' && canManageOrders && <ManagerOrders onUpdate={fetchStats} />}
         {currentTab === 'products' && canManageProducts && <ManagerProducts />}
         {currentTab === 'inventory' && canManageInventory && <ManagerInventory onUpdate={fetchStats} />}
+        {currentTab === 'stock-receiving' && canManageReceiving && <AdminStockReceiving onUpdate={fetchStats} />}
       </Panel>
     </BackofficeShell>
   );

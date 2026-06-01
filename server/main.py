@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from config import settings, validate_settings
 from logging_config import configure_logging, get_logger
-from routers import admin, auth, brands, cart, categories, inventory, notifications, orders, password_reset, products, promo, search, stats, suppliers, supply, users, wishlist
+from routers import admin, auth, brands, cart, categories, inventory, notifications, orders, password_reset, products, promo, search, stats, suppliers, supply, users, wishlist, analytics
 from security import add_request_id_middleware, add_security_headers_middleware, add_timing_middleware, custom_rate_limit_handler, limiter
 
 validate_settings()
@@ -47,5 +47,5 @@ logger.info("CORS origins: %s", settings.get_cors_origins())
 if settings.cors_origin_regex:
     logger.info("CORS origin regex: %s", settings.cors_origin_regex)
 
-for router_module in [auth, password_reset, users, products, categories, brands, suppliers, inventory, orders, cart, wishlist, promo, notifications, admin, supply, search, stats]:
+for router_module in [auth, password_reset, users, products, categories, brands, suppliers, inventory, orders, cart, wishlist, promo, notifications, admin, supply, search, stats, analytics]:
     app.include_router(router_module.router)

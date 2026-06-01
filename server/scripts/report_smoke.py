@@ -9,7 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from database import SessionLocal
-from reporting import build_admin_report_pdf, build_admin_report_xlsx, collect_admin_report_data
+from services.reporting import build_admin_report_pdf, build_admin_report_xlsx, collect_admin_report_data
 
 
 def parse_args() -> argparse.Namespace:

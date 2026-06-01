@@ -5,7 +5,7 @@ Configuration management for BuildShop API using Pydantic Settings
 import base64
 from typing import Optional, List
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator, ValidationInfo
+from pydantic import Field, field_validator, model_validator, ValidationInfo
 import re
 import textwrap
 
@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     jwt_access_ttl_min: int = Field(default=30, validation_alias='JWT_ACCESS_TTL_MIN')
     jwt_refresh_ttl_min: int = Field(default=1440, validation_alias='JWT_REFRESH_TTL_MIN')  # 24 hours
     auth_cookie_name: str = Field(default='access_token', validation_alias='AUTH_COOKIE_NAME')
+    refresh_cookie_name: str = Field(default='refresh_token', validation_alias='REFRESH_COOKIE_NAME')
     auth_cookie_samesite: str = Field(default='lax', validation_alias='AUTH_COOKIE_SAMESITE')
     auth_cookie_secure: bool = Field(default=True, validation_alias='AUTH_COOKIE_SECURE')  # HTTPS only
     # For RS* algorithms provide PEM keys as environment variables (raw PEM text)
@@ -104,6 +105,15 @@ class Settings(BaseSettings):
             # We cannot access instance values here, so just allow but runtime will validate
             pass
         return v
+
+    @model_validator(mode='after')
+    def keep_auth_cookies_distinct(self):
+        if self.auth_cookie_name == self.refresh_cookie_name:
+            if self.auth_cookie_name == 'refresh_token':
+                self.auth_cookie_name = 'access_token'
+            else:
+                self.refresh_cookie_name = 'refresh_token'
+        return self
 
     @field_validator('auth_cookie_samesite')
     def validate_auth_cookie_samesite(cls, v, info: ValidationInfo):

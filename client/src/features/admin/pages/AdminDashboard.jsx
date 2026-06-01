@@ -1,5 +1,5 @@
 import api from '../../../api';
-import { BadgePercent, Boxes, FileDown, LayoutGrid, PackageCheck, Shield, TriangleAlert, Users } from 'lucide-react';
+import { BadgePercent, Boxes, FileDown, LayoutGrid, PackageCheck, Shield, TriangleAlert, Users, BarChart2, PackagePlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { BackofficeShell, Panel, StatCard } from '../components/BackofficeUI';
@@ -13,6 +13,8 @@ import AdminCustomerGroups from './AdminCustomerGroups';
 import AdminPriceHistory from './AdminPriceHistory';
 import AdminSuppliers from './AdminSuppliers';
 import AdminUsers from './AdminUsers';
+import AdminAnalytics from './AdminAnalytics';
+import AdminStockReceiving from './AdminStockReceiving';
 import { useAuth } from '../../auth/hooks/useAuth';
 import { getRoleLabel, isStaffRole } from '../../../shared/utils/roles';
 
@@ -28,6 +30,8 @@ const navItems = {
     { to: '/admin/customer-groups', label: 'Групи клієнтів', icon: Users },
     { to: '/admin/price-history', label: 'Історія цін', icon: BadgePercent },
     { to: '/admin/inventory', label: 'Склад', icon: Shield },
+    { to: '/admin/stock-receiving', label: 'Прийом товарів', icon: PackagePlus },
+    { to: '/admin/analytics', label: 'Аналітика', icon: BarChart2 },
   ],
   content_manager: [
     { to: '/admin/products', label: 'Товари', icon: Boxes },
@@ -38,9 +42,11 @@ const navItems = {
     { to: '/admin/categories', label: 'Категорії', icon: LayoutGrid },
     { to: '/admin/orders', label: 'Замовлення', icon: PackageCheck },
     { to: '/admin/inventory', label: 'Склад', icon: Shield },
+    { to: '/admin/stock-receiving', label: 'Прийом товарів', icon: PackagePlus },
   ],
   warehouse_manager: [
     { to: '/admin/inventory', label: 'Склад', icon: Shield },
+    { to: '/admin/stock-receiving', label: 'Прийом товарів', icon: PackagePlus },
   ],
   sales_processor: [
     { to: '/admin/orders', label: 'Замовлення', icon: PackageCheck },
@@ -284,6 +290,8 @@ export default function AdminDashboard() {
         {availableNavItems.some((item) => item.to === '/admin/customer-groups') && <Route path="customer-groups" element={<AdminCustomerGroups />} />}
         {availableNavItems.some((item) => item.to === '/admin/price-history') && <Route path="price-history" element={<AdminPriceHistory />} />}
         {availableNavItems.some((item) => item.to === '/admin/inventory') && <Route path="inventory" element={<AdminInventory />} />}
+        {availableNavItems.some((item) => item.to === '/admin/analytics') && <Route path="analytics" element={<AdminAnalytics />} />}
+        {availableNavItems.some((item) => item.to === '/admin/stock-receiving') && <Route path="stock-receiving" element={<AdminStockReceiving />} />}
         {firstSectionPath ? <Route path="*" element={<Navigate to={firstSectionPath.replace('/admin/', '')} replace />} /> : null}
       </Routes>
     </BackofficeShell>

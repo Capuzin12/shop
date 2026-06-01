@@ -47,9 +47,20 @@ async def login_for_access_token(
 
     # Create refresh token and store hash server-side; send raw refresh token in HttpOnly cookie
     raw_refresh, rt_row = create_refresh_token(db, user, ip=request.client.host if request.client else None, device=request.headers.get("User-Agent"))
+    access_max_age = int(access_token_expires.total_seconds())
     refresh_max_age = int(timedelta(minutes=settings.jwt_refresh_ttl_min).total_seconds())
     response.set_cookie(
         key=settings.auth_cookie_name,
+        value=access_token,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite=settings.auth_cookie_samesite,
+        max_age=access_max_age,
+        path="/",
+        domain=None,
+    )
+    response.set_cookie(
+        key=settings.refresh_cookie_name,
         value=raw_refresh,
         httponly=True,
         secure=settings.auth_cookie_secure,
@@ -65,13 +76,14 @@ async def login_for_access_token(
 @router.post("/api/logout")
 def logout(request: Request, response: Response, db: Annotated[Session, Depends(get_db)]):
     # Revoke refresh token if present
-    raw = request.cookies.get(settings.auth_cookie_name)
+    raw = request.cookies.get(settings.refresh_cookie_name)
     if raw:
         try:
             revoke_refresh_token_by_raw(db, raw)
         except Exception:  #nosec B110
             pass
     response.delete_cookie(key=settings.auth_cookie_name, path="/")
+    response.delete_cookie(key=settings.refresh_cookie_name, path="/")
     return {"ok": True}
 
 
@@ -79,7 +91,7 @@ def logout(request: Request, response: Response, db: Annotated[Session, Depends(
 @limiter.limit("10/minute")
 def refresh_access_token(request: Request, response: Response, db: Annotated[Session, Depends(get_db)]):
     """Rotate refresh token and issue new access token. """
-    raw = request.cookies.get(settings.auth_cookie_name)
+    raw = request.cookies.get(settings.refresh_cookie_name)
     if not raw:
         raise HTTPException(status_code=401, detail="Missing refresh token")
 
@@ -111,10 +123,26 @@ def refresh_access_token(request: Request, response: Response, db: Annotated[Ses
 
     raw_new, new_row = create_refresh_token(db, user, ip=request.client.host if request.client else None, device=request.headers.get("User-Agent"))
 
-    # set new cookie
+    # issue new access token
+    access_token_expires = timedelta(minutes=settings.jwt_access_ttl_min)
+    access_token = create_access_token(
+        data={"sub": user.email, "role": user.role.value if hasattr(user.role, "value") else str(user.role)},
+        expires_delta=access_token_expires,
+    )
+    access_max_age = int(access_token_expires.total_seconds())
     refresh_max_age = int(timedelta(minutes=settings.jwt_refresh_ttl_min).total_seconds())
     response.set_cookie(
         key=settings.auth_cookie_name,
+        value=access_token,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite=settings.auth_cookie_samesite,
+        max_age=access_max_age,
+        path="/",
+        domain=None,
+    )
+    response.set_cookie(
+        key=settings.refresh_cookie_name,
         value=raw_new,
         httponly=True,
         secure=settings.auth_cookie_secure,
@@ -122,13 +150,6 @@ def refresh_access_token(request: Request, response: Response, db: Annotated[Ses
         max_age=refresh_max_age,
         path="/",
         domain=None,
-    )
-
-    # issue new access token
-    access_token_expires = timedelta(minutes=settings.jwt_access_ttl_min)
-    access_token = create_access_token(
-        data={"sub": user.email, "role": user.role.value if hasattr(user.role, "value") else str(user.role)},
-        expires_delta=access_token_expires,
     )
     return {"access_token": access_token, "token_type": "bearer"}  #nosec B105
 
