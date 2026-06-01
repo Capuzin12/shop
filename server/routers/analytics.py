@@ -76,31 +76,61 @@ def analytics_overview(db: Annotated[Session, Depends(get_db)], current_user=Dep
     current_start, current_end = _month_window(now, 0)
     previous_start, previous_end = _month_window(now, -1)
 
-    def month_sum(table: str, column: str, start: date, end: date, where_sql: str = "1=1") -> float:
-        return float(db.scalar(text(f"SELECT COALESCE(SUM({column}),0) FROM {table} WHERE {where_sql} AND DATE(created_at) BETWEEN :start_date AND :end_date"), {"start_date": start.isoformat(), "end_date": end.isoformat()}) or 0)
+    def month_orders_total(start: date, end: date, fulfilled_only: bool = False) -> float:
+        if fulfilled_only:
+            statement = text("""
+                SELECT COALESCE(SUM(total), 0)
+                FROM orders
+                WHERE status IN ('delivered', 'picked_up') AND DATE(created_at) BETWEEN :start_date AND :end_date
+            """)
+        else:
+            statement = text("""
+                SELECT COALESCE(SUM(total), 0)
+                FROM orders
+                WHERE DATE(created_at) BETWEEN :start_date AND :end_date
+            """)
+        return float(db.scalar(statement, {"start_date": start.isoformat(), "end_date": end.isoformat()}) or 0)
 
-    def month_count(table: str, start: date, end: date, where_sql: str = "1=1") -> int:
-        return int(db.scalar(text(f"SELECT COUNT(*) FROM {table} WHERE {where_sql} AND DATE(created_at) BETWEEN :start_date AND :end_date"), {"start_date": start.isoformat(), "end_date": end.isoformat()}) or 0)
+    def month_orders_count(start: date, end: date, fulfilled_only: bool = False) -> int:
+        if fulfilled_only:
+            statement = text("""
+                SELECT COUNT(*)
+                FROM orders
+                WHERE status IN ('delivered', 'picked_up') AND DATE(created_at) BETWEEN :start_date AND :end_date
+            """)
+        else:
+            statement = text("""
+                SELECT COUNT(*)
+                FROM orders
+                WHERE DATE(created_at) BETWEEN :start_date AND :end_date
+            """)
+        return int(db.scalar(statement, {"start_date": start.isoformat(), "end_date": end.isoformat()}) or 0)
 
-    fulfilled_where = "status IN ('delivered','picked_up')"
+    def month_users_count(start: date, end: date) -> int:
+        statement = text("""
+            SELECT COUNT(*)
+            FROM users
+            WHERE DATE(created_at) BETWEEN :start_date AND :end_date
+        """)
+        return int(db.scalar(statement, {"start_date": start.isoformat(), "end_date": end.isoformat()}) or 0)
 
     # Revenue totals
     total_revenue = db.scalar(text("SELECT COALESCE(SUM(total),0) FROM orders")) or 0
     paid_revenue = db.scalar(text("SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ('delivered','picked_up')")) or 0
-    current_month_revenue = month_sum("orders", "total", current_start, current_end, fulfilled_where)
-    previous_month_revenue = month_sum("orders", "total", previous_start, previous_end, fulfilled_where)
+    current_month_revenue = month_orders_total(current_start, current_end, fulfilled_only=True)
+    previous_month_revenue = month_orders_total(previous_start, previous_end, fulfilled_only=True)
     growth_percent = _ratio(current_month_revenue - previous_month_revenue, previous_month_revenue) if previous_month_revenue else 0.0
 
     # Orders
     orders_total = db.scalar(text("SELECT COUNT(*) FROM orders")) or 0
-    orders_this_month = month_count("orders", current_start, current_end)
-    orders_last_month = month_count("orders", previous_start, previous_end)
+    orders_this_month = month_orders_count(current_start, current_end)
+    orders_last_month = month_orders_count(previous_start, previous_end)
     avg_order_value = db.scalar(text("SELECT COALESCE(AVG(total),0) FROM orders")) or 0
     current_avg_order_value = current_month_revenue / orders_this_month if orders_this_month else 0.0
     previous_avg_order_value = previous_month_revenue / orders_last_month if orders_last_month else 0.0
     conversion_rate = _ratio(db.scalar(text("SELECT COUNT(*) FROM orders WHERE status IN ('delivered','picked_up')")) or 0, orders_total)
-    current_conversion_rate = _ratio(month_count("orders", current_start, current_end, fulfilled_where), orders_this_month)
-    previous_conversion_rate = _ratio(month_count("orders", previous_start, previous_end, fulfilled_where), orders_last_month)
+    current_conversion_rate = _ratio(month_orders_count(current_start, current_end, fulfilled_only=True), orders_this_month)
+    previous_conversion_rate = _ratio(month_orders_count(previous_start, previous_end, fulfilled_only=True), orders_last_month)
 
     status_rows = db.execute(text("SELECT COALESCE(status,'new') as status, COUNT(*) as count FROM orders GROUP BY COALESCE(status,'new')")).mappings().all()
     by_status = {row['status']: int(row['count']) for row in status_rows}
@@ -113,8 +143,8 @@ def analytics_overview(db: Annotated[Session, Depends(get_db)], current_user=Dep
 
     # Users
     users_total = db.scalar(text("SELECT COUNT(*) FROM users")) or 0
-    new_this_month = month_count("users", current_start, current_end)
-    new_last_month = month_count("users", previous_start, previous_end)
+    new_this_month = month_users_count(current_start, current_end)
+    new_last_month = month_users_count(previous_start, previous_end)
     user_growth = _ratio(new_this_month - new_last_month, new_last_month) if new_last_month else 0.0
 
     comparison = {
@@ -122,7 +152,7 @@ def analytics_overview(db: Annotated[Session, Depends(get_db)], current_user=Dep
             "label": current_start.strftime("%m.%Y"),
             "revenue": float(current_month_revenue),
             "orders": int(orders_this_month),
-            "fulfilled_orders": int(month_count("orders", current_start, current_end, fulfilled_where)),
+            "fulfilled_orders": int(month_orders_count(current_start, current_end, fulfilled_only=True)),
             "avg_order_value": float(current_avg_order_value),
             "conversion_rate": float(current_conversion_rate),
             "new_users": int(new_this_month),
@@ -131,7 +161,7 @@ def analytics_overview(db: Annotated[Session, Depends(get_db)], current_user=Dep
             "label": previous_start.strftime("%m.%Y"),
             "revenue": float(previous_month_revenue),
             "orders": int(orders_last_month),
-            "fulfilled_orders": int(month_count("orders", previous_start, previous_end, fulfilled_where)),
+            "fulfilled_orders": int(month_orders_count(previous_start, previous_end, fulfilled_only=True)),
             "avg_order_value": float(previous_avg_order_value),
             "conversion_rate": float(previous_conversion_rate),
             "new_users": int(new_last_month),
@@ -325,7 +355,7 @@ def top_products(limit: int = 10, period: str = '30d', db: Annotated[Session, De
             days = 30
     date_expr = _date_filter_sql(days, settings.database_url)
     # PostgreSQL/SQLite compatible query using DATE(created_at)
-    stmt = text(f"""
+    stmt = text("""
         SELECT p.id AS product_id, p.name AS product_name, p.sku, SUM(oi.quantity) AS total_sold_qty,
                SUM(oi.quantity * oi.unit_price) AS total_revenue, COUNT(DISTINCT o.id) AS orders_count
         FROM order_items oi
@@ -362,7 +392,7 @@ def top_categories(limit: int = 10, period: str = '30d', db: Annotated[Session, 
         except Exception:
             days = 30
     since = (datetime.utcnow() - timedelta(days=days)).date().isoformat()
-    stmt = text(f"""
+    stmt = text("""
         SELECT c.id AS category_id, c.name AS category_name, SUM(oi.quantity) AS total_sold_qty,
                SUM(oi.quantity * oi.unit_price) AS total_revenue, COUNT(DISTINCT o.id) AS orders_count
         FROM order_items oi

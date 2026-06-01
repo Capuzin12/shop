@@ -208,15 +208,15 @@ def collect_admin_report_data(db: Session) -> dict[str, Any]:
         FROM orders
         WHERE DATE(created_at) BETWEEN :start_date AND :end_date
     """), 0, {"start_date": previous_start_date, "end_date": previous_end_date})
-    current_month_fulfilled = _scalar_or_default(db, text(f"""
+    current_month_fulfilled = _scalar_or_default(db, text("""
         SELECT COUNT(*)
         FROM orders
-        WHERE {fulfilled_where} AND DATE(created_at) BETWEEN :start_date AND :end_date
+        WHERE status IN ('delivered', 'picked_up') AND DATE(created_at) BETWEEN :start_date AND :end_date
     """), 0, {"start_date": current_start_date, "end_date": current_end_date})
-    previous_month_fulfilled = _scalar_or_default(db, text(f"""
+    previous_month_fulfilled = _scalar_or_default(db, text("""
         SELECT COUNT(*)
         FROM orders
-        WHERE {fulfilled_where} AND DATE(created_at) BETWEEN :start_date AND :end_date
+        WHERE status IN ('delivered', 'picked_up') AND DATE(created_at) BETWEEN :start_date AND :end_date
     """), 0, {"start_date": previous_start_date, "end_date": previous_end_date})
     current_month_users = _scalar_or_default(db, text("""
         SELECT COUNT(*)
