@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 import traceback
 from typing import Any
-from xml.sax.saxutils import escape
+from html import escape
 
 from config import settings
 from openpyxl import Workbook
@@ -528,7 +528,7 @@ def _build_admin_report_pdf_internal(data: dict[str, Any]) -> bytes:
     status_rows_data = data.get("status_counts", [])
     if status_rows_data:
         max_cnt = max((int(r.get("count", 0)) for r in status_rows_data), default=1)
-        sr = [[p("Статус", sTHL), p("Кількість", sTHC if 'sTHC' in locals() else sTH), p("Графік", sTHL)]]
+        sr = [[p("Статус", sTHL), p("Кількість", sTH), p("Графік", sTHL)]]
 
         sorted_status = sorted(status_rows_data, key=lambda x: int(x.get("count", 0)), reverse=True)
 
