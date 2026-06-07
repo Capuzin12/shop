@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Bell, Heart, LogOut, Menu, Moon, Search, ShoppingCart, SunMedium, User, X } from 'lucide-react';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect} from 'react';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { useCart } from '../../features/cart/context/CartContext';
 import { useTheme } from '../context/ThemeContext';
@@ -21,7 +21,7 @@ const Badge = ({ count, tone = 'accent' }) => {
   );
 };
 
-function SearchDropdown({ query, onSelect, onClose }) {
+function SearchDropdown({ query, onSelect}) {
   const [suggestions, setSuggestions] = useState({ products: [], categories: [], brands: [] });
   const [loading, setLoading] = useState(false);
   const timerRef = useRef(null);
