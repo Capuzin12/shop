@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
-from models import Brand, Category, Inventory, Product
+from models import Brand, Category, Inventory, Product, ProductImage
 from routers.deps import get_db
 from services.search import rank_fuzzy_products
 
@@ -62,10 +62,23 @@ def search_suggestions(q: str, db: Annotated[Session, Depends(get_db)]):
             category_conditions.append(Category.name.ilike(f"%{term}%"))
             brand_conditions.append(Brand.name.ilike(f"%{term}%"))
 
-    products_query = select(Product).where(Product.is_active == True)
+    main_image_sq = (
+        select(ProductImage.product_id, ProductImage.url)
+        .where(ProductImage.is_main == True)
+        .distinct(ProductImage.product_id)
+        .subquery()
+    )
+
+    products_query = (
+        select(Product, main_image_sq.c.url.label("image_url"))
+        .where(Product.is_active == True)
+        .outerjoin(Brand, Product.brand_id == Brand.id)
+        .outerjoin(Category, Product.category_id == Category.id)
+        .outerjoin(main_image_sq, Product.id == main_image_sq.c.product_id)
+    )
+
     if product_conditions:
         products_query = products_query.where(and_(*product_conditions))
-    products_query = products_query.outerjoin(Brand, Product.brand_id == Brand.id).outerjoin(Category, Product.category_id == Category.id)
 
     categories_query = select(Category).where(Category.is_active == True)
     if category_conditions:
@@ -75,13 +88,18 @@ def search_suggestions(q: str, db: Annotated[Session, Depends(get_db)]):
     if brand_conditions:
         brands_query = brands_query.where(and_(*brand_conditions))
 
-    products = db.scalars(
+    search_mode = "strict"
+    image_url_map = {}
+
+    rows = db.execute(
         products_query
         .order_by(Product.is_featured.desc(), Product.name.asc())
         .limit(8)
     ).all()
 
-    search_mode = "strict"
+    products = [row[0] for row in rows]
+    image_url_map = {row[0].id: row[1] for row in rows}
+
     if not products:
         fallback_candidates = db.scalars(
             select(Product)
@@ -93,6 +111,13 @@ def search_suggestions(q: str, db: Annotated[Session, Depends(get_db)]):
         ranked_products = cast(list[tuple[Product, float]], list(rank_fuzzy_products(query, fallback_candidates, limit=8)))
         products = [item[0] for item in ranked_products]
         search_mode = "fuzzy"
+
+        fuzzy_ids = [p.id for p in products]
+        fuzzy_images = db.execute(
+            select(ProductImage.product_id, ProductImage.url)
+            .where(ProductImage.product_id.in_(fuzzy_ids), ProductImage.is_main == True)
+        ).all()
+        image_url_map = {row[0]: row[1] for row in fuzzy_images}
 
     product_ids = [product.id for product in products]
     stock_map = {
@@ -127,6 +152,7 @@ def search_suggestions(q: str, db: Annotated[Session, Depends(get_db)]):
                 "quantity": stock_map.get(product.id, 0),
                 "brand_name": product.brand.name if product.brand else None,
                 "category_name": product.category.name if product.category else None,
+                "image_url": image_url_map.get(product.id),
             }
             for product in products
         ],
@@ -148,4 +174,3 @@ def search_suggestions(q: str, db: Annotated[Session, Depends(get_db)]):
         ],
         "search_mode": search_mode,
     }
-

@@ -42,7 +42,6 @@ app.middleware("http")(add_request_id_middleware)
 app.middleware("http")(add_security_headers_middleware)
 app.middleware("http")(add_timing_middleware)
 
-# Log configured CORS origins on startup for easier debugging in deployment
 logger.info("CORS origins: %s", settings.get_cors_origins())
 if settings.cors_origin_regex:
     logger.info("CORS origin regex: %s", settings.cors_origin_regex)
