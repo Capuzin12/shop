@@ -44,7 +44,7 @@ function SearchDropdown({ query, onSelect, onClose }) {
       } finally {
         setLoading(false);
       }
-    }, 180);
+    }, 600);
 
     return () => clearTimeout(timerRef.current);
   }, [query]);
@@ -78,7 +78,12 @@ function SearchDropdown({ query, onSelect, onClose }) {
                             className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-amber-50 dark:hover:bg-amber-500/10"
                         >
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-500 dark:bg-white/10 dark:text-slate-400">
-                            {item.sku ? item.sku.slice(0, 2).toUpperCase() : '##'}
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 overflow-hidden dark:bg-white/10">
+                              {item.image_url
+                                  ? <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
+                                  : <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{item.sku ? item.sku.slice(0, 2).toUpperCase() : '##'}</span>
+                              }
+                            </div>
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{item.name}</p>
