@@ -1,3 +1,5 @@
+import { useRef, useEffect } from 'react';
+import { Search, X, SlidersHorizontal } from 'lucide-react';
 import Feature from '../../../shared/components/Feature';
 import { mapZodErrors, productFilterSchema } from '../../../shared/utils/validation';
 import { useCart } from '../../cart/context/CartContext';
@@ -10,6 +12,188 @@ const CARD_VIEW_OPTIONS = {
   comfortable: { label: 'Комфортно', minWidth: 280, cardPadding: 'p-5', previewPadding: 'p-6', titleClass: 'text-2xl', detailsMinHeight: 'min-h-[120px]', cardImageHeight: '200px' },
   spacious: { label: 'Великий вигляд', minWidth: 340, cardPadding: 'p-6', previewPadding: 'p-7', titleClass: 'text-3xl', detailsMinHeight: 'min-h-[136px]', cardImageHeight: '260px' },
 };
+
+function CatalogSearchBar({ value, onChange, suggestions, searchParams, setSearchParams, categories }) {
+  const [open, setOpen] = useRef(false).current !== undefined
+      ? [false, () => {}]
+      : [false, () => {}];
+
+  const wrapperRef = useRef(null);
+  const [isOpen, setIsOpen] = useStateful(false);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [setIsOpen]);
+
+  const hasSuggestions = suggestions.products.length > 0 || suggestions.categories.length > 0 || suggestions.brands.length > 0;
+  const showDropdown = isOpen && value.trim().length >= 1;
+
+  const applySearch = (q) => {
+    const next = new URLSearchParams(searchParams);
+    if (q) next.set('search', q);
+    else next.delete('search');
+    next.delete('page');
+    setSearchParams(next);
+    setIsOpen(false);
+  };
+
+  const applyCategory = (id) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('category_id', id);
+    next.delete('page');
+    setSearchParams(next);
+    setIsOpen(false);
+  };
+
+  const applyBrand = (name) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('search', name);
+    next.delete('page');
+    setSearchParams(next);
+    setIsOpen(false);
+  };
+
+  return (
+      <div ref={wrapperRef} className="relative">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+              type="text"
+              name="search"
+              value={value}
+              onChange={(e) => {
+                onChange(e);
+                setIsOpen(true);
+              }}
+              onFocus={() => setIsOpen(true)}
+              placeholder="Наприклад, цемент або Bosch"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pl-11 text-sm text-slate-900 outline-none transition focus:border-amber-300 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+          />
+          {value ? (
+              <button
+                  type="button"
+                  onClick={() => {
+                    onChange({ target: { name: 'search', value: '' } });
+                    setIsOpen(false);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+          ) : null}
+        </div>
+
+        {showDropdown && (
+            <div className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-2xl border border-white/60 bg-white shadow-2xl shadow-slate-900/15 dark:border-white/10 dark:bg-slate-900">
+              {!hasSuggestions ? (
+                  <div className="px-4 py-3 text-sm text-slate-400 dark:text-slate-500">
+                    Нічого не знайдено для «{value}»
+                  </div>
+              ) : (
+                  <div className="max-h-80 overflow-y-auto">
+                    {suggestions.products.length > 0 && (
+                        <div>
+                          <p className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
+                            Товари
+                          </p>
+                          {suggestions.products.slice(0, 6).map((item) => (
+                              <button
+                                  key={`cp-${item.id}`}
+                                  type="button"
+                                  onClick={() => applySearch(item.name)}
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-amber-50 dark:hover:bg-amber-500/10"
+                              >
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-[10px] font-bold text-slate-500 dark:bg-white/10 dark:text-slate-400">
+                                  {item.sku ? item.sku.slice(0, 2).toUpperCase() : '##'}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{item.name}</p>
+                                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                                    {item.sku}
+                                    {item.brand_name ? ` · ${item.brand_name}` : ''}
+                                    {typeof item.quantity === 'number'
+                                        ? ` · ${item.quantity > 0 ? `${item.quantity} на складі` : 'немає'}`
+                                        : ''}
+                                  </p>
+                                </div>
+                                {item.price ? (
+                                    <span className="shrink-0 text-sm font-semibold text-amber-600 dark:text-amber-300">
+                          {new Intl.NumberFormat('uk-UA', { style: 'currency', currency: 'UAH', maximumFractionDigits: 0 }).format(item.price)}
+                        </span>
+                                ) : null}
+                              </button>
+                          ))}
+                        </div>
+                    )}
+
+                    {(suggestions.categories.length > 0 || suggestions.brands.length > 0) && (
+                        <div className="border-t border-slate-100 px-4 pt-2 pb-3 dark:border-white/5">
+                          {suggestions.categories.length > 0 && (
+                              <>
+                                <p className="pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">Категорії</p>
+                                <div className="flex flex-wrap gap-1.5 pb-2">
+                                  {suggestions.categories.slice(0, 4).map((item) => (
+                                      <button
+                                          key={`cc-${item.id}`}
+                                          type="button"
+                                          onClick={() => applyCategory(item.id)}
+                                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:border-amber-400/30 dark:hover:text-amber-200"
+                                      >
+                                        {item.name}
+                                      </button>
+                                  ))}
+                                </div>
+                              </>
+                          )}
+                          {suggestions.brands.length > 0 && (
+                              <>
+                                <p className="pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">Бренди</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {suggestions.brands.slice(0, 4).map((item) => (
+                                      <button
+                                          key={`cb-${item.id}`}
+                                          type="button"
+                                          onClick={() => applyBrand(item.name)}
+                                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:border-amber-400/30 dark:hover:text-amber-200"
+                                      >
+                                        {item.name}
+                                      </button>
+                                  ))}
+                                </div>
+                              </>
+                          )}
+                        </div>
+                    )}
+
+                    <div className="border-t border-slate-100 px-4 py-2 dark:border-white/5">
+                      <button
+                          type="button"
+                          onClick={() => applySearch(value)}
+                          className="flex items-center gap-2 text-xs text-slate-400 transition hover:text-amber-700 dark:hover:text-amber-300"
+                      >
+                        <Search className="h-3.5 w-3.5" />
+                        Показати всі результати для «{value}»
+                      </button>
+                    </div>
+                  </div>
+              )}
+            </div>
+        )}
+      </div>
+  );
+}
+
+function useStateful(initial) {
+  // eslint-disable-next-line no-undef
+  const { useState } = require('react');
+  return useState(initial);
+}
 
 export default function Catalog() {
   const {
@@ -41,16 +225,11 @@ export default function Catalog() {
       const firstError = Object.values(mapped)[0];
       if (firstError) {
         window.dispatchEvent(new CustomEvent('buildshop:toast', {
-          detail: {
-            title: 'Некоректний фільтр',
-            message: firstError,
-            level: 'warning',
-          },
+          detail: { title: 'Некоректний фільтр', message: firstError, level: 'warning' },
         }));
       }
       return;
     }
-
     const nextParams = new URLSearchParams(searchParams);
     if (value) nextParams.set(name, value);
     else nextParams.delete(name);
@@ -58,14 +237,15 @@ export default function Catalog() {
     setSearchParams(nextParams);
   };
 
-  const selectedBrandIds = filters.brand_ids ? filters.brand_ids.split(',').map((value) => value.trim()).filter(Boolean) : [];
+  const selectedBrandIds = filters.brand_ids
+      ? filters.brand_ids.split(',').map((v) => v.trim()).filter(Boolean)
+      : [];
 
   const toggleBrandFilter = (brandId) => {
     const id = String(brandId);
     const current = new Set(selectedBrandIds);
     if (current.has(id)) current.delete(id);
     else current.add(id);
-
     const nextParams = new URLSearchParams(searchParams);
     const value = Array.from(current).join(',');
     if (value) nextParams.set('brand_ids', value);
@@ -88,25 +268,15 @@ export default function Catalog() {
     setSearchParams(nextParams);
   };
 
-  // Додана функція скидання фільтрів
   const handleResetFilters = () => {
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('category_id');
-    nextParams.delete('search');
-    nextParams.delete('brand_ids');
-    nextParams.delete('min_price');
-    nextParams.delete('max_price');
-    nextParams.delete('sort_by');
-    nextParams.delete('sort_order');
-    nextParams.delete('page');
+    ['category_id', 'search', 'brand_ids', 'min_price', 'max_price', 'sort_by', 'sort_order', 'page'].forEach((k) => nextParams.delete(k));
     setSearchParams(nextParams);
   };
 
   const selectedCardView = CARD_VIEW_OPTIONS[cardView] ? cardView : 'comfortable';
   const viewConfig = CARD_VIEW_OPTIONS[selectedCardView];
-  const productGridStyle = {
-    gridTemplateColumns: `repeat(auto-fit, minmax(${viewConfig.minWidth}px, 1fr))`,
-  };
+  const productGridStyle = { gridTemplateColumns: `repeat(auto-fit, minmax(${viewConfig.minWidth}px, 1fr))` };
 
   return (
       <div className="page-shell">
@@ -121,9 +291,11 @@ export default function Catalog() {
         <div className="flex flex-col gap-8 lg:flex-row">
           <aside className="w-full lg:w-80">
             <div className="sticky top-28 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-              {/* Додано кнопку "Скинути" поруч із заголовком */}
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Фільтри</h2>
+                <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Фільтри
+                </h2>
                 <button
                     type="button"
                     onClick={handleResetFilters}
@@ -144,77 +316,18 @@ export default function Catalog() {
                   </select>
                 </label>
 
+                {/* Enhanced search with live suggestions */}
                 <label className="block">
                   <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Пошук</span>
-                  <input name="search" value={filters.search || ''} onChange={handleFilterChange} placeholder="Наприклад, цемент або Bosch" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100" />
+                  <CatalogSearchBar
+                      value={filters.search || ''}
+                      onChange={handleFilterChange}
+                      suggestions={suggestions}
+                      searchParams={searchParams}
+                      setSearchParams={setSearchParams}
+                      categories={categories}
+                  />
                 </label>
-
-                <Feature flag="experimentalCatalogSuggestions">
-                  {(suggestions.products.length > 0 || suggestions.categories.length > 0 || suggestions.brands.length > 0) && (
-                      <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm dark:border-white/10 dark:bg-slate-950/60">
-                        {suggestions.products.length > 0 && (
-                            <div className="mb-2">
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Товари</p>
-                              <div className="space-y-1">
-                                {suggestions.products.map((item) => (
-                                    <button
-                                        key={`sp-${item.id}`}
-                                        type="button"
-                                        onClick={() => {
-                                          const nextParams = new URLSearchParams(searchParams);
-                                          nextParams.set('search', item.name);
-                                          nextParams.delete('page');
-                                          setSearchParams(nextParams);
-                                        }}
-                                        className="block w-full rounded-xl px-2 py-1 text-left text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5"
-                                    >
-                                      <span className="block font-medium">{item.name}</span>
-                                      <span className="block text-xs text-slate-400">
-                                {item.sku}
-                                        {typeof item.quantity === 'number' ? ` • ${item.quantity > 0 ? `на складі: ${item.quantity}` : 'немає на складі'}` : ''}
-                              </span>
-                                    </button>
-                                ))}
-                              </div>
-                            </div>
-                        )}
-                        {suggestions.categories.length > 0 && (
-                            <div className="mb-2">
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Категорії</p>
-                              <div className="space-y-1">
-                                {suggestions.categories.map((item) => (
-                                    <button
-                                        key={`sc-${item.id}`}
-                                        type="button"
-                                        onClick={() => {
-                                          const nextParams = new URLSearchParams(searchParams);
-                                          nextParams.set('category_id', String(item.id));
-                                          nextParams.delete('page');
-                                          setSearchParams(nextParams);
-                                        }}
-                                        className="block w-full rounded-xl px-2 py-1 text-left text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5"
-                                    >
-                                      {item.name}
-                                    </button>
-                                ))}
-                              </div>
-                            </div>
-                        )}
-                        {suggestions.brands.length > 0 && (
-                            <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Бренди</p>
-                              <div className="space-y-1">
-                                {suggestions.brands.map((item) => (
-                                    <button key={`sb-${item.id}`} type="button" onClick={() => toggleBrandFilter(item.id)} className="block w-full rounded-xl px-2 py-1 text-left text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/5">
-                                      {item.name}
-                                    </button>
-                                ))}
-                              </div>
-                            </div>
-                        )}
-                      </div>
-                  )}
-                </Feature>
 
                 {brandFacets.length > 0 && (
                     <div>
@@ -282,7 +395,7 @@ export default function Catalog() {
                       <p className="text-sm text-slate-500 dark:text-slate-400">Знайдено {pagination.total} товарів</p>
                       {filters.search || filters.category_id || filters.brand_ids ? (
                           <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                            {filters.search ? `Пошук: “${filters.search}”` : ''}
+                            {filters.search ? `Пошук: "${filters.search}"` : ''}
                             {filters.category_id ? ` ${filters.search ? '•' : ''} Категорія #${filters.category_id}` : ''}
                             {filters.brand_ids ? ` ${filters.search || filters.category_id ? '•' : ''} Бренди: ${filters.brand_ids}` : ''}
                           </p>
@@ -296,14 +409,12 @@ export default function Catalog() {
                             <option key={value} value={value}>{config.label}</option>
                         ))}
                       </select>
-
                       <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 sm:ml-2">Показувати по</label>
                       <select value={pagination.limit} onChange={(event) => handleLimitChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-200">
                         {[8, 12, 16, 24, 32, 48].map((limit) => (
                             <option key={limit} value={limit}>{limit}</option>
                         ))}
                       </select>
-                      <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 sm:ml-2">товарів.</label>
                     </div>
                   </div>
 
@@ -337,7 +448,6 @@ export default function Catalog() {
                           Ви переглянули всі товари за цим запитом.
                         </div>
                     ) : null}
-
                     <div ref={loadMoreRef} className="h-1 w-full" />
                   </div>
                 </>
