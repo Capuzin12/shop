@@ -55,9 +55,9 @@ def resolve_effective_product_price(
             )
             .order_by(ProductPrice.min_quantity.desc())
         )
+        group = db.get(CustomerGroup, customer_group_id)
+        group_name = group.name if group else None
         if tier:
-            group = db.get(CustomerGroup, customer_group_id)
-            group_name = group.name if group else None
             group_price = float(tier.price)
             applied_tier = {
                 "id": tier.id,
@@ -65,10 +65,21 @@ def resolve_effective_product_price(
                 "price": float(tier.price),
                 "customer_group_id": tier.customer_group_id,
             }
+        else:
+            group_price = None
+
+        # Для користувачів з роллю використовуємо ВИКЛЮЧНО ціну групи
+        pre_discount_price = group_price
+    else:
+        # Для звичайних роздрібних покупців без групи
+        pre_discount_price = base_price
 
     active_discount = get_active_product_discount(db, product.id)
-    pre_discount_price = group_price if group_price is not None else base_price
-    effective_price = apply_product_discount(pre_discount_price, active_discount)
+
+    if pre_discount_price is not None:
+        effective_price = apply_product_discount(pre_discount_price, active_discount)
+    else:
+        effective_price = None
 
     return {
         "base_price": base_price,

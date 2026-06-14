@@ -1,22 +1,21 @@
 import { Heart, ShoppingCart } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useWishlist } from '../../wishlist/context/WishlistContext';
 import { formatPrice } from '../../../shared/utils/format';
 
 const getStockCopy = (product) => {
-  const quantity = product?.quantity ?? 0;
-  if (quantity > 9) return { label: 'У наявності', tone: 'emerald' };
-  if (quantity > 0) return { label: `Залишок: ${quantity}`, tone: 'amber' };
-  return { label: 'Немає на складі', tone: 'rose' };
+    const quantity = product?.quantity ?? 0;
+    if (quantity > 9) return { label: 'У наявності', tone: 'emerald' };
+    if (quantity > 0) return { label: `Залишок: ${quantity}`, tone: 'amber' };
+    return { label: 'Немає на складі', tone: 'rose' };
 };
 
-// Helper to ensure absolute URLs for images
 const getImageUrl = (url) => {
-  if (!url) return null;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  if (url.startsWith('/')) return url;
-  return `/${url}`;
+    if (!url) return null;
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/')) return url;
+    return `/${url}`;
 };
 
 export default function ProductCard({ product, viewConfig, liked, onToggleWishlist, onAddToCart }) {
@@ -25,16 +24,16 @@ export default function ProductCard({ product, viewConfig, liked, onToggleWishli
     const navigate = useNavigate();
     const stock = getStockCopy(product);
     const description = product.description || 'Короткий опис буде додано пізніше.';
-     const imageUrl = getImageUrl(product.image_url);
-     const hasCardImage = Boolean(imageUrl) && !imageLoadError;
+    const imageUrl = getImageUrl(product.image_url);
+    const hasCardImage = Boolean(imageUrl) && !imageLoadError;
     const cardBackgroundStyle = hasCardImage
-    ? {
-        backgroundImage: `linear-gradient(135deg, rgba(15, 23, 42, 0.6), rgba(15, 23, 42, 0.4)), url('${imageUrl}')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-      }
-    : undefined;
+        ? {
+            backgroundImage: `linear-gradient(135deg, rgba(15, 23, 42, 0.6), rgba(15, 23, 42, 0.4)), url('${imageUrl}')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+        }
+        : undefined;
 
     return (
         <div
@@ -42,7 +41,6 @@ export default function ProductCard({ product, viewConfig, liked, onToggleWishli
             onClick={() => navigate(`/product/${product.id}`)}
             role="article"
         >
-            {/* Hidden image for loading verification */}
             {imageUrl && (
                 <img
                     src={imageUrl}
@@ -67,13 +65,13 @@ export default function ProductCard({ product, viewConfig, liked, onToggleWishli
                     }}
                 >
                     <div className="flex items-center justify-between">
-            <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${hasCardImage ? 'bg-black/45 text-white' : 'bg-white/80 text-slate-500 dark:bg-white/10 dark:text-slate-300'}`}>
-              {product.sku}
-            </span>
+                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${hasCardImage ? 'bg-black/45 text-white' : 'bg-white/80 text-slate-500 dark:bg-white/10 dark:text-slate-300'}`}>
+                          {product.sku}
+                        </span>
                         {product.active_discount ? (
                             <span className="rounded-full bg-rose-500 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white">
-                Акція
-              </span>
+                                Акція
+                            </span>
                         ) : null}
                         <button
                             onClick={async (e) => {
@@ -82,9 +80,7 @@ export default function ProductCard({ product, viewConfig, liked, onToggleWishli
                                     if (onToggleWishlist) await onToggleWishlist(product);
                                     else await ctxToggleWishlist(product);
                                     await refreshWishlist();
-                                } catch {
-                                    // ignore
-                                }
+                                } catch { /* ignore */ }
                             }}
                             className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl transition ${
                                 liked
@@ -106,9 +102,17 @@ export default function ProductCard({ product, viewConfig, liked, onToggleWishli
                 <h2 className={`${viewConfig.titleClass} font-bold transition text-slate-900 group-hover:text-amber-700 dark:text-white dark:group-hover:text-amber-300`}>
                     {product.name}
                 </h2>
-                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                    Артикул {product.sku} • одиниця {product.unit || 'шт'}
-                </p>
+                <div className="mt-2 flex flex-col gap-0.5">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Артикул {product.sku} • одиниця {product.unit || 'шт'}
+                    </p>
+                    {/* Вказуємо мінімальний поріг для спец-ціни ролі якщо поріг існує */}
+                    {product.applied_tier && (
+                        <p className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                            📦 Гурт від {product.applied_tier.min_quantity} {product.unit || 'шт'}
+                        </p>
+                    )}
+                </div>
                 <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
                     {description}
                 </p>
@@ -119,13 +123,25 @@ export default function ProductCard({ product, viewConfig, liked, onToggleWishli
                     <div className="min-w-0">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Ціна</p>
                         <div className="flex items-center gap-2">
-                            <span className="text-2xl font-black text-amber-600 dark:text-amber-300">{formatPrice(product.effective_price ?? product.price)}</span>
-                            {(product.effective_price ?? product.price) < product.price ? <span className="text-sm text-slate-400 line-through">{formatPrice(product.price)}</span> : null}
+                            {product.effective_price !== null ? (
+                                <>
+                                  <span className="text-2xl font-black text-amber-600 dark:text-amber-300">
+                                      {formatPrice(product.effective_price)}
+                                  </span>
+                                    {product.price > product.effective_price ? (
+                                        <span className="text-sm text-slate-400 line-through">{formatPrice(product.price)}</span>
+                                    ) : null}
+                                </>
+                            ) : (
+                                <span className="text-sm font-bold text-rose-500 dark:text-rose-400">
+                                    Ціну не встановлено
+                                </span>
+                            )}
                         </div>
                     </div>
                     <span className={`inline-flex max-w-full rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${stock.tone === 'emerald' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : stock.tone === 'amber' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'}`}>
-            {stock.label}
-          </span>
+                      {stock.label}
+                    </span>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <Link
@@ -140,16 +156,18 @@ export default function ProductCard({ product, viewConfig, liked, onToggleWishli
                             e.stopPropagation();
                             onAddToCart(product);
                         }}
-                        disabled={!product.is_active || product.quantity <= 0}
+                        disabled={!product.is_active || product.quantity <= 0 || product.effective_price === null}
                         className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                            product.is_active && product.quantity > 0
+                            product.is_active && product.quantity > 0 && product.effective_price !== null
                                 ? 'bg-slate-950 text-white hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300'
                                 : 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'
                         }`}
                         type="button"
                     >
                         <ShoppingCart className="h-4 w-4" />
-                        {product.is_active && product.quantity > 0 ? 'До кошика' : 'Немає в наявності'}
+                        {product.is_active && product.quantity > 0
+                            ? product.effective_price !== null ? 'До кошика' : 'Недоступно'
+                            : 'Немає в наявності'}
                     </button>
                 </div>
             </div>

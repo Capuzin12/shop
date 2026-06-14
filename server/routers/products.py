@@ -229,6 +229,7 @@ def get_product(
         "active_discount": pricing["active_discount"],
         "effective_price": pricing["effective_price"],
         "customer_group_name": pricing["group_name"],
+        "applied_tier": pricing["applied_tier"],  # <-- ДОДАНО ЦЕЙ РЯДОК
     })
     return payload
 

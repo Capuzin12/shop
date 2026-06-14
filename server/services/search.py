@@ -169,7 +169,31 @@ def search_products_response(
     for product in products:
         product_obj = cast(Product, product)
         pricing = resolve_effective_product_price(db, product_obj, getattr(current_user, "customer_group_id", None), 1)
-        products_data.append({"id": product_obj.id, "name": product_obj.name, "slug": product_obj.slug, "price": product_obj.price, "old_price": get_presentational_old_price(pricing), "effective_price": pricing["effective_price"], "active_discount": pricing["active_discount"], "customer_group_name": pricing["group_name"], "unit": product_obj.unit, "icon": product_obj.icon, "description": product_obj.description, "badge": product_obj.badge.value if product_obj.badge and hasattr(product_obj.badge, "value") else str(product_obj.badge) if product_obj.badge else None, "is_featured": product_obj.is_featured, "is_active": product_obj.is_active, "category_id": product_obj.category_id, "brand_id": product_obj.brand_id, "sku": product_obj.sku, "category_name": product_obj.category.name if product_obj.category else None, "brand_name": product_obj.brand.name if product_obj.brand else None, "quantity": inventory_map.get(product_obj.id, 0), "in_stock": inventory_map.get(product_obj.id, 0) > 0, "image_url": image_map.get(product_obj.id)})
+        products_data.append({
+                "id": product_obj.id,
+                "name": product_obj.name,
+                "slug": product_obj.slug,
+                "price": product_obj.price,
+                "old_price": get_presentational_old_price(pricing),
+                "effective_price": pricing["effective_price"],
+                "active_discount": pricing["active_discount"],
+                "customer_group_name": pricing["group_name"],
+                "applied_tier": pricing["applied_tier"],
+                "unit": product_obj.unit,
+                "icon": product_obj.icon,
+                "description": product_obj.description,
+                "badge": product_obj.badge.value if product_obj.badge and hasattr(product_obj.badge, "value") else str(product_obj.badge) if product_obj.badge else None,
+                "is_featured": product_obj.is_featured,
+                "is_active": product_obj.is_active,
+                "category_id": product_obj.category_id,
+                "brand_id": product_obj.brand_id,
+                "sku": product_obj.sku,
+                "category_name": product_obj.category.name if product_obj.category else None,
+                "brand_name": product_obj.brand.name if product_obj.brand else None,
+                "quantity": inventory_map.get(product_obj.id, 0),
+                "in_stock": inventory_map.get(product_obj.id, 0) > 0,
+                "image_url": image_map.get(product_obj.id)
+            })
     facets = {}
     brand_facets_query = select(Brand.id, Brand.name, func.count(Product.id)).join(Product, cast(Any, Product.brand_id) == Brand.id).where(cast(Any, Product.is_active) == True)
     if search:

@@ -17,12 +17,9 @@ export default function ProductPricingTable({ productId, basePrice }) {
     [form]
   );
 
-  return (
-    <div className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
-      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Роздрібна ціна за замовчуванням</p>
-      <p className="mt-1 text-lg font-bold text-amber-600 dark:text-amber-300">{basePrice ?? '—'} грн</p>
-
-      <div className="mt-4 grid gap-2 md:grid-cols-4">
+    return (
+        <div className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
+            <div className="grid gap-2 md:grid-cols-4">
         <select
           className="form-input text-sm"
           value={form.customer_group_id}

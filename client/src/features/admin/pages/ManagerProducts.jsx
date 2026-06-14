@@ -126,7 +126,7 @@ export default function ManagerProducts() {
                       <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">#{product.id}</td>
                       <td className="px-4 py-4 font-semibold text-slate-900 dark:text-white">{product.name}</td>
                       <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">{product.sku}</td>
-                      <td className="px-4 py-4 font-semibold text-amber-600 dark:text-amber-300">{product.price}</td>
+                      <td className="px-4 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400">За тарифами</td>
                       <td className="px-4 py-4 text-sm text-slate-400">{product.old_price || '—'}</td>
                       <td className="px-4 py-4">
                         {product.badge

@@ -362,7 +362,7 @@ export default function AdminProducts() {
                           <p className="font-semibold text-slate-900 dark:text-white">{product.name}</p>
                         </td>
                         <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">{product.sku || '-'}</td>
-                        <td className="px-4 py-4 font-semibold text-amber-600 dark:text-amber-300">{product.price}</td>
+                        <td className="px-4 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400">За тарифами</td>
                         <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">{product.category_name || `#${product.category_id}`}</td>
                         <td className="px-4 py-4 text-sm text-slate-500 dark:text-slate-400">{product.brand_name || '—'}</td>
                         <td className="px-4 py-4">
