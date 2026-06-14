@@ -368,9 +368,12 @@ export default function Checkout() {
                             </div>
                         ) : <div className="h-10 w-10 flex-none rounded-lg bg-slate-100 dark:bg-slate-800" />}
                         <div className="min-w-0 flex-1">
-                          {item.price !== null ? formatPrice(item.price * item.quantity) : 'Недоступно'}
+                          <p className="truncate text-xs font-medium text-slate-900 dark:text-white">{item.name}</p>
+                          <p className="text-xs text-slate-400">{item.quantity} шт{isOut ? ' · недостатньо' : ''}</p>
                         </div>
-                        <p className="text-xs font-semibold text-slate-900 dark:text-white">{formatPrice(item.price * item.quantity)}</p>
+                        <p className="text-xs font-semibold text-slate-900 dark:text-white">
+                          {item.price !== null ? formatPrice(item.price * item.quantity) : 'Недоступно'}
+                        </p>
                       </div>
                   );
                 })}

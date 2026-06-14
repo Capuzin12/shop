@@ -33,6 +33,8 @@ def apply_product_discount(base_price: float, discount: ProductDiscount | None) 
     return round(price, 2)
 
 
+from sqlalchemy import or_, func
+
 def resolve_effective_product_price(
     db: Session,
     product: Product,
@@ -44,6 +46,18 @@ def resolve_effective_product_price(
     group_name = None
     group_price = None
     qty = max(int(quantity or 1), 1)
+    if not customer_group_id:
+        default_group = db.scalar(
+            select(CustomerGroup).where(
+                or_(
+                    CustomerGroup.is_default == True,
+                    CustomerGroup.is_default == 1,
+                    func.lower(CustomerGroup.name) == "роздріб"
+                )
+            )
+        )
+        if default_group:
+            customer_group_id = default_group.id
 
     if customer_group_id:
         tier = db.scalar(
@@ -57,6 +71,7 @@ def resolve_effective_product_price(
         )
         group = db.get(CustomerGroup, customer_group_id)
         group_name = group.name if group else None
+
         if tier:
             group_price = float(tier.price)
             applied_tier = {
@@ -65,13 +80,13 @@ def resolve_effective_product_price(
                 "price": float(tier.price),
                 "customer_group_id": tier.customer_group_id,
             }
+        elif group and (group.is_default or func.lower(group.name) == "роздріб"):
+            group_price = base_price
         else:
             group_price = None
 
-        # Для користувачів з роллю використовуємо ВИКЛЮЧНО ціну групи
         pre_discount_price = group_price
     else:
-        # Для звичайних роздрібних покупців без групи
         pre_discount_price = base_price
 
     active_discount = get_active_product_discount(db, product.id)
