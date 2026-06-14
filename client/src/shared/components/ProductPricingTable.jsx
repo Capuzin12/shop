@@ -19,7 +19,10 @@ export default function ProductPricingTable({ productId}) {
 
     return (
         <div className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">Акції та знижки</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">Ціна на товар
+
+            </p>
+
             <div className="grid gap-2 md:grid-cols-4">
         <select
           className="form-input text-sm"
