@@ -5,67 +5,22 @@ import { useAuth } from '../../auth/hooks/useAuth';
 import api from '../../../api';
 import { clientEnv } from '../../../shared/config/env';
 import { checkoutSchema, mapZodErrors, normalizePhoneInput } from '../../../shared/utils/validation';
+import { formatPrice } from '../../../shared/utils/format';
 
 const GUEST_CHECKOUT_KEY = 'buildshop-checkout-draft';
 
-import { formatPrice } from '../../../shared/utils/format';
-
 const DELIVERY_OPTIONS = [
-  {
-    id: 'nova_poshta',
-    label: 'Нова пошта',
-    description: 'Доставка у відділення або поштомат по Україні.',
-    baseCost: 90,
-    freeFrom: 4000,
-    addressLabel: 'Відділення або поштомат',
-  },
-  {
-    id: 'ukrposhta',
-    label: 'Укрпошта',
-    description: 'Економна доставка у відділення.',
-    baseCost: 60,
-    freeFrom: 3000,
-    addressLabel: 'Відділення Укрпошти',
-  },
-  {
-    id: 'courier',
-    label: 'Курʼєр',
-    description: 'Доставка за повною адресою до дверей.',
-    baseCost: 250,
-    freeFrom: 6000,
-    addressLabel: 'Повна адреса доставки',
-  },
-  {
-    id: 'pickup',
-    label: 'Самовивіз',
-    description: 'Безкоштовно з головного складу BuildShop у Києві.',
-    baseCost: 0,
-    freeFrom: 0,
-    addressLabel: 'Точка самовивозу',
-  },
+  { id: 'nova_poshta', label: 'Нова пошта', description: 'Відділення або поштомат.', baseCost: 90, freeFrom: 4000, addressLabel: 'Відділення або поштомат' },
+  { id: 'ukrposhta', label: 'Укрпошта', description: 'Відділення Укрпошти.', baseCost: 60, freeFrom: 3000, addressLabel: 'Відділення Укрпошти' },
+  { id: 'courier', label: 'Курʼєр', description: 'Доставка до дверей.', baseCost: 250, freeFrom: 6000, addressLabel: 'Повна адреса доставки' },
+  { id: 'pickup', label: 'Самовивіз', description: 'Безкоштовно зі складу в Києві.', baseCost: 0, freeFrom: 0, addressLabel: 'Точка самовивозу' },
 ];
 
 const PAYMENT_OPTIONS = [
-  {
-    id: 'card',
-    label: 'Карткою при отриманні',
-    description: 'Оплата карткою під час видачі або доставки.',
-  },
-  {
-    id: 'card_online',
-    label: 'Онлайн-оплата карткою',
-    description: 'Безпечна передоплата карткою для швидшої обробки замовлення.',
-  },
-  {
-    id: 'cash',
-    label: 'Готівкою при отриманні',
-    description: 'Оплата готівкою в точці видачі або курʼєру.',
-  },
-  {
-    id: 'bank_transfer',
-    label: 'Безготівковий переказ',
-    description: 'Оплата за рахунком для юридичних осіб та B2B-клієнтів.',
-  },
+  { id: 'card', label: 'Карткою при отриманні' },
+  { id: 'card_online', label: 'Онлайн-оплата карткою' },
+  { id: 'cash', label: 'Готівкою при отриманні' },
+  { id: 'bank_transfer', label: 'Безготівковий переказ' },
 ];
 
 const PICKUP_CITY = 'Київ';
@@ -86,12 +41,8 @@ const getImageUrl = (url) => {
 };
 
 const readDraft = () => {
-  try {
-    const raw = localStorage.getItem(GUEST_CHECKOUT_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  try { const raw = localStorage.getItem(GUEST_CHECKOUT_KEY); return raw ? JSON.parse(raw) : null; }
+  catch { return null; }
 };
 
 const getStockQuantity = (item) => {
@@ -100,141 +51,68 @@ const getStockQuantity = (item) => {
   return null;
 };
 
+const normalizePhone = (value) => normalizePhoneInput(value);
 const trimValue = (value) => String(value || '').trim();
 
-const normalizePhone = (value) => {
-  return normalizePhoneInput(value);
+const getDeliveryOption = (dm) => DELIVERY_OPTIONS.find((o) => o.id === dm) || DELIVERY_OPTIONS[0];
+
+const getAvailablePaymentOptions = (dm) => {
+  const allowed = PAYMENT_COMPATIBILITY[dm] || PAYMENT_COMPATIBILITY.nova_poshta;
+  return PAYMENT_OPTIONS.filter((o) => allowed.includes(o.id));
 };
 
 const mapOrderError = (errorPayload, fallbackMessage) => {
   const detail = errorPayload?.detail;
-  if (typeof detail === 'string') {
-    return { message: detail };
-  }
-
-  if (detail?.code === 'INSUFFICIENT_STOCK') {
-    return {
-      message: `Товар "${detail.product_name}" недоступний у потрібній кількості. Потрібно: ${detail.requested}, доступно: ${detail.available}.`,
-    };
-  }
-
-  if (detail?.field && detail?.message) {
-    return {
-      message: detail.message,
-      fieldErrors: { [detail.field]: detail.message },
-    };
-  }
-
-  if (detail?.code === 'PROMO_INVALID') {
-    return {
-      message: detail.message || 'Промокод недійсний.',
-      fieldErrors: { promo_code: detail.message || 'Промокод недійсний.' },
-    };
-  }
-
+  if (typeof detail === 'string') return { message: detail };
+  if (detail?.code === 'INSUFFICIENT_STOCK') return { message: `Товар "${detail.product_name}" недоступний. Потрібно: ${detail.requested}, доступно: ${detail.available}.` };
+  if (detail?.field && detail?.message) return { message: detail.message, fieldErrors: { [detail.field]: detail.message } };
+  if (detail?.code === 'PROMO_INVALID') return { message: detail.message || 'Промокод недійсний.', fieldErrors: { promo_code: detail.message || 'Промокод недійсний.' } };
   return { message: detail?.message || fallbackMessage };
-};
-
-const composeAddress = (street, district, fallback) => {
-  return [street, district].filter(Boolean).join(', ').trim() || fallback || '';
-};
-
-const getDeliveryOption = (deliveryMethod) => DELIVERY_OPTIONS.find((option) => option.id === deliveryMethod) || DELIVERY_OPTIONS[0];
-
-const getAvailablePaymentOptions = (deliveryMethod) => {
-  const allowed = PAYMENT_COMPATIBILITY[deliveryMethod] || PAYMENT_COMPATIBILITY.nova_poshta;
-  return PAYMENT_OPTIONS.filter((option) => allowed.includes(option.id));
 };
 
 const parsePhoton = (data) => {
   const props = data?.features?.[0]?.properties || {};
   const city = props.city || props.town || props.village || props.county || '';
   const street = [props.street, props.housenumber].filter(Boolean).join(' ').trim();
-  const district = props.district || props.suburb || '';
-  const address = composeAddress(street, district, props.name || props.state || '');
-  return { city, address };
+  return { city, address: [street, props.district || ''].filter(Boolean).join(', ') || props.name || '' };
 };
 
 const parseNominatim = (data) => {
-  const addressData = data?.address || {};
-  const city = addressData.city || addressData.town || addressData.village || addressData.municipality || addressData.county || '';
-  const street = [addressData.road, addressData.house_number].filter(Boolean).join(' ').trim();
-  const district = addressData.suburb || addressData.neighbourhood || '';
-  const address = composeAddress(street, district, data?.display_name || '');
-  return { city, address };
+  const a = data?.address || {};
+  const city = a.city || a.town || a.village || a.municipality || a.county || '';
+  const street = [a.road, a.house_number].filter(Boolean).join(' ').trim();
+  return { city, address: [street, a.suburb || ''].filter(Boolean).join(', ') || data?.display_name || '' };
 };
 
-const parseBigDataCloud = (data) => {
-  const city = data?.city || data?.locality || data?.principalSubdivision || '';
-  const district = data?.localityInfo?.administrative?.[2]?.name || data?.localityInfo?.informative?.[0]?.name || '';
-  const street = [data?.locality, data?.principalSubdivision].filter(Boolean).join(', ');
-  const address = composeAddress(street, district, data?.locality || data?.countryName || '');
-  return { city, address };
-};
+const parseBigDataCloud = (data) => ({ city: data?.city || data?.locality || '', address: data?.locality || data?.countryName || '' });
 
-const parseOpenMeteo = (data) => {
-  const result = data?.results?.[0] || {};
-  const city = result.name || result.admin2 || result.admin1 || '';
-  const address = [result.name, result.admin2, result.admin1].filter(Boolean).join(', ');
-  return { city, address };
-};
+const parseOpenMeteo = (data) => { const r = data?.results?.[0] || {}; return { city: r.name || r.admin2 || '', address: [r.name, r.admin2, r.admin1].filter(Boolean).join(', ') }; };
 
-const reverseGeocodeWithFallback = async (latitude, longitude) => {
+const reverseGeocodeWithFallback = async (lat, lon) => {
   const providers = [
-    {
-      name: 'Photon',
-      url: `${clientEnv.geocodePhotonUrl}?lat=${latitude}&lon=${longitude}`,
-      parse: parsePhoton,
-    },
-    {
-      name: 'Nominatim',
-      url: `${clientEnv.geocodeNominatimUrl}?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=uk`,
-      parse: parseNominatim,
-    },
-    {
-      name: 'BigDataCloud',
-      url: `${clientEnv.geocodeBigDataCloudUrl}?latitude=${latitude}&longitude=${longitude}&localityLanguage=uk`,
-      parse: parseBigDataCloud,
-    },
-    {
-      name: 'Open-Meteo',
-      url: `${clientEnv.geocodeOpenMeteoUrl}?latitude=${latitude}&longitude=${longitude}&language=uk`,
-      parse: parseOpenMeteo,
-    },
+    { url: `${clientEnv.geocodePhotonUrl}?lat=${lat}&lon=${lon}`, parse: parsePhoton },
+    { url: `${clientEnv.geocodeNominatimUrl}?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=uk`, parse: parseNominatim },
+    { url: `${clientEnv.geocodeBigDataCloudUrl}?latitude=${lat}&longitude=${lon}&localityLanguage=uk`, parse: parseBigDataCloud },
+    { url: `${clientEnv.geocodeOpenMeteoUrl}?latitude=${lat}&longitude=${lon}&language=uk`, parse: parseOpenMeteo },
   ];
 
   for (const provider of providers) {
     try {
-      const response = await fetch(provider.url);
-      if (!response.ok) continue;
-      const data = await response.json();
-      const parsed = provider.parse(data);
-      if (parsed.city || parsed.address) {
-        return { ...parsed, provider: provider.name };
-      }
-    } catch {
-      // Try next provider silently.
-    }
+      const res = await fetch(provider.url);
+      if (!res.ok) continue;
+      const parsed = provider.parse(await res.json());
+      if (parsed.city || parsed.address) return parsed;
+    } catch { /* try next */ }
   }
-
-  throw new Error('Не вдалося визначити адресу за геолокацією через жоден сервіс.');
+  throw new Error('Не вдалося визначити адресу за геолокацією.');
 };
 
 export default function Checkout() {
   const { cart, clearCart, getTotal } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [formData, setFormData] = useState(() => readDraft() || {
-    contact_name: '',
-    contact_phone: '',
-    contact_email: '',
-    delivery_city: '',
-    delivery_address: '',
-    comment: '',
-    promo_code: '',
-    delivery_method: 'nova_poshta',
-    payment_method: 'card',
-  });
+
+  const [formData, setFormData] = useState(() => readDraft() || { contact_name: '', contact_phone: '', contact_email: '', delivery_city: '', delivery_address: '', comment: '', promo_code: '', delivery_method: 'nova_poshta', payment_method: 'card' });
   const [message, setMessage] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -244,7 +122,6 @@ export default function Checkout() {
   const [promoValidation, setPromoValidation] = useState(null);
   const [promoLoading, setPromoLoading] = useState(false);
 
-  const getInputClass = (field) => `form-input ${fieldErrors[field] ? 'form-input-error' : ''}`;
   const orderSubtotal = getTotal();
   const selectedDelivery = getDeliveryOption(formData.delivery_method);
   const allowedPayments = getAvailablePaymentOptions(formData.delivery_method);
@@ -252,9 +129,7 @@ export default function Checkout() {
   const promoDiscountPreview = promoValidation?.valid ? Number(promoValidation.discount || 0) : 0;
   const estimatedTotal = Math.max(orderSubtotal + estimatedDeliveryCost - promoDiscountPreview, 0);
 
-  useEffect(() => {
-    localStorage.setItem(GUEST_CHECKOUT_KEY, JSON.stringify(formData));
-  }, [formData]);
+  useEffect(() => { localStorage.setItem(GUEST_CHECKOUT_KEY, JSON.stringify(formData)); }, [formData]);
 
   useEffect(() => {
     if (!user) return;
@@ -269,111 +144,53 @@ export default function Checkout() {
   const updateField = (field, value) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value };
-
       if (field === 'delivery_method') {
         const allowed = PAYMENT_COMPATIBILITY[value] || PAYMENT_COMPATIBILITY.nova_poshta;
-        if (!allowed.includes(next.payment_method)) {
-          next.payment_method = allowed[0];
-        }
-
-        if (value === 'pickup') {
-          next.delivery_city = PICKUP_CITY;
-          next.delivery_address = PICKUP_ADDRESS;
-        }
+        if (!allowed.includes(next.payment_method)) next.payment_method = allowed[0];
+        if (value === 'pickup') { next.delivery_city = PICKUP_CITY; next.delivery_address = PICKUP_ADDRESS; }
       }
-
       return next;
     });
-    if (field === 'promo_code') {
-      setPromoValidation(null);
-    }
-    setFieldErrors((prev) => {
-      if (!prev[field]) return prev;
-      const { [field]: _removed, ...rest } = prev;
-      return rest;
-    });
+    if (field === 'promo_code') setPromoValidation(null);
+    setFieldErrors((prev) => { if (!prev[field]) return prev; const { [field]: _, ...rest } = prev; return rest; });
   };
 
   const applyPromoCode = async () => {
     const promoCode = trimValue(formData.promo_code);
-    if (!promoCode) {
-      setPromoValidation(null);
-      return;
-    }
-
+    if (!promoCode) { setPromoValidation(null); return; }
     try {
       setPromoLoading(true);
-      const response = await api.post('/api/promo-codes/validate', {
-        code: promoCode,
-        order_amount: orderSubtotal,
-      });
-
-      const result = response.data || {};
-      setPromoValidation({
-        valid: Boolean(result.valid),
-        message: result.message || '',
-        discount: Number(result.discount || 0),
-        promo: result.promo || null,
-      });
+      const res = await api.post('/api/promo-codes/validate', { code: promoCode, order_amount: orderSubtotal });
+      const result = res.data || {};
+      setPromoValidation({ valid: Boolean(result.valid), message: result.message || '', discount: Number(result.discount || 0), promo: result.promo || null });
     } catch (error) {
-      setPromoValidation({
-        valid: false,
-        message: error?.response?.data?.detail?.message || 'Не вдалося перевірити промокод.',
-        discount: 0,
-        promo: null,
-      });
-    } finally {
-      setPromoLoading(false);
-    }
+      setPromoValidation({ valid: false, message: error?.response?.data?.detail?.message || 'Не вдалося перевірити промокод.', discount: 0, promo: null });
+    } finally { setPromoLoading(false); }
   };
 
   const autofillAddressFromLocation = async () => {
-    if (!locationConsent) {
-      setLocationMessage('Спочатку підтвердіть дозвіл на використання геолокації.');
-      return;
-    }
-    if (!navigator.geolocation) {
-      setLocationMessage('Ваш браузер не підтримує геолокацію.');
-      return;
-    }
-
+    if (!locationConsent) { setLocationMessage('Спочатку підтвердіть дозвіл на геолокацію.'); return; }
+    if (!navigator.geolocation) { setLocationMessage('Браузер не підтримує геолокацію.'); return; }
     setLocationLoading(true);
     setLocationMessage('Запитуємо геолокацію...');
 
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          const geocoded = await reverseGeocodeWithFallback(latitude, longitude);
-
-          setFormData((prev) => ({
-            ...prev,
-            delivery_city: prev.delivery_city || geocoded.city || '',
-            delivery_address: prev.delivery_address || geocoded.address || '',
-          }));
-
-          setLocationMessage('Місто та адреса заповнені за геолокацією. За потреби відредагуйте вручну.');
-        } catch (error) {
-          setLocationMessage(error?.message || 'Не вдалося визначити адресу.');
-        } finally {
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const geocoded = await reverseGeocodeWithFallback(latitude, longitude);
+            setFormData((prev) => ({ ...prev, delivery_city: prev.delivery_city || geocoded.city || '', delivery_address: prev.delivery_address || geocoded.address || '' }));
+            setLocationMessage('Адреса заповнена. Відредагуйте за потреби.');
+          } catch (error) { setLocationMessage(error?.message || 'Не вдалося визначити адресу.'); }
+          finally { setLocationLoading(false); }
+        },
+        (error) => {
+          const map = { 1: 'Доступ відхилено.', 2: 'Не вдалося отримати координати.', 3: 'Час очікування вичерпано.' };
+          setLocationMessage(map[error.code] || 'Помилка геолокації.');
           setLocationLoading(false);
-        }
-      },
-      (error) => {
-        const map = {
-          1: 'Доступ до геолокації відхилено. Дозвольте доступ у браузері.',
-          2: 'Не вдалося отримати координати. Перевірте сигнал геолокації.',
-          3: 'Час очікування геолокації вичерпано.',
-        };
-        setLocationMessage(map[error.code] || 'Помилка отримання геолокації.');
-        setLocationLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
-  };
-
-  const getAvailableQuantity = (item) => {
-    return getStockQuantity(item);
   };
 
   const handleSubmit = async (e) => {
@@ -381,48 +198,16 @@ export default function Checkout() {
     if (submitting) return;
     setMessage('');
 
-    if (!user) {
-      setMessage('Дані збережено. Увійдіть, щоб завершити оформлення замовлення.');
-      navigate('/login');
-      return;
-    }
+    if (!user) { setMessage('Увійдіть, щоб завершити оформлення.'); navigate('/login'); return; }
 
-    const payload = {
-      ...formData,
-      contact_name: trimValue(formData.contact_name),
-      contact_phone: normalizePhone(formData.contact_phone),
-      contact_email: trimValue(formData.contact_email),
-      delivery_city: trimValue(formData.delivery_city),
-      delivery_address: trimValue(formData.delivery_address),
-      comment: trimValue(formData.comment),
-      promo_code: trimValue(formData.promo_code),
-      items: cart.map((item) => ({
-        product_id: item.id,
-        quantity: item.quantity,
-      })),
-    };
-
-    if (payload.delivery_method === 'pickup') {
-      payload.delivery_city = PICKUP_CITY;
-      payload.delivery_address = payload.delivery_address || PICKUP_ADDRESS;
-    }
+    const payload = { ...formData, contact_name: trimValue(formData.contact_name), contact_phone: normalizePhone(formData.contact_phone), contact_email: trimValue(formData.contact_email), delivery_city: trimValue(formData.delivery_city), delivery_address: trimValue(formData.delivery_address), comment: trimValue(formData.comment), promo_code: trimValue(formData.promo_code), items: cart.map((item) => ({ product_id: item.id, quantity: item.quantity })) };
+    if (payload.delivery_method === 'pickup') { payload.delivery_city = PICKUP_CITY; payload.delivery_address = payload.delivery_address || PICKUP_ADDRESS; }
 
     const parsed = checkoutSchema.safeParse(payload);
-    if (!parsed.success) {
-      setFieldErrors(mapZodErrors(parsed.error));
-      setMessage('Перевірте заповнення полів форми.');
-      return;
-    }
+    if (!parsed.success) { setFieldErrors(mapZodErrors(parsed.error)); setMessage('Перевірте заповнення полів форми.'); return; }
 
-    const outOfStock = cart.find((item) => {
-      const available = getAvailableQuantity(item);
-      return typeof available === 'number' && available >= 0 && available < item.quantity;
-    });
-    if (outOfStock) {
-      const available = getAvailableQuantity(outOfStock);
-      setMessage(`Товару "${outOfStock.name}" недостатньо на складі. Доступно: ${available}`);
-      return;
-    }
+    const outOfStock = cart.find((item) => { const a = getStockQuantity(item); return typeof a === 'number' && a >= 0 && a < item.quantity; });
+    if (outOfStock) { setMessage(`Товару "${outOfStock.name}" недостатньо на складі.`); return; }
 
     try {
       setSubmitting(true);
@@ -430,260 +215,190 @@ export default function Checkout() {
       clearCart();
       localStorage.removeItem(GUEST_CHECKOUT_KEY);
       window.dispatchEvent(new Event('buildshop:notifications-refresh'));
-
       navigate('/profile');
     } catch (error) {
-      console.error('Error creating order:', error);
-      const parsed = mapOrderError(error?.response?.data, 'Не вдалося оформити замовлення');
-      if (parsed.fieldErrors) setFieldErrors(parsed.fieldErrors);
-      const errorMsg = parsed.message || error?.message || 'Не вдалося оформити замовлення';
-      setMessage(`Не вдалося оформити замовлення. Помилка: ${errorMsg}`);
-    } finally {
-      setSubmitting(false);
-    }
+      const p = mapOrderError(error?.response?.data, 'Не вдалося оформити замовлення');
+      if (p.fieldErrors) setFieldErrors(p.fieldErrors);
+      setMessage(p.message || 'Не вдалося оформити замовлення');
+    } finally { setSubmitting(false); }
   };
 
-  useEffect(() => {
-    if (cart.length === 0) {
-      navigate('/cart');
-    }
-  }, [cart.length, navigate]);
+  useEffect(() => { if (cart.length === 0) navigate('/cart'); }, [cart.length, navigate]);
+  if (cart.length === 0) return null;
 
-  if (cart.length === 0) {
-    return null;
-  }
+  const getInputClass = (field) => `form-input ${fieldErrors[field] ? 'form-input-error' : ''}`;
 
   return (
-    <div className="page-shell">
-      <div className="mb-8 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Замовлення</p>
-        <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">Оформлення замовлення</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          Заповніть контактні дані та адресу доставки — це займе кілька хвилин.
-        </p>
-      </div>
+      <div className="page-shell">
+        <div className="mb-6 rounded-2xl border border-white/50 bg-white/75 px-5 py-4 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+          <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-300">Замовлення</p>
+          <h1 className="mt-0.5 text-2xl font-black text-slate-900 dark:text-white">Оформлення замовлення</h1>
+        </div>
 
-      <div className="grid gap-8 lg:grid-cols-[1.05fr,0.95fr]">
-        <form noValidate onSubmit={handleSubmit} className="rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-500/20 dark:bg-blue-500/10">
-              <label className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={locationConsent}
-                  onChange={(e) => setLocationConsent(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300"
-                />
-                <span>Дозволяю використати мою геолокацію для автозаповнення міста та адреси.</span>
-              </label>
-              <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={autofillAddressFromLocation}
-                  disabled={!locationConsent || locationLoading}
-                  className="rounded-2xl border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500/30 dark:bg-slate-950/40 dark:text-blue-300 dark:hover:bg-blue-500/10"
-                >
-                  {locationLoading ? 'Визначаємо місцезнаходження...' : 'Автозаповнити адресу'}
-                </button>
-                {locationMessage ? <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">{locationMessage}</p> : null}
+        <div className="grid gap-6 lg:grid-cols-[1fr,360px] lg:items-start">
+          <form noValidate onSubmit={handleSubmit} className="space-y-5">
+            <div className="rounded-2xl border border-white/50 bg-white/75 p-5 backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+              <p className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">Контактні дані</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Ім'я отримувача *</label>
+                  <input value={formData.contact_name} onChange={(e) => updateField('contact_name', e.target.value)} className={getInputClass('contact_name')} required />
+                  {fieldErrors.contact_name && <p className="form-error-text">{fieldErrors.contact_name}</p>}
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Телефон *</label>
+                  <input value={formData.contact_phone} onChange={(e) => updateField('contact_phone', e.target.value)} className={getInputClass('contact_phone')} required />
+                  {fieldErrors.contact_phone && <p className="form-error-text">{fieldErrors.contact_phone}</p>}
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs text-slate-500">Email</label>
+                  <input value={formData.contact_email} onChange={(e) => updateField('contact_email', e.target.value)} className={getInputClass('contact_email')} />
+                  {fieldErrors.contact_email && <p className="form-error-text">{fieldErrors.contact_email}</p>}
+                </div>
               </div>
             </div>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Ім'я<span className="required-mark">*</span></span>
-              <input value={formData.contact_name} onChange={(e) => updateField('contact_name', e.target.value)} className={getInputClass('contact_name')} required />
-              {fieldErrors.contact_name ? <p className="form-error-text">{fieldErrors.contact_name}</p> : null}
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Телефон<span className="required-mark">*</span></span>
-              <input value={formData.contact_phone} onChange={(e) => updateField('contact_phone', e.target.value)} className={getInputClass('contact_phone')} required />
-              {fieldErrors.contact_phone ? <p className="form-error-text">{fieldErrors.contact_phone}</p> : null}
-            </label>
-            <label className="block md:col-span-2">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Email</span>
-              <input value={formData.contact_email} onChange={(e) => updateField('contact_email', e.target.value)} className={getInputClass('contact_email')} />
-              {fieldErrors.contact_email ? <p className="form-error-text">{fieldErrors.contact_email}</p> : null}
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Спосіб доставки<span className="required-mark">*</span></span>
-              <div className="grid gap-3">
+
+            <div className="rounded-2xl border border-white/50 bg-white/75 p-5 backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+              <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Спосіб доставки</p>
+              <div className="grid gap-2 sm:grid-cols-2">
                 {DELIVERY_OPTIONS.map((option) => {
                   const active = formData.delivery_method === option.id;
-                  const freeDeliveryReached = option.freeFrom > 0 && orderSubtotal >= option.freeFrom;
+                  const free = option.freeFrom > 0 && orderSubtotal >= option.freeFrom;
                   return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => updateField('delivery_method', option.id)}
-                      className={`rounded-2xl border px-4 py-4 text-left transition ${
-                        active
-                          ? 'border-amber-300 bg-amber-50 dark:border-amber-400/40 dark:bg-amber-400/10'
-                          : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950/30 dark:hover:bg-white/5'
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <span className="text-sm font-semibold text-slate-900 dark:text-white">{option.label}</span>
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                          {freeDeliveryReached ? 'Безкоштовно' : formatPrice(option.baseCost)}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{option.description}</p>
-                      {option.freeFrom > 0 ? (
-                        <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-                          Безкоштовно від {formatPrice(option.freeFrom)}
-                        </p>
-                      ) : null}
-                    </button>
+                      <button key={option.id} type="button" onClick={() => updateField('delivery_method', option.id)}
+                              className={`rounded-xl border px-4 py-3 text-left transition ${active ? 'border-amber-300 bg-amber-50 dark:border-amber-400/40 dark:bg-amber-400/10' : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950/30 dark:hover:bg-white/5'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-slate-900 dark:text-white">{option.label}</span>
+                          <span className="text-xs font-semibold text-amber-600 dark:text-amber-300">{free ? 'Безкоштовно' : formatPrice(option.baseCost)}</span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-slate-400">{option.description}</p>
+                      </button>
                   );
                 })}
               </div>
-              {fieldErrors.delivery_method ? <p className="form-error-text">{fieldErrors.delivery_method}</p> : null}
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Спосіб оплати<span className="required-mark">*</span></span>
-              <div className="grid gap-3">
+            </div>
+
+            <div className="rounded-2xl border border-white/50 bg-white/75 p-5 backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+              <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Адреса доставки</p>
+              <div className="mb-3 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 dark:border-blue-500/20 dark:bg-blue-500/10">
+                <input type="checkbox" checked={locationConsent} onChange={(e) => setLocationConsent(e.target.checked)} className="h-4 w-4" />
+                <span className="text-xs text-slate-600 dark:text-slate-300">Дозволити геолокацію для автозаповнення</span>
+                <button type="button" onClick={autofillAddressFromLocation} disabled={!locationConsent || locationLoading}
+                        className="ml-auto rounded-lg border border-blue-300 bg-white px-2.5 py-1 text-xs font-medium text-blue-700 disabled:opacity-50 dark:border-blue-500/30 dark:bg-slate-950/40 dark:text-blue-300">
+                  {locationLoading ? 'Визначаємо...' : 'Автозаповнити'}
+                </button>
+              </div>
+              {locationMessage && <p className="mb-2 text-xs text-blue-600 dark:text-blue-300">{locationMessage}</p>}
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Місто *</label>
+                  <input value={formData.delivery_city} onChange={(e) => updateField('delivery_city', e.target.value)} className={getInputClass('delivery_city')} required disabled={formData.delivery_method === 'pickup'} />
+                  {fieldErrors.delivery_city && <p className="form-error-text">{fieldErrors.delivery_city}</p>}
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">{selectedDelivery.addressLabel} *</label>
+                  <input value={formData.delivery_address} onChange={(e) => updateField('delivery_address', e.target.value)} className={getInputClass('delivery_address')} required disabled={formData.delivery_method === 'pickup'} placeholder={formData.delivery_method === 'pickup' ? PICKUP_ADDRESS : ''} />
+                  {fieldErrors.delivery_address && <p className="form-error-text">{fieldErrors.delivery_address}</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/50 bg-white/75 p-5 backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+              <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Спосіб оплати</p>
+              <div className="grid gap-2 sm:grid-cols-2">
                 {allowedPayments.map((option) => {
                   const active = formData.payment_method === option.id;
                   return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => updateField('payment_method', option.id)}
-                      className={`rounded-2xl border px-4 py-4 text-left transition ${
-                        active
-                          ? 'border-amber-300 bg-amber-50 dark:border-amber-400/40 dark:bg-amber-400/10'
-                          : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950/30 dark:hover:bg-white/5'
-                      }`}
-                    >
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">{option.label}</p>
-                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{option.description}</p>
-                    </button>
+                      <button key={option.id} type="button" onClick={() => updateField('payment_method', option.id)}
+                              className={`rounded-xl border px-4 py-2.5 text-left transition ${active ? 'border-amber-300 bg-amber-50 dark:border-amber-400/40 dark:bg-amber-400/10' : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-slate-950/30 dark:hover:bg-white/5'}`}>
+                        <span className="text-sm font-medium text-slate-900 dark:text-white">{option.label}</span>
+                      </button>
                   );
                 })}
               </div>
-              {fieldErrors.payment_method ? <p className="form-error-text">{fieldErrors.payment_method}</p> : null}
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Місто<span className="required-mark">*</span></span>
-              <input
-                value={formData.delivery_city}
-                onChange={(e) => updateField('delivery_city', e.target.value)}
-                className={getInputClass('delivery_city')}
-                required
-                disabled={formData.delivery_method === 'pickup'}
-              />
-              {fieldErrors.delivery_city ? <p className="form-error-text">{fieldErrors.delivery_city}</p> : null}
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">{selectedDelivery.addressLabel}<span className="required-mark">*</span></span>
-              <input
-                value={formData.delivery_address}
-                onChange={(e) => updateField('delivery_address', e.target.value)}
-                className={getInputClass('delivery_address')}
-                required
-                disabled={formData.delivery_method === 'pickup'}
-                placeholder={formData.delivery_method === 'pickup' ? PICKUP_ADDRESS : ''}
-              />
-              {fieldErrors.delivery_address ? <p className="form-error-text">{fieldErrors.delivery_address}</p> : null}
-            </label>
-            <label className="block md:col-span-2">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Коментар</span>
-              <textarea value={formData.comment} onChange={(e) => updateField('comment', e.target.value)} rows="4" className={getInputClass('comment')} />
-            </label>
-
-            <div className="block md:col-span-2">
-              <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Промокод</span>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                <div className="w-full">
-                  <input
-                    value={formData.promo_code || ''}
-                    onChange={(e) => updateField('promo_code', e.target.value.toUpperCase())}
-                    placeholder="Наприклад, BUD10"
-                    className={getInputClass('promo_code')}
-                  />
-                  {fieldErrors.promo_code ? <p className="form-error-text">{fieldErrors.promo_code}</p> : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={applyPromoCode}
-                  disabled={promoLoading}
-                  className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
-                >
-                  {promoLoading ? 'Перевірка...' : 'Застосувати'}
-                </button>
-              </div>
-              {promoValidation ? (
-                <p className={`mt-2 text-xs ${promoValidation.valid ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>
-                  {promoValidation.message}
-                  {promoValidation.valid && promoValidation.discount > 0 ? ` Знижка: ${formatPrice(promoValidation.discount)}.` : ''}
-                </p>
-              ) : null}
             </div>
-          </div>
 
-          {message ? (
-            <p className={Object.keys(fieldErrors).length ? 'form-error-banner' : 'mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}>
-              {message}
-            </p>
-          ) : null}
-
-          <button disabled={submitting} className="mt-6 w-full rounded-2xl bg-slate-950 px-6 py-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300" type="submit">
-            {submitting ? 'Оформлення...' : user ? 'Підтвердити замовлення' : 'Увійти, щоб оформити замовлення'}
-          </button>
-        </form>
-
-        <div className="rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/30 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white">Ваше замовлення</h2>
-          <div className="mt-5 space-y-3">
-            {cart.map((item) => {
-              const available = getAvailableQuantity(item);
-              const isOutOfStock = typeof available === 'number' && available >= 0 && available < item.quantity;
-              return (
-                <div key={item.id} className={`flex items-center justify-between rounded-2xl border px-4 py-3 dark:border-white/10 dark:bg-white/5 ${isOutOfStock ? 'border-rose-300 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10' : 'border-slate-200 bg-slate-50'}`}>
-                  <div className="flex items-center gap-3">
-                    {item.image_url ? (
-                      <div className="h-14 w-14 flex-none overflow-hidden rounded-2xl bg-white dark:bg-slate-950/50">
-                        <img src={getImageUrl(item.image_url)} alt={item.name || 'Товар'} className="h-full w-full object-cover" loading="lazy" />
-                      </div>
-                    ) : null}
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-white">{item.name}</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        {item.quantity} x {formatPrice(item.price)}
-                        {typeof available === 'number' && available > 0 && available < item.quantity && (
-                          <span className="ml-2 text-rose-500"> (в наявності: {available})</span>
-                        )}
-                        {available === 0 && (
-                          <span className="ml-2 text-rose-500"> (немає в наявності)</span>
-                        )}
-                        {available === null && (
-                          <span className="ml-2 text-slate-400"> (склад оновлюється)</span>
-                        )}
-                      </p>
-                      {item.description ? <p className="mt-1 max-w-[360px] text-xs text-slate-400 dark:text-slate-500">{item.description}</p> : null}
-                    </div>
-                  </div>
-                  <p className="font-bold text-amber-600 dark:text-amber-300">{formatPrice(item.price * item.quantity)}</p>
+            <div className="rounded-2xl border border-white/50 bg-white/75 p-5 backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+              <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Коментар та промокод</p>
+              <div className="space-y-3">
+                <textarea value={formData.comment} onChange={(e) => updateField('comment', e.target.value)} rows={2} placeholder="Коментар до замовлення" className={getInputClass('comment')} />
+                <div className="flex gap-2">
+                  <input value={formData.promo_code || ''} onChange={(e) => updateField('promo_code', e.target.value.toUpperCase())} placeholder="Промокод" className={`${getInputClass('promo_code')} flex-1`} />
+                  <button type="button" onClick={applyPromoCode} disabled={promoLoading}
+                          className="rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5">
+                    {promoLoading ? '...' : 'OK'}
+                  </button>
                 </div>
-              );
-            })}
-          </div>
+                {promoValidation && (
+                    <p className={`text-xs ${promoValidation.valid ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-500 dark:text-rose-300'}`}>
+                      {promoValidation.message}{promoValidation.valid && promoValidation.discount > 0 ? ` Знижка: ${formatPrice(promoValidation.discount)}.` : ''}
+                    </p>
+                )}
+              </div>
+            </div>
 
-          <div className="mt-6 rounded-[1.75rem] bg-slate-950 p-5 text-white dark:bg-amber-400 dark:text-slate-950">
-            <p className="text-xs uppercase tracking-[0.2em] text-white/70 dark:text-slate-800/70">Разом</p>
-            <p className="mt-1 text-sm text-white/70 dark:text-slate-800/70">
-              Товари: {formatPrice(orderSubtotal)}
-            </p>
-            <p className="mt-1 text-sm text-white/70 dark:text-slate-800/70">
-              Доставка: {estimatedDeliveryCost > 0 ? formatPrice(estimatedDeliveryCost) : 'Безкоштовно'}
-            </p>
-            {promoDiscountPreview > 0 ? (
-              <p className="mt-1 text-sm text-emerald-200 dark:text-emerald-900">Знижка: -{formatPrice(promoDiscountPreview)}</p>
-            ) : null}
-            <p className="mt-2 text-3xl font-black">{formatPrice(estimatedTotal)}</p>
+            {message && (
+                <p className={Object.keys(fieldErrors).length ? 'form-error-banner' : 'rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}>
+                  {message}
+                </p>
+            )}
+
+            <div className="flex justify-center">
+              <button disabled={submitting} type="submit"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-8 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300">
+                {submitting ? 'Оформлення...' : user ? 'Підтвердити замовлення' : 'Увійти та оформити'}
+              </button>
+            </div>
+          </form>
+
+          <div className="lg:sticky lg:top-24">
+            <div className="rounded-2xl border border-white/50 bg-white/75 p-5 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+              <p className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">Ваше замовлення</p>
+              <div className="space-y-3">
+                {cart.map((item) => {
+                  const available = getStockQuantity(item);
+                  const isOut = typeof available === 'number' && available >= 0 && available < item.quantity;
+                  return (
+                      <div key={item.id} className="flex items-center gap-3">
+                        {item.image_url ? (
+                            <div className="h-10 w-10 flex-none overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
+                              <img src={getImageUrl(item.image_url)} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
+                            </div>
+                        ) : <div className="h-10 w-10 flex-none rounded-lg bg-slate-100 dark:bg-slate-800" />}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium text-slate-900 dark:text-white">{item.name}</p>
+                          <p className="text-xs text-slate-400">{item.quantity} шт{isOut ? ' · недостатньо' : ''}</p>
+                        </div>
+                        <p className="text-xs font-semibold text-slate-900 dark:text-white">{formatPrice(item.price * item.quantity)}</p>
+                      </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 border-t border-slate-200 pt-4 dark:border-white/10">
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-sm text-slate-900 dark:text-white">
+                    <span>Товари</span>
+                    <span className="font-medium">{formatPrice(orderSubtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-slate-900 dark:text-white">
+                    <span>Доставка</span>
+                    <span className="font-medium">{estimatedDeliveryCost > 0 ? formatPrice(estimatedDeliveryCost) : 'Безкоштовно'}</span>
+                  </div>
+                  {promoDiscountPreview > 0 && (
+                      <div className="flex justify-between text-sm text-emerald-600 dark:text-emerald-400">
+                        <span>Знижка</span>
+                        <span className="font-medium">-{formatPrice(promoDiscountPreview)}</span>
+                      </div>
+                  )}
+                  <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 dark:border-white/10">
+                    <span className="text-base font-black text-slate-900 dark:text-white">Разом</span>
+                    <span className="text-base font-black text-slate-900 dark:text-white">{formatPrice(estimatedTotal)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
   );
 }
-

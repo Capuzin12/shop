@@ -21,10 +21,8 @@ export default function Cart() {
   const { cart, removeFromCart, updateQuantity } = useCart();
   const total = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
 
-  const getAvailableQuantity = (item) => getStockQuantity(item);
-
   const handleUpdateQuantity = (item, newQuantity) => {
-    const available = getAvailableQuantity(item);
+    const available = getStockQuantity(item);
     if (typeof available === 'number' && available >= 0 && newQuantity > available) {
       updateQuantity(item.id, available);
     } else if (newQuantity > 0) {
@@ -34,174 +32,100 @@ export default function Cart() {
 
   if (!cart || cart.length === 0) {
     return (
-      <div className="page-shell">
-        <div className="mb-8 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Кошик</p>
-          <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">Ваш кошик</h1>
-        </div>
-
-        <div className="rounded-[2rem] border border-dashed border-amber-200 bg-white/70 p-12 text-center shadow-lg shadow-amber-100/30 backdrop-blur dark:border-amber-500/20 dark:bg-slate-900/60 dark:shadow-none">
-          <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-            <ShoppingBag className="h-8 w-8" />
+        <div className="page-shell">
+          <div className="mb-6 rounded-2xl border border-white/50 bg-white/75 p-5 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+            <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-300">Кошик</p>
+            <h1 className="mt-1 text-2xl font-black text-slate-900 dark:text-white">Ваш кошик</h1>
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Кошик порожній</h2>
-          <p className="mt-2 text-slate-600 dark:text-slate-300">Додайте товари з каталогу, щоб оформити замовлення.</p>
-          <Link to="/catalog" className="mt-6 inline-flex rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300">
-            Перейти до каталогу
-          </Link>
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-10 text-center dark:border-white/10 dark:bg-slate-900/40">
+            <ShoppingBag className="mx-auto mb-3 h-8 w-8 text-slate-300 dark:text-slate-600" />
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Кошик порожній</p>
+            <p className="mt-1 text-xs text-slate-400">Додайте товари з каталогу</p>
+            <Link to="/catalog" className="mt-4 inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950">
+              До каталогу
+            </Link>
+          </div>
         </div>
-      </div>
     );
   }
 
   const hasOutOfStock = cart.some((item) => {
-    const available = getAvailableQuantity(item);
+    const available = getStockQuantity(item);
     return typeof available === 'number' && available >= 0 && available < item.quantity;
   });
 
   return (
-    <div className="page-shell">
-      <div className="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Кошик</p>
-          <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">Ваші товари</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-            Перегляньте обрані товари перед оформленням замовлення.
-          </p>
-        </div>
-        <span className="text-sm text-slate-500 dark:text-slate-400">
-          {cart.length} товар{cart.length === 1 ? '' : cart.length > 1 && cart.length < 5 ? 'и' : 'ів'} у кошику
-        </span>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {cart.map((item) => (
-          <div key={item.id} className="group rounded-[2rem] border border-white/50 bg-white/80 p-5 shadow-lg shadow-amber-100/30 transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none">
-            <div className="mb-5 overflow-hidden rounded-[1.5rem] bg-[linear-gradient(135deg,#ffe9d2,_#fff7ef)] dark:bg-[linear-gradient(135deg,#2b231d,_#18181f)]">
-              {item.image_url ? (
-                <div className="relative aspect-[4/3] w-full overflow-hidden bg-white/40 dark:bg-slate-950/40">
-                  <img
-                    src={getImageUrl(item.image_url)}
-                    alt={item.name || 'Товар'}
-                    className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                    loading="lazy"
-                  />
-                </div>
-              ) : null}
-              <div className="p-6">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
-                  <span>{item.sku || 'BuildShop'}</span>
-                  <span className="rounded-full bg-white/80 px-3 py-1 text-amber-700 dark:bg-white/10 dark:text-amber-300">У кошику</span>
-                </div>
-                <h2 className="mt-6 min-h-[72px] text-2xl font-bold text-slate-900 dark:text-white">
-                  {item.name || 'Товар'}
-                </h2>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Ціна</p>
-                  <p className="text-2xl font-black text-amber-600 dark:text-amber-300">
-                    {formatPrice(item.price)}
-                  </p>
-                </div>
-                {item.description ? (
-                  <p className="max-w-[220px] text-right text-xs leading-5 text-slate-500 dark:text-slate-400">
-                    {item.description}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-950/60">
-                <button
-                  onClick={() => handleUpdateQuantity(item, (item.quantity || 1) - 1)}
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
-                  type="button"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-                <div className="text-center">
-                  <span className="text-lg font-semibold text-slate-900 dark:text-white">
-                    {item.quantity || 1}
-                  </span>
-                  {getAvailableQuantity(item) !== null ? (
-                    <p className={`text-xs ${getAvailableQuantity(item) > 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-500 dark:text-rose-300'}`}>
-                      {getAvailableQuantity(item) > 0 ? `на складі: ${getAvailableQuantity(item)}` : 'немає на складі'}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-slate-400">склад оновлюється</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleUpdateQuantity(item, (item.quantity || 1) + 1)}
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"
-                  type="button"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-
-              {typeof getAvailableQuantity(item) === 'number' && getAvailableQuantity(item) < item.quantity ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
-                  Обрана кількість перевищує залишок на складі. Зменште кількість або видаліть товар.
-                </div>
-              ) : null}
-
-              <div className="flex items-end justify-between rounded-2xl bg-slate-100 p-4 dark:bg-slate-950/60">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Сума</p>
-                  <p className="text-xl font-black text-slate-900 dark:text-white">
-                    {formatPrice(item.price * (item.quantity || 1))}
-                  </p>
-                </div>
-                <button
-                  onClick={() => removeFromCart(item.id)}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                  type="button"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Видалити
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {hasOutOfStock && (
-        <div className="mt-4 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
-          Деякі товари закінчилися на складі. Будь ласка, видаліть їх або зменшіть кількість.
-        </div>
-      )}
-
-      <div className="mt-8 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="page-shell">
+        <div className="mb-6 flex items-center justify-between rounded-2xl border border-white/50 bg-white/75 px-5 py-4 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
           <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-slate-400">Загальна сума</p>
-            <p className="text-3xl font-black text-amber-600 dark:text-amber-300">
-              {formatPrice(total)}
+            <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-300">Кошик</p>
+            <h1 className="mt-0.5 text-2xl font-black text-slate-900 dark:text-white">Ваші товари</h1>
+          </div>
+          <span className="text-xs text-slate-400">{cart.length} позиц{cart.length === 1 ? 'ія' : cart.length < 5 ? 'ії' : 'ій'}</span>
+        </div>
+        <div className="space-y-3">
+          {cart.map((item) => {
+            const available = getStockQuantity(item);
+            const isOutOfStock = typeof available === 'number' && available >= 0 && available < item.quantity;
+            return (
+                <div key={item.id} className={`flex items-center gap-4 rounded-2xl border bg-white/80 px-4 py-3 dark:bg-slate-900/60 ${isOutOfStock ? 'border-rose-200 dark:border-rose-500/20' : 'border-white/50 dark:border-white/10'}`}>
+                  {item.image_url ? (
+                      <div className="h-14 w-14 flex-none overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
+                        <img src={getImageUrl(item.image_url)} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
+                      </div>
+                  ) : (
+                      <div className="h-14 w-14 flex-none rounded-xl bg-slate-100 dark:bg-slate-800" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{item.name}</p>
+                    <p className="text-xs text-slate-400">{item.sku}</p>
+                    {isOutOfStock && (
+                        <p className="mt-0.5 text-xs text-rose-500">Недостатньо на складі</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 rounded-xl border border-slate-200 dark:border-white/10">
+                    <button onClick={() => handleUpdateQuantity(item, (item.quantity || 1) - 1)} className="flex h-8 w-8 items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white" type="button">
+                      <Minus className="h-3 w-3" />
+                    </button>
+                    <span className="min-w-6 text-center text-sm font-medium text-slate-900 dark:text-white">{item.quantity}</span>
+                    <button onClick={() => handleUpdateQuantity(item, (item.quantity || 1) + 1)} className="flex h-8 w-8 items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white" type="button">
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-amber-600 dark:text-amber-300">{formatPrice(item.price * (item.quantity || 1))}</p>
+                    <p className="text-xs text-slate-400">{formatPrice(item.price)} / шт</p>
+                  </div>
+                  <button onClick={() => removeFromCart(item.id)} className="text-slate-300 transition hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400" type="button">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+            );
+          })}
+        </div>
+        {hasOutOfStock && (
+            <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+              Деякі товари закінчилися. Видаліть їх або зменшіть кількість.
             </p>
+        )}
+        <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/50 bg-white/75 px-5 py-4 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+          <div>
+            <p className="text-xs text-slate-400">Загальна сума</p>
+            <p className="text-2xl font-black text-slate-900 dark:text-white">{formatPrice(total)}</p>
           </div>
           <Link
-            to={hasOutOfStock ? "#" : "/checkout"}
-            onClick={(e) => {
-              if (hasOutOfStock) {
-                e.preventDefault();
-              }
-            }}
-            className={`inline-flex items-center justify-center gap-2 rounded-2xl px-8 py-4 text-base font-semibold transition ${
-              hasOutOfStock
-                ? 'cursor-not-allowed bg-slate-300 text-slate-500 dark:bg-slate-700 dark:text-slate-500'
-                : 'bg-slate-950 text-white hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300'
-            }`}
+              to={hasOutOfStock ? '#' : '/checkout'}
+              onClick={(e) => { if (hasOutOfStock) e.preventDefault(); }}
+              className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition ${
+                  hasOutOfStock
+                      ? 'cursor-not-allowed bg-slate-200 text-slate-400 dark:bg-slate-700 dark:text-slate-500'
+                      : 'bg-slate-950 text-white hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300'
+              }`}
           >
-            <ShoppingBag className="h-5 w-5" />
+            <ShoppingBag className="h-4 w-4" />
             Оформити замовлення
           </Link>
         </div>
       </div>
-    </div>
   );
 }

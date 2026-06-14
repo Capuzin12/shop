@@ -69,7 +69,7 @@ function CatalogSearchBar({ value, onChange, suggestions, searchParams, setSearc
               }}
               onFocus={() => setIsOpen(true)}
               placeholder="Наприклад, цемент або Bosch"
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pl-11 text-sm text-slate-900 outline-none transition focus:border-amber-300 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pl-11 text-sm text-slate-900 outline-none transition focus:border-amber-300 dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-100"
           />
           {value ? (
               <button
@@ -401,21 +401,6 @@ export default function Catalog() {
                             {filters.brand_ids ? ` ${filters.search || filters.category_id ? '•' : ''} Бренди: ${filters.brand_ids}` : ''}
                           </p>
                       ) : null}
-                    </div>
-
-                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                      <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Картки</label>
-                      <select value={selectedCardView} onChange={(event) => handleCardViewChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-200">
-                        {Object.entries(CARD_VIEW_OPTIONS).map(([value, config]) => (
-                            <option key={value} value={value}>{config.label}</option>
-                        ))}
-                      </select>
-                      <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 sm:ml-2">Показувати по</label>
-                      <select value={pagination.limit} onChange={(event) => handleLimitChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none dark:border-white/10 dark:bg-slate-950/60 dark:text-slate-200">
-                        {[8, 12, 16, 24, 32, 48].map((limit) => (
-                            <option key={limit} value={limit}>{limit}</option>
-                        ))}
-                      </select>
                     </div>
                   </div>
 

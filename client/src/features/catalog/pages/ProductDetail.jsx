@@ -486,9 +486,9 @@ export default function ProductDetail() {
           </div>
 
           {wishlistMessage ? (
-            <p className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-              {wishlistMessage}
-            </p>
+              <p className="mt-4 rounded-full bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                {wishlistMessage}
+              </p>
           ) : null}
 
           <div className="mt-8 grid gap-3 sm:grid-cols-3">

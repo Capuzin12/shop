@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Heart, RefreshCcw, ShoppingBag, Trash2 } from 'lucide-react';
+import { Heart, ShoppingBag, Trash2 } from 'lucide-react';
 import { useCart } from '../../cart/context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
-
 import { formatPrice } from '../../../shared/utils/format';
 
 const getImageUrl = (url) => {
@@ -16,116 +15,74 @@ export default function Wishlist() {
   const { addToCart } = useCart();
   const { items, loading, refreshWishlist, removeFromWishlist } = useWishlist();
 
+  if (loading) {
+    return (
+        <div className="page-shell">
+          <div className="rounded-2xl border border-white/50 bg-white/75 p-10 text-center text-sm text-slate-400 backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+            Завантаження...
+          </div>
+        </div>
+    );
+  }
+
   return (
-    <div className="page-shell">
-      <div className="mb-8 flex flex-col gap-4 rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">Обране</p>
-          <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">Вподобані товари</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-            Додавайте товари сюди, щоб швидко повернутися до них пізніше.
-          </p>
-        </div>
-        <button
-          onClick={() => refreshWishlist()}
-          className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
-          type="button"
-        >
-          <RefreshCcw className="h-4 w-4" />
-          Оновити
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="rounded-[2rem] border border-white/50 bg-white/70 p-10 text-center text-slate-500 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-400">
-          Завантаження списку...
-        </div>
-      ) : items.length === 0 ? (
-        <div className="rounded-[2rem] border border-dashed border-amber-200 bg-white/70 p-12 text-center shadow-lg shadow-amber-100/30 backdrop-blur dark:border-amber-500/20 dark:bg-slate-900/60 dark:shadow-none">
-          <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-            <Heart className="h-8 w-8" />
+      <div className="page-shell">
+        <div className="mb-6 flex items-center justify-between rounded-2xl border border-white/50 bg-white/75 px-5 py-4 shadow-lg backdrop-blur dark:border-white/10 dark:bg-slate-900/60">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-300">Обране</p>
+            <h1 className="mt-0.5 text-2xl font-black text-slate-900 dark:text-white">Вподобайки</h1>
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Поки що тут порожньо</h2>
-          <p className="mt-2 text-slate-600 dark:text-slate-300">Додавайте товари в обране з каталогу або зі сторінки товару.</p>
-          <Link to="/catalog" className="mt-6 inline-flex rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300">
-            Перейти до каталогу
-          </Link>
+          <button onClick={() => refreshWishlist()} className="text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition" type="button">
+            Оновити
+          </button>
         </div>
-      ) : (
-        <>
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {items.map((item) => (
-              <div key={item.product_id} className="group rounded-[2rem] border border-white/50 bg-white/80 p-5 shadow-lg shadow-amber-100/30 transition hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none">
-                <div className="mb-5 overflow-hidden rounded-[1.5rem] bg-[linear-gradient(135deg,#ffe9d2,_#fff7ef)] dark:bg-[linear-gradient(135deg,#2b231d,_#18181f)]">
-                  {item.product?.image_url ? (
-                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-white/40 dark:bg-slate-950/40">
-                      <img
-                        src={getImageUrl(item.product.image_url)}
-                        alt={item.product?.name || 'Товар'}
-                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                        loading="lazy"
-                      />
+        {items.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-10 text-center dark:border-white/10 dark:bg-slate-900/40">
+              <Heart className="mx-auto mb-3 h-8 w-8 text-slate-300 dark:text-slate-600" />
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Список порожній</p>
+              <p className="mt-1 text-xs text-slate-400">Додавайте товари з каталогу або сторінки товару</p>
+              <Link to="/catalog" className="mt-4 inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950">
+                До каталогу
+              </Link>
+            </div>
+        ) : (
+            <div className="space-y-2">
+              {items.map((item) => (
+                  <div key={item.product_id} className="flex items-center gap-4 rounded-2xl border border-white/50 bg-white/80 px-4 py-3 dark:border-white/10 dark:bg-slate-900/60">
+                    {item.product?.image_url ? (
+                        <div className="h-12 w-12 flex-none overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
+                          <img src={getImageUrl(item.product.image_url)} alt={item.product?.name} className="h-full w-full object-cover" loading="lazy" />
+                        </div>
+                    ) : (
+                        <div className="h-12 w-12 flex-none rounded-xl bg-slate-100 dark:bg-slate-800" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <Link to={`/product/${item.product_id}`} className="block truncate text-sm font-semibold text-slate-900 hover:text-amber-600 dark:text-white dark:hover:text-amber-300">
+                        {item.product?.name || 'Товар'}
+                      </Link>
+                      <p className="text-xs text-slate-400">{item.product?.sku}</p>
                     </div>
-                  ) : null}
-                  <div className="p-6">
-                    <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
-                      <span>{item.product?.sku || 'BuildShop'}</span>
-                      <span className="rounded-full bg-white/80 px-3 py-1 text-rose-500 dark:bg-white/10 dark:text-rose-300">Обране</span>
-                    </div>
-                    <h2 className="mt-6 min-h-[72px] text-2xl font-bold text-slate-900 dark:text-white">
-                      {item.product?.name || 'Товар'}
-                    </h2>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-end justify-between gap-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Ціна</p>
-                      <p className="text-2xl font-black text-amber-600 dark:text-amber-300">
-                        {formatPrice(item.product?.price)}
-                      </p>
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      Додано {item.added_at ? new Date(item.added_at).toLocaleDateString('uk-UA') : '-'}
+                    <p className="text-sm font-bold text-amber-600 dark:text-amber-300 shrink-0">
+                      {formatPrice(item.product?.price)}
                     </p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                          onClick={() => addToCart(item.product)}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300"
+                          type="button"
+                      >
+                        <ShoppingBag className="h-3 w-3" />
+                        До кошика
+                      </button>
+                      <button onClick={() => removeFromWishlist(item.product_id)} className="text-slate-300 transition hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400" type="button">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <Link
-                      to={`/product/${item.product_id}`}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/5"
-                    >
-                      <ShoppingBag className="h-4 w-4" />
-                      Деталі
-                    </Link>
-                    <button
-                      onClick={() => addToCart(item.product)}
-                      className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300"
-                      type="button"
-                    >
-                      До кошика
-                    </button>
-                    <button
-                      onClick={() => removeFromWishlist(item.product_id)}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                      type="button"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Видалити
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
-            У списку {items.length} товарів.
-          </p>
-        </>
-      )}
-    </div>
+              ))}
+              <p className="pt-1 text-center text-xs text-slate-400">{items.length} товарів у списку</p>
+            </div>
+        )}
+      </div>
   );
 }
-

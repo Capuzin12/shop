@@ -268,7 +268,7 @@ export default function Header() {
   return (
       <header className="sticky top-0 z-40 border-b border-white/40 bg-white/70 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/70">
         <div className="flex w-full items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
-          <Link to="/" className="shrink-0">
+          <Link to="/catalog" className="shrink-0">
             <div className="rounded-3xl bg-slate-950 px-3 py-2 text-base font-black tracking-[0.18em] text-amber-300 shadow-lg shadow-slate-950/20 sm:px-4 sm:text-lg dark:bg-amber-400 dark:text-slate-950">
               BUILDSHOP
             </div>
@@ -276,10 +276,6 @@ export default function Header() {
 
           {/* Desktop search with live dropdown */}
           <SearchBar className="hidden flex-1 md:block" />
-
-          <nav className="hidden items-center gap-5 lg:flex">
-            <Link to="/catalog" className="text-sm font-medium text-slate-600 transition hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">Каталог</Link>
-          </nav>
 
           <div className="ml-auto flex items-center gap-2">
             <button onClick={toggleTheme} className={`${iconButtonClass} hidden sm:inline-flex`} title="Змінити тему" type="button">
@@ -395,7 +391,6 @@ export default function Header() {
                 )}
 
                 <div className="grid gap-2">
-                  <Link to="/catalog" onClick={closeMobileMenu} className={mobileLinkClass}>Каталог</Link>
                   <Link to="/wishlist" onClick={closeMobileMenu} className={mobileLinkClass}>
                     <span>Обране</span>
                     {wishlistCount ? <span className="text-xs font-bold text-amber-600 dark:text-amber-300">{wishlistCount}</span> : null}

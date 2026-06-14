@@ -1,31 +1,39 @@
 import { AlertTriangle, CheckCircle2, LoaderCircle } from 'lucide-react';
 
 export function BackofficeShell({ eyebrow, title, description, actions, stats, sidebar, children }) {
-  return (
-    <div className="page-shell">
-      <div className="mb-8 rounded-[2rem] border border-white/50 bg-white/75 p-6 shadow-xl shadow-amber-100/40 backdrop-blur dark:border-white/10 dark:bg-slate-900/60 dark:shadow-none">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            {eyebrow ? <p className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-600 dark:text-amber-300">{eyebrow}</p> : null}
-            <h1 className="mt-2 text-4xl font-black text-slate-900 dark:text-white">{title}</h1>
-            {description ? <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300">{description}</p> : null}
-          </div>
-          {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
-        </div>
-      </div>
+    return (
+        <div className="page-shell">
+            <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
+                <div>
+                    {eyebrow && <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-300">{eyebrow}</p>}
+                    <h1 className="mt-1 text-3xl font-black text-slate-900 dark:text-white">{title}</h1>
+                    {description && <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-400">{description}</p>}
+                </div>
+                {actions && (
+                    <div className="flex shrink-0 items-center gap-3">
+                        {actions}
+                    </div>
+                )}
+            </div>
 
-      {stats ? <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">{stats}</div> : null}
+            {stats && (
+                <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {stats}
+                </div>
+            )}
 
-      {sidebar ? (
-        <div className="grid gap-8 lg:grid-cols-[280px,1fr]">
-          <aside>{sidebar}</aside>
-          <main>{children}</main>
+            <div className="grid items-start gap-8 lg:grid-cols-[280px_1fr]">
+                {sidebar && (
+                    <aside className="lg:sticky lg:top-24">
+                        {sidebar}
+                    </aside>
+                )}
+                <main className="min-w-0">
+                    {children}
+                </main>
+            </div>
         </div>
-      ) : (
-        <div>{children}</div>
-      )}
-    </div>
-  );
+    );
 }
 
 export function StatCard({ icon: Icon, label, value, tone = 'amber', hint }) {
