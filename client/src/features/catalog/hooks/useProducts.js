@@ -3,13 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../../../api';
 
 export function useProducts() {
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [brandFacets, setBrandFacets] = useState([]);
-  const [suggestions, setSuggestions] = useState({ products: [], categories: [], brands: [] });
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [searchMeta, setSearchMeta] = useState({ mode: 'strict', hint: null });
   const [searchParams, setSearchParams] = useSearchParams();
   const loadMoreRef = useRef(null);
   const loadMoreObserverRef = useRef(null);
@@ -24,13 +17,29 @@ export function useProducts() {
     sort_order: 'asc',
   });
 
-  const [pagination, setPagination] = useState({
-    page: parseInt(searchParams.get('page'), 10) || 1,
-    limit: parseInt(searchParams.get('limit'), 10) || 12,
-    total: 0,
-    totalPages: 0,
+  // Ініціалізація товарів та пагінації з sessionStorage
+  const [products, setProducts] = useState(() => {
+    const saved = sessionStorage.getItem('catalog_products_cache');
+    return saved ? JSON.parse(saved).products : [];
   });
 
+  const [pagination, setPagination] = useState(() => {
+    const saved = sessionStorage.getItem('catalog_products_cache');
+    const savedPage = saved ? JSON.parse(saved).pagination : null;
+    return savedPage || {
+      page: parseInt(searchParams.get('page'), 10) || 1,
+      limit: parseInt(searchParams.get('limit'), 10) || 12,
+      total: 0,
+      totalPages: 0,
+    };
+  });
+
+  const [categories, setCategories] = useState([]);
+  const [brandFacets, setBrandFacets] = useState([]);
+  const [suggestions, setSuggestions] = useState({ products: [], categories: [], brands: [] });
+  const [loading, setLoading] = useState(() => !sessionStorage.getItem('catalog_products_cache'));
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [searchMeta, setSearchMeta] = useState({ mode: 'strict', hint: null });
   const [cardView, setCardView] = useState(searchParams.get('card_view') || 'comfortable');
 
   useEffect(() => {
@@ -53,7 +62,7 @@ export function useProducts() {
       sort_by: sortByParam,
       sort_order: sortOrderParam,
     });
-    setPagination((prev) => ({ ...prev, page: 1, limit: limitParam }));
+    setPagination((prev) => ({ ...prev, limit: limitParam }));
     setCardView(cardViewParam);
   }, [searchParams]);
 
@@ -67,7 +76,6 @@ export function useProducts() {
         console.error('Error fetching categories:', error);
       }
     };
-
     fetchCategories();
   }, []);
 
@@ -77,7 +85,6 @@ export function useProducts() {
       setSuggestions({ products: [], categories: [], brands: [] });
       return;
     }
-
     const timer = window.setTimeout(async () => {
       try {
         const response = await api.get('/api/search/suggestions', { params: { q: query } });
@@ -86,22 +93,24 @@ export function useProducts() {
         setSuggestions({ products: [], categories: [], brands: [] });
       }
     }, 200);
-
     return () => window.clearTimeout(timer);
   }, [filters.search]);
 
   const productsRequestKey = useMemo(
-    () =>
-      JSON.stringify({
-        ...filters,
-        limit: pagination.limit,
-      }),
-    [filters, pagination.limit],
+      () => JSON.stringify({ ...filters, limit: pagination.limit }),
+      [filters, pagination.limit]
   );
 
   const fetchProducts = useCallback(async ({ page = 1, append = false } = {}) => {
-    if (!append) setLoading(true);
-    else setLoadingMore(true);
+    if (!append) {
+      const saved = sessionStorage.getItem('catalog_products_cache');
+      if (saved && products.length > 0) {
+        return;
+      }
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
 
     try {
       const params = {
@@ -120,6 +129,7 @@ export function useProducts() {
       const response = await api.get('/api/products', { params });
       const productsData = response.data.products;
       const validProducts = Array.isArray(productsData) ? productsData.filter((product) => product && product.id) : [];
+
       setProducts((prev) => {
         if (!append) return validProducts;
         const next = [...prev];
@@ -146,13 +156,27 @@ export function useProducts() {
       if (!append) setLoading(false);
       else setLoadingMore(false);
     }
-  }, [filters, pagination.limit]);
+  }, [filters, pagination.limit, products.length]);
 
   useEffect(() => {
+    const saved = sessionStorage.getItem('catalog_products_cache');
+    if (saved) {
+      const cachedFilters = JSON.parse(saved).filters;
+      if (JSON.stringify(cachedFilters) === JSON.stringify(filters) && products.length > 0) {
+        return;
+      }
+    }
     setProducts([]);
     setPagination((prev) => ({ ...prev, page: 1 }));
     fetchProducts({ page: 1, append: false });
-  }, [fetchProducts, productsRequestKey]);
+  }, [fetchProducts, productsRequestKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Збереження стану в кеш сесії
+  useEffect(() => {
+    if (products.length > 0) {
+      sessionStorage.setItem('catalog_products_cache', JSON.stringify({ products, pagination, filters }));
+    }
+  }, [products, pagination, filters]);
 
   const hasMore = pagination.totalPages ? pagination.page < pagination.totalPages : false;
 
@@ -194,4 +218,3 @@ export function useProducts() {
     suggestions,
   };
 }
-

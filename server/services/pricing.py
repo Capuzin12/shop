@@ -51,7 +51,6 @@ def resolve_effective_product_price(
             select(CustomerGroup).where(
                 or_(
                     CustomerGroup.is_default == True,
-                    CustomerGroup.is_default == 1,
                     func.lower(CustomerGroup.name) == "роздріб"
                 )
             )

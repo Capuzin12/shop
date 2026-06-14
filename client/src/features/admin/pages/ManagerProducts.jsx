@@ -8,12 +8,25 @@ const PAGE_SIZE = 15;
 
 export default function ManagerProducts() {
   const { user } = useAuth();
-  const [products, setProducts] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [products, setProducts] = useState(() => {
+    const saved = sessionStorage.getItem('manager_products_cache');
+    return saved ? JSON.parse(saved).products : [];
+  });
+  const [page, setPage] = useState(() => {
+    const saved = sessionStorage.getItem('manager_products_cache');
+    return saved ? JSON.parse(saved).page : 1;
+  });
+  const [totalPages, setTotalPages] = useState(() => {
+    const saved = sessionStorage.getItem('manager_products_cache');
+    return saved ? JSON.parse(saved).totalPages : 1;
+  });
+  const [totalCount, setTotalCount] = useState(() => {
+    const saved = sessionStorage.getItem('manager_products_cache');
+    return saved ? JSON.parse(saved).totalCount : 0;
+  });
+
+  const [isLoading, setIsLoading] = useState(() => !sessionStorage.getItem('manager_products_cache'));
   const [loadingMore, setLoadingMore] = useState(false);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const loadMoreRef = useRef(null);
@@ -21,8 +34,16 @@ export default function ManagerProducts() {
   const searchTimerRef = useRef(null);
 
   const fetchPage = useCallback(async ({ pageNum = 1, append = false, searchQuery = search } = {}) => {
-    if (pageNum === 1 && !append) setIsLoading(true);
-    else setLoadingMore(true);
+    if (pageNum === 1 && !append) {
+      const saved = sessionStorage.getItem('manager_products_cache');
+      if (saved && products.length > 0) {
+        const cachedSearch = JSON.parse(saved).search;
+        if (cachedSearch === searchQuery) return;
+      }
+      setIsLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
 
     try {
       const params = { page: pageNum, limit: PAGE_SIZE };
@@ -44,7 +65,7 @@ export default function ManagerProducts() {
       setIsLoading(false);
       setLoadingMore(false);
     }
-  }, [search]);
+  }, [search, products.length]);
 
   useEffect(() => {
     if (!user) return;
@@ -76,6 +97,33 @@ export default function ManagerProducts() {
       fetchPage({ pageNum: 1, append: false, searchQuery: value });
     }, 300);
   };
+
+  useEffect(() => {
+    if (products.length > 0) {
+      sessionStorage.setItem('manager_products_cache', JSON.stringify({ products, page, totalPages, totalCount, search }));
+    }
+  }, [products, page, totalPages, totalCount, search]);
+
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.max-h-\\[65vh\\]');
+    const savedScroll = sessionStorage.getItem('manager_products_scroll');
+    if (scrollContainer && savedScroll && products.length > 0) {
+      const timer = setTimeout(() => {
+        scrollContainer.scrollTop = parseInt(savedScroll, 10);
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [products]);
+
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.max-h-\\[65vh\\]');
+    if (!scrollContainer) return;
+    const handleScroll = () => {
+      sessionStorage.setItem('manager_products_scroll', String(scrollContainer.scrollTop));
+    };
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, [isLoading, products]);
 
   return (
       <Panel

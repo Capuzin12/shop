@@ -35,20 +35,32 @@ const toBool = (value) => value === true || value === 'true';
 
 export default function AdminProducts() {
   const { user } = useAuth();
-  const [products, setProducts] = useState([]);
+// 1. Онови ініціалізацію станів на початку компонента AdminProducts:
+  const [products, setProducts] = useState(() => {
+    const saved = sessionStorage.getItem('admin_products_cache');
+    return saved ? JSON.parse(saved).products : [];
+  });
+  const [page, setPage] = useState(() => {
+    const saved = sessionStorage.getItem('admin_products_cache');
+    return saved ? JSON.parse(saved).page : 1;
+  });
+  const [totalPages, setTotalPages] = useState(() => {
+    const saved = sessionStorage.getItem('admin_products_cache');
+    return saved ? JSON.parse(saved).totalPages : 1;
+  });
+  const [totalCount, setTotalCount] = useState(() => {
+    const saved = sessionStorage.getItem('admin_products_cache');
+    return saved ? JSON.parse(saved).totalCount : 0;
+  });
+
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [editing, setEditing] = useState(null);
   const [formData, setFormData] = useState(DEFAULT_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => !sessionStorage.getItem('admin_products_cache'));
   const [showPriceHistory, setShowPriceHistory] = useState(false);
-
-  // Lazy loading state
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -67,7 +79,14 @@ export default function AdminProducts() {
 
   const fetchProductsPage = useCallback(async ({ pageNum = 1, append = false, searchQuery = search } = {}) => {
     if (pageNum === 1) {
-      if (!append) setIsLoading(true);
+      if (!append) {
+        const saved = sessionStorage.getItem('admin_products_cache');
+        if (saved && products.length > 0) {
+          const cachedSearch = JSON.parse(saved).search;
+          if (cachedSearch === searchQuery) return;
+        }
+        setIsLoading(true);
+      }
     } else {
       setLoadingMore(true);
     }
@@ -82,7 +101,6 @@ export default function AdminProducts() {
 
       setTotalCount(data.total ?? validProducts.length);
       setTotalPages(data.total_pages ?? 1);
-
       setProducts((prev) => append ? [...prev, ...validProducts] : validProducts);
       setPage(pageNum);
     } catch (error) {
@@ -92,7 +110,7 @@ export default function AdminProducts() {
       setIsLoading(false);
       setLoadingMore(false);
     }
-  }, [search]);
+  }, [search, products.length]);
 
   const fetchCategories = async () => {
     try {
@@ -278,6 +296,33 @@ export default function AdminProducts() {
       setFormError(detail?.message || detail || 'Не вдалося зберегти товар.');
     }
   };
+
+  useEffect(() => {
+    if (products.length > 0) {
+      sessionStorage.setItem('admin_products_cache', JSON.stringify({ products, page, totalPages, totalCount, search }));
+    }
+  }, [products, page, totalPages, totalCount, search]);
+
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.max-h-\\[65vh\\]');
+    const savedScroll = sessionStorage.getItem('admin_products_scroll');
+    if (scrollContainer && savedScroll && products.length > 0) {
+      const timer = setTimeout(() => {
+        scrollContainer.scrollTop = parseInt(savedScroll, 10);
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [products]);
+
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.max-h-\\[65vh\\]');
+    if (!scrollContainer) return;
+    const handleScroll = () => {
+      sessionStorage.setItem('admin_products_scroll', String(scrollContainer.scrollTop));
+    };
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, [isLoading, products]);
 
   return (
       <div className="space-y-6">

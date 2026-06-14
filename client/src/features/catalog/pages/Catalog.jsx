@@ -55,6 +55,7 @@ function CatalogSearchBar({ value, onChange, suggestions, searchParams, setSearc
     setIsOpen(false);
   };
 
+
   return (
       <div ref={wrapperRef} className="relative">
         <div className="relative">
@@ -263,6 +264,26 @@ export default function Catalog() {
   const selectedCardView = CARD_VIEW_OPTIONS[cardView] ? cardView : 'comfortable';
   const viewConfig = CARD_VIEW_OPTIONS[selectedCardView];
   const productGridStyle = { gridTemplateColumns: `repeat(auto-fit, minmax(${viewConfig.minWidth}px, 1fr))` };
+
+  // --- ДОДАТИ ОСЬ СЮДИ: ---
+  useEffect(() => {
+    const savedScroll = sessionStorage.getItem('catalog_scroll_position');
+    if (savedScroll && products.length > 0) {
+      const timer = setTimeout(() => {
+        window.scrollTo(0, parseInt(savedScroll, 10));
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [products]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      sessionStorage.setItem('catalog_scroll_position', String(window.scrollY));
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+  // -------------------------
 
   return (
       <div className="page-shell">
