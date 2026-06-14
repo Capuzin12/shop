@@ -210,7 +210,6 @@ export default function Catalog() {
     products,
     searchMeta,
     searchParams,
-    setCardView,
     setSearchParams,
     suggestions,
   } = useProducts();
@@ -252,20 +251,6 @@ export default function Catalog() {
     if (value) nextParams.set('brand_ids', value);
     else nextParams.delete('brand_ids');
     nextParams.delete('page');
-    setSearchParams(nextParams);
-  };
-
-  const handleLimitChange = (value) => {
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('limit', String(Number(value) || 12));
-    setSearchParams(nextParams);
-  };
-
-  const handleCardViewChange = (value) => {
-    const nextView = CARD_VIEW_OPTIONS[value] ? value : 'comfortable';
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('card_view', nextView);
-    setCardView(nextView);
     setSearchParams(nextParams);
   };
 
