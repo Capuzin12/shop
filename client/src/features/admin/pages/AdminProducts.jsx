@@ -35,23 +35,12 @@ const toBool = (value) => value === true || value === 'true';
 
 export default function AdminProducts() {
   const { user } = useAuth();
-// 1. Онови ініціалізацію станів на початку компонента AdminProducts:
-  const [products, setProducts] = useState(() => {
-    const saved = sessionStorage.getItem('admin_products_cache');
-    return saved ? JSON.parse(saved).products : [];
-  });
-  const [page, setPage] = useState(() => {
-    const saved = sessionStorage.getItem('admin_products_cache');
-    return saved ? JSON.parse(saved).page : 1;
-  });
-  const [totalPages, setTotalPages] = useState(() => {
-    const saved = sessionStorage.getItem('admin_products_cache');
-    return saved ? JSON.parse(saved).totalPages : 1;
-  });
-  const [totalCount, setTotalCount] = useState(() => {
-    const saved = sessionStorage.getItem('admin_products_cache');
-    return saved ? JSON.parse(saved).totalCount : 0;
-  });
+
+  // Чиста ініціалізація без sessionStorage
+  const [products, setProducts] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -59,11 +48,12 @@ export default function AdminProducts() {
   const [formData, setFormData] = useState(DEFAULT_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
-  const [isLoading, setIsLoading] = useState(() => !sessionStorage.getItem('admin_products_cache'));
+  const [isLoading, setIsLoading] = useState(true);
   const [showPriceHistory, setShowPriceHistory] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
+
   const loadMoreRef = useRef(null);
   const observerRef = useRef(null);
   const searchTimerRef = useRef(null);
@@ -77,16 +67,10 @@ export default function AdminProducts() {
     });
   };
 
+  // Чиста функція завантаження
   const fetchProductsPage = useCallback(async ({ pageNum = 1, append = false, searchQuery = search } = {}) => {
     if (pageNum === 1) {
-      if (!append) {
-        const saved = sessionStorage.getItem('admin_products_cache');
-        if (saved && products.length > 0) {
-          const cachedSearch = JSON.parse(saved).search;
-          if (cachedSearch === searchQuery) return;
-        }
-        setIsLoading(true);
-      }
+      if (!append) setIsLoading(true);
     } else {
       setLoadingMore(true);
     }
@@ -110,7 +94,7 @@ export default function AdminProducts() {
       setIsLoading(false);
       setLoadingMore(false);
     }
-  }, [search, products.length]);
+  }, [search]);
 
   const fetchCategories = async () => {
     try {
@@ -297,33 +281,6 @@ export default function AdminProducts() {
     }
   };
 
-  useEffect(() => {
-    if (products.length > 0) {
-      sessionStorage.setItem('admin_products_cache', JSON.stringify({ products, page, totalPages, totalCount, search }));
-    }
-  }, [products, page, totalPages, totalCount, search]);
-
-  useEffect(() => {
-    const scrollContainer = document.querySelector('.max-h-\\[65vh\\]');
-    const savedScroll = sessionStorage.getItem('admin_products_scroll');
-    if (scrollContainer && savedScroll && products.length > 0) {
-      const timer = setTimeout(() => {
-        scrollContainer.scrollTop = parseInt(savedScroll, 10);
-      }, 80);
-      return () => clearTimeout(timer);
-    }
-  }, [products]);
-
-  useEffect(() => {
-    const scrollContainer = document.querySelector('.max-h-\\[65vh\\]');
-    if (!scrollContainer) return;
-    const handleScroll = () => {
-      sessionStorage.setItem('admin_products_scroll', String(scrollContainer.scrollTop));
-    };
-    scrollContainer.addEventListener('scroll', handleScroll);
-    return () => scrollContainer.removeEventListener('scroll', handleScroll);
-  }, [isLoading, products]);
-
   return (
       <div className="space-y-6">
         <Panel
@@ -337,26 +294,26 @@ export default function AdminProducts() {
             )}
         >
           <ProductForm
-            brands={brands}
-            categories={categories}
-            editing={editing}
-            fieldErrors={fieldErrors}
-            formData={formData}
-            formError={formError}
-            onCancel={() => {
-              setEditing(null);
-              setFormData(DEFAULT_FORM);
-              setFieldErrors({});
-              setFormError('');
-            }}
-            onChange={updateField}
-            onSubmit={handleSubmit}
-            toBool={toBool}
+              brands={brands}
+              categories={categories}
+              editing={editing}
+              fieldErrors={fieldErrors}
+              formData={formData}
+              formError={formError}
+              onCancel={() => {
+                setEditing(null);
+                setFormData(DEFAULT_FORM);
+                setFieldErrors({});
+                setFormError('');
+              }}
+              onChange={updateField}
+              onSubmit={handleSubmit}
+              toBool={toBool}
           />
 
           {editing ? (
               <div className="mt-6 space-y-4 border-t border-slate-200 pt-6 dark:border-white/10">
-                <ProductPricingTable productId={editing} basePrice={Number(formData.price) || 0} />
+                <ProductPricingTable productId={editing} />
                 <ProductDiscountsManager productId={editing} />
                 <div className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
                   <button type="button" className="text-sm font-semibold text-blue-600 dark:text-blue-300" onClick={() => setShowPriceHistory((prev) => !prev)}>
@@ -400,8 +357,8 @@ export default function AdminProducts() {
                 <DataTable columns={['Назва', 'SKU', 'Ціна', 'Категорія', 'Бренд', 'Статус', 'Дії']}>
                   {products.map((product) => (
                       <tr
-                        key={product.id}
-                        className={`align-top transition ${editing === product.id ? 'bg-blue-50 dark:bg-blue-500/10 border-l-4 border-blue-500' : 'border-l-4 border-transparent hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                          key={product.id}
+                          className={`align-top transition ${editing === product.id ? 'bg-blue-50 dark:bg-blue-500/10 border-l-4 border-blue-500' : 'border-l-4 border-transparent hover:bg-slate-50 dark:hover:bg-white/5'}`}
                       >
                         <td className="px-4 py-4">
                           <p className="font-semibold text-slate-900 dark:text-white">{product.name}</p>
