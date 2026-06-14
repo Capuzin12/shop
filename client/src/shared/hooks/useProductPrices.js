@@ -21,8 +21,12 @@ export function useUpsertProductPrice(productId) {
       return data;
     },
     onSuccess: () => {
+      // Миттєво анулюємо та оновлюємо всі пов'язані з цінами та історією запити
       queryClient.invalidateQueries({ queryKey: ['product-prices', productId] });
       queryClient.invalidateQueries({ queryKey: ['product-effective-price', productId] });
+      queryClient.invalidateQueries({ queryKey: ['price-history', productId] });
+      queryClient.invalidateQueries({ queryKey: ['global-price-history'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
   });
 }
@@ -35,8 +39,12 @@ export function useDeleteProductPrice(productId) {
       return priceId;
     },
     onSuccess: () => {
+      // Миттєво анулюємо та оновлюємо всі пов'язані з цінами та історією запити
       queryClient.invalidateQueries({ queryKey: ['product-prices', productId] });
       queryClient.invalidateQueries({ queryKey: ['product-effective-price', productId] });
+      queryClient.invalidateQueries({ queryKey: ['price-history', productId] });
+      queryClient.invalidateQueries({ queryKey: ['global-price-history'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
     },
   });
 }
