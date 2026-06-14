@@ -36,11 +36,23 @@ const toBool = (value) => value === true || value === 'true';
 export default function AdminProducts() {
   const { user } = useAuth();
 
-  // Чиста ініціалізація без sessionStorage
-  const [products, setProducts] = useState([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  // Безпечне зчитування початкового стану з кешу
+  const [products, setProducts] = useState(() => {
+    const saved = sessionStorage.getItem('admin_products_cache');
+    return saved ? JSON.parse(saved).products : [];
+  });
+  const [page, setPage] = useState(() => {
+    const saved = sessionStorage.getItem('admin_products_cache');
+    return saved ? JSON.parse(saved).page : 1;
+  });
+  const [totalPages, setTotalPages] = useState(() => {
+    const saved = sessionStorage.getItem('admin_products_cache');
+    return saved ? JSON.parse(saved).totalPages : 1;
+  });
+  const [totalCount, setTotalCount] = useState(() => {
+    const saved = sessionStorage.getItem('admin_products_cache');
+    return saved ? JSON.parse(saved).totalCount : 0;
+  });
 
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -48,7 +60,9 @@ export default function AdminProducts() {
   const [formData, setFormData] = useState(DEFAULT_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+
+  // Якщо є кеш — не показуємо початковий глобальний лоадер
+  const [isLoading, setIsLoading] = useState(() => !sessionStorage.getItem('admin_products_cache'));
   const [showPriceHistory, setShowPriceHistory] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
@@ -57,6 +71,9 @@ export default function AdminProducts() {
   const loadMoreRef = useRef(null);
   const observerRef = useRef(null);
   const searchTimerRef = useRef(null);
+
+  // Ключовий прапорець: блокує тригери скролу під час відновлення позиції
+  const isRestoringRef = useRef(Boolean(sessionStorage.getItem('admin_products_scroll')));
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -67,10 +84,19 @@ export default function AdminProducts() {
     });
   };
 
-  // Чиста функція завантаження
   const fetchProductsPage = useCallback(async ({ pageNum = 1, append = false, searchQuery = search } = {}) => {
     if (pageNum === 1) {
-      if (!append) setIsLoading(true);
+      if (!append) {
+        const saved = sessionStorage.getItem('admin_products_cache');
+        if (saved && products.length > 0) {
+          const cachedSearch = JSON.parse(saved).search;
+          // Якщо пошуковий запит збігається з кешованим — не робимо повторний запит
+          if (cachedSearch === searchQuery) {
+            return;
+          }
+        }
+        setIsLoading(true);
+      }
     } else {
       setLoadingMore(true);
     }
@@ -87,14 +113,18 @@ export default function AdminProducts() {
       setTotalPages(data.total_pages ?? 1);
       setProducts((prev) => append ? [...prev, ...validProducts] : validProducts);
       setPage(pageNum);
+
+      // Якщо це був новий запит без кешу — знімаємо блокування
+      isRestoringRef.current = false;
     } catch (error) {
       console.error('Error fetching products:', error);
       if (!append) setProducts([]);
+      isRestoringRef.current = false;
     } finally {
       setIsLoading(false);
       setLoadingMore(false);
     }
-  }, [search]);
+  }, [search, products.length]);
 
   const fetchCategories = async () => {
     try {
@@ -117,14 +147,20 @@ export default function AdminProducts() {
   };
 
   const reload = useCallback(async () => {
+    sessionStorage.removeItem('admin_products_cache');
+    sessionStorage.removeItem('admin_products_scroll');
+    isRestoringRef.current = false;
     setIsLoading(true);
     await Promise.all([fetchProductsPage({ pageNum: 1, append: false }), fetchCategories(), fetchBrands()]);
   }, [fetchProductsPage]);
 
   useEffect(() => {
     if (!user) return;
-    reload();
-  }, [user, reload]);
+    // Завантажуємо категорії та бренди, а товари підтягнуться або з кешу, або з першого запиту всередині fetchProductsPage
+    fetchCategories();
+    fetchBrands();
+    fetchProductsPage({ pageNum: 1, append: false });
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Infinite scroll observer
   useEffect(() => {
@@ -133,6 +169,10 @@ export default function AdminProducts() {
 
     observerRef.current = new IntersectionObserver((entries) => {
       if (!entries[0]?.isIntersecting) return;
+
+      // НАДІЙНИЙ ЗАХИСТ: Якщо ми все ще відновлюємо позицію скролу — ігноруємо тригер пагінації
+      if (isRestoringRef.current) return;
+
       if (isLoading || loadingMore) return;
       if (page >= totalPages) return;
       fetchProductsPage({ pageNum: page + 1, append: true });
@@ -150,9 +190,50 @@ export default function AdminProducts() {
       setSearch(value);
       setProducts([]);
       setPage(1);
+      isRestoringRef.current = false;
       fetchProductsPage({ pageNum: 1, append: false, searchQuery: value });
     }, 300);
   };
+
+  // ── Ефекти для скролу та синхронізації кешу ────────────────
+
+  useEffect(() => {
+    if (products.length > 0) {
+      sessionStorage.setItem('admin_products_cache', JSON.stringify({ products, page, totalPages, totalCount, search }));
+    }
+  }, [products, page, totalPages, totalCount, search]);
+
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.max-h-\\[65vh\\]');
+    const savedScroll = sessionStorage.getItem('admin_products_scroll');
+
+    if (scrollContainer && savedScroll && products.length > 0) {
+      const timer = setTimeout(() => {
+        scrollContainer.scrollTop = parseInt(savedScroll, 10);
+        // Знімаємо блокування ОДРАЗУ ПІСЛЯ того, як контейнер став на потрібну позицію
+        setTimeout(() => {
+          isRestoringRef.current = false;
+        }, 50);
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      isRestoringRef.current = false;
+    }
+  }, [products]);
+
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.max-h-\\[65vh\\]');
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      // Записуємо позицію лише тоді, коли не виконується відновлення старого скролу
+      if (!isRestoringRef.current) {
+        sessionStorage.setItem('admin_products_scroll', String(scrollContainer.scrollTop));
+      }
+    };
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, [isLoading, products]);
 
   // ── form helpers ──────────────────────────────────────────
 
@@ -250,7 +331,7 @@ export default function AdminProducts() {
     if (!sku) nextErrors.sku = 'Вкажіть SKU';
     if (!Number.isInteger(categoryId) || categoryId <= 0) nextErrors.category_id = 'Вкажіть коректний ID категорії';
     if (slug && !isValidSlug(slug)) nextErrors.slug = 'Slug може містити лише малі латинські літери, цифри та дефіс';
-    if (sku && !isValidSku(sku)) nextErrors.sku = 'SKU має містити 3-100 символів: літери, цифри, крапку, дефіс, / або _';
+    if (sku && !isValidSku(sku)) nextErrors.sku = 'SKU має містити 3-100 symbols: літери, цифри, крапку, дефіс, / або _';
     if (brandId !== null && (!Number.isInteger(brandId) || brandId <= 0)) nextErrors.brand_id = 'Бренд має бути коректним ID';
     if (weight !== null && (!Number.isFinite(weight) || weight < 0)) nextErrors.weight_kg = 'Вага має бути невід\'ємним числом';
     if (!unit) nextErrors.unit = 'Вкажіть одиницю виміру';
@@ -273,6 +354,7 @@ export default function AdminProducts() {
       setEditing(null);
       setFormData(DEFAULT_FORM);
       setFieldErrors({});
+      sessionStorage.removeItem('admin_products_cache');
       await fetchProductsPage({ pageNum: 1, append: false });
     } catch (error) {
       console.error('Error saving product:', error);
@@ -381,6 +463,7 @@ export default function AdminProducts() {
                                 onClick={async () => {
                                   if (!confirm('Видалити товар?')) return;
                                   await api.delete(`/api/products/${product.id}`);
+                                  sessionStorage.removeItem('admin_products_cache');
                                   await fetchProductsPage({ pageNum: 1, append: false });
                                 }}
                                 className="inline-flex items-center gap-1 text-sm font-semibold text-rose-600 dark:text-rose-300"
