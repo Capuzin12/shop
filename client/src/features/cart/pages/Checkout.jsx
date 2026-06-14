@@ -208,6 +208,8 @@ export default function Checkout() {
 
     const outOfStock = cart.find((item) => { const a = getStockQuantity(item); return typeof a === 'number' && a >= 0 && a < item.quantity; });
     if (outOfStock) { setMessage(`Товару "${outOfStock.name}" недостатньо на складі.`); return; }
+    const invalidPriceItem = cart.find((item) => item.price === null || item.price === undefined);
+    if (invalidPriceItem) { setMessage(`Для товару "${invalidPriceItem.name}" не встановлено ціну для вашої ролі.`); return; }
 
     try {
       setSubmitting(true);
@@ -366,8 +368,7 @@ export default function Checkout() {
                             </div>
                         ) : <div className="h-10 w-10 flex-none rounded-lg bg-slate-100 dark:bg-slate-800" />}
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium text-slate-900 dark:text-white">{item.name}</p>
-                          <p className="text-xs text-slate-400">{item.quantity} шт{isOut ? ' · недостатньо' : ''}</p>
+                          {item.price !== null ? formatPrice(item.price * item.quantity) : 'Недоступно'}
                         </div>
                         <p className="text-xs font-semibold text-slate-900 dark:text-white">{formatPrice(item.price * item.quantity)}</p>
                       </div>

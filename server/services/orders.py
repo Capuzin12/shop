@@ -283,10 +283,21 @@ def create_order(order_data: dict, db: Session, current_user: User):
                     },
                 )
 
-            unit_price = float(
-                resolve_effective_product_price(db, product, current_user.customer_group_id, quantity)["effective_price"]
-            )
+            effective_price_resolved = resolve_effective_product_price(db, product, current_user.customer_group_id, quantity)["effective_price"]
+            if effective_price_resolved is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "PRICE_NOT_SET_FOR_ROLE",
+                        "product_id": product_id,
+                        "product_name": product.name,
+                        "message": f"Ціну для вашої групи користувачів на товар '{product.name}' не встановлено для вказаної кількості ({quantity} шт).",
+                    }
+                )
+
+            unit_price = float(effective_price_resolved)
             subtotal += unit_price * quantity
+
             db.add(
                 OrderItem(
                     order_id=order.id,

@@ -360,8 +360,7 @@ export const CartProvider = ({ children }) => {
     setCart([]);
     localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
   };
-
-  const getTotal = () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const getTotal = () => cart.reduce((sum, item) => sum + (item.price !== null ? item.price : 0) * item.quantity, 0);
 
   const value = {
     cart,

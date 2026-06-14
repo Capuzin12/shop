@@ -1,6 +1,6 @@
 import { Heart, ShoppingCart } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useWishlist } from '../../wishlist/context/WishlistContext';
 import { formatPrice } from '../../../shared/utils/format';
 

@@ -17,13 +17,11 @@ export default function ProductPricingTable({ productId}) {
     [form]
   );
 
-    return (
-        <div className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">Ціна на товар
+  return (
+    <div className="rounded-2xl border border-slate-200 p-4 dark:border-white/10">
+      <p className="text-xs uppercase tracking-[0.2em] text-sm font-semibold text-slate-900 dark:text-white">Ціни для користувачів</p>
 
-            </p>
-
-            <div className="grid gap-2 md:grid-cols-4">
+      <div className="mt-4 grid gap-2 md:grid-cols-4">
         <select
           className="form-input text-sm"
           value={form.customer_group_id}
